@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Plus, Upload, X, BarChart2 } from 'lucide-react';
+import { Download, Plus, Upload, X, BarChart2, LogOut } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { supabase } from './lib/supabase';
 
 const FIELD_WIDTH = 15;
 const FIELD_HEIGHT = 12.5;
@@ -48,53 +49,42 @@ const DEFAULT_MATCH = () => ({
   shots: []
 });
 
-const storageGet = async (key) => {
-  if (window.storage?.get) {
-    const result = await window.storage.get(key);
-    if (!result?.value) return null;
-    return JSON.parse(result.value);
-  }
-  const raw = window.localStorage.getItem(key);
-  return raw ? JSON.parse(raw) : null;
-};
-
-const storageSet = async (key, value) => {
-  const payload = JSON.stringify(value);
-  if (window.storage?.set) {
-    await window.storage.set(key, payload);
-    return;
-  }
-  window.localStorage.setItem(key, payload);
-};
-
-const storageDelete = async (key) => {
-  if (window.storage?.delete) {
-    await window.storage.delete(key);
-    return;
-  }
-  window.localStorage.removeItem(key);
-};
-
 const notifyDataUpdated = () => {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new Event('waterpolo-data-updated'));
 };
 
-const dataKey = (seasonId, teamId, key) => `waterpolo_${seasonId}_${teamId}_${key}`;
-
-const loadShotmapData = async (seasonId, teamId) => {
-  if (!seasonId || !teamId) return { roster: [], matches: [] };
-  const roster = (await storageGet(dataKey(seasonId, teamId, 'roster'))) || [];
-  const matchList = (await storageGet(dataKey(seasonId, teamId, 'match_list'))) || [];
-  const matches = matchList.length
-    ? await Promise.all(
-        matchList.map(async (info) => {
-          const match = await storageGet(dataKey(seasonId, teamId, `match_${info.id}`));
-          return match || { info, shots: [] };
-        })
-      )
-    : [];
-  return { roster, matches };
+const loadTeamData = async (teamId) => {
+  if (!teamId) return { roster: [], matches: [] };
+  const [{ data: roster, error: rosterError }, { data: matches, error: matchError }, { data: shots, error: shotError }] =
+    await Promise.all([
+      supabase.from('roster').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
+      supabase.from('matches').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
+      supabase.from('shots').select('*').eq('team_id', teamId)
+    ]);
+  if (rosterError || matchError || shotError) {
+    throw new Error('Failed to load team data');
+  }
+  const matchMap = new Map();
+  (matches || []).forEach((match) => {
+    matchMap.set(match.id, { info: { id: match.id, name: match.name, date: match.date }, shots: [] });
+  });
+  (shots || []).forEach((shot) => {
+    const target = matchMap.get(shot.match_id);
+    if (!target) return;
+    target.shots.push({
+      id: shot.id,
+      x: shot.x,
+      y: shot.y,
+      zone: shot.zone,
+      result: shot.result,
+      playerCap: shot.player_cap,
+      attackType: shot.attack_type,
+      time: shot.time,
+      period: shot.period
+    });
+  });
+  return { roster: roster || [], matches: Array.from(matchMap.values()) };
 };
 
 const detectZone = (x, y) => {
@@ -167,6 +157,10 @@ const valueToColor = (value, max, scheme) => {
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('shotmap');
+  const [session, setSession] = useState(null);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
+  const [authLoading, setAuthLoading] = useState(true);
   const [seasons, setSeasons] = useState([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState('');
@@ -175,57 +169,126 @@ const App = () => {
   const [loadingSeasons, setLoadingSeasons] = useState(true);
 
   useEffect(() => {
-    const loadSeasons = async () => {
-      const stored = (await storageGet('waterpolo_seasons')) || [];
-      setSeasons(stored);
-      setLoadingSeasons(false);
+    let active = true;
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
+      setSession(data.session || null);
+      setAuthLoading(false);
     };
-    loadSeasons();
+    init();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!active) return;
+      setSession(nextSession);
+    });
+    return () => {
+      active = false;
+      listener?.subscription?.unsubscribe();
+    };
   }, []);
+
+  const loadSeasons = async (userId) => {
+    const [{ data: seasonsData, error: seasonsError }, { data: teamsData, error: teamsError }] =
+      await Promise.all([
+        supabase.from('seasons').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
+        supabase.from('teams').select('*').eq('user_id', userId).order('created_at', { ascending: true })
+      ]);
+    if (seasonsError || teamsError) throw new Error('Failed to load seasons');
+    const seasonsWithTeams = (seasonsData || []).map((season) => ({
+      id: season.id,
+      name: season.name,
+      teams: (teamsData || []).filter((team) => team.season_id === season.id)
+    }));
+    return seasonsWithTeams;
+  };
+
+  useEffect(() => {
+    if (!session?.user) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const data = await loadSeasons(session.user.id);
+        if (!active) return;
+        setSeasons(data);
+        setLoadingSeasons(false);
+      } catch (e) {
+        if (active) setLoadingSeasons(false);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [session]);
 
   const selectedSeason = seasons.find((season) => season.id === selectedSeasonId);
   const selectedTeam = selectedSeason?.teams?.find((team) => team.id === selectedTeamId);
 
+  const handleMagicLink = async () => {
+    if (!authEmail) return;
+    setAuthMessage('Sending magic link...');
+    const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
+    const { error } = await supabase.auth.signInWithOtp({
+      email: authEmail,
+      options: { emailRedirectTo: redirectTo }
+    });
+    if (error) {
+      setAuthMessage('Failed to send link.');
+      return;
+    }
+    setAuthMessage('Check your inbox for the magic link.');
+  };
+
   const createSeason = async () => {
-    if (!seasonForm.trim()) return;
-    const newSeason = { id: `season_${Date.now()}`, name: seasonForm.trim(), teams: [] };
-    const nextSeasons = [...seasons, newSeason];
+    if (!seasonForm.trim() || !session?.user) return;
+    const { data, error } = await supabase
+      .from('seasons')
+      .insert({ name: seasonForm.trim(), user_id: session.user.id })
+      .select('*')
+      .single();
+    if (error) return;
+    const nextSeasons = [...seasons, { id: data.id, name: data.name, teams: [] }];
     setSeasons(nextSeasons);
     setSeasonForm('');
-    await storageSet('waterpolo_seasons', nextSeasons);
-    setSelectedSeasonId(newSeason.id);
+    setSelectedSeasonId(data.id);
     setSelectedTeamId('');
   };
 
   const createTeam = async () => {
-    if (!teamForm.trim() || !selectedSeason) return;
-    const newTeam = { id: `team_${Date.now()}`, name: teamForm.trim() };
+    if (!teamForm.trim() || !selectedSeason || !session?.user) return;
+    const { data, error } = await supabase
+      .from('teams')
+      .insert({ name: teamForm.trim(), season_id: selectedSeason.id, user_id: session.user.id })
+      .select('*')
+      .single();
+    if (error) return;
     const nextSeasons = seasons.map((season) =>
       season.id === selectedSeason.id
-        ? { ...season, teams: [...(season.teams || []), newTeam] }
+        ? { ...season, teams: [...(season.teams || []), data] }
         : season
     );
     setSeasons(nextSeasons);
     setTeamForm('');
-    await storageSet('waterpolo_seasons', nextSeasons);
-    setSelectedTeamId(newTeam.id);
+    setSelectedTeamId(data.id);
   };
 
   const renameSeason = async (seasonId, name) => {
     const trimmed = name.trim();
     if (!trimmed) return;
+    const { error } = await supabase.from('seasons').update({ name: trimmed }).eq('id', seasonId);
+    if (error) return;
     const nextSeasons = seasons.map((season) =>
       season.id === seasonId ? { ...season, name: trimmed } : season
     );
     setSeasons(nextSeasons);
-    await storageSet('waterpolo_seasons', nextSeasons);
   };
 
   const deleteSeason = async (seasonId) => {
-    if (!window.confirm('Season verwijderen? Alle teams en data verdwijnen.')) return;
+    if (!window.confirm('Delete season? All teams and data will be removed.')) return;
+    const { error } = await supabase.from('seasons').delete().eq('id', seasonId);
+    if (error) return;
     const nextSeasons = seasons.filter((season) => season.id !== seasonId);
     setSeasons(nextSeasons);
-    await storageSet('waterpolo_seasons', nextSeasons);
     if (selectedSeasonId === seasonId) {
       setSelectedSeasonId('');
       setSelectedTeamId('');
@@ -235,6 +298,8 @@ const App = () => {
   const renameTeam = async (seasonId, teamId, name) => {
     const trimmed = name.trim();
     if (!trimmed) return;
+    const { error } = await supabase.from('teams').update({ name: trimmed }).eq('id', teamId);
+    if (error) return;
     const nextSeasons = seasons.map((season) => {
       if (season.id !== seasonId) return season;
       const teams = (season.teams || []).map((team) =>
@@ -243,21 +308,55 @@ const App = () => {
       return { ...season, teams };
     });
     setSeasons(nextSeasons);
-    await storageSet('waterpolo_seasons', nextSeasons);
   };
 
   const deleteTeam = async (seasonId, teamId) => {
-    if (!window.confirm('Team verwijderen? Alle data voor dit team verdwijnen.')) return;
+    if (!window.confirm('Delete team? All data for this team will be removed.')) return;
+    const { error } = await supabase.from('teams').delete().eq('id', teamId);
+    if (error) return;
     const nextSeasons = seasons.map((season) => {
       if (season.id !== seasonId) return season;
       return { ...season, teams: (season.teams || []).filter((team) => team.id !== teamId) };
     });
     setSeasons(nextSeasons);
-    await storageSet('waterpolo_seasons', nextSeasons);
     if (selectedTeamId === teamId) {
       setSelectedTeamId('');
     }
   };
+
+  if (authLoading) {
+    return <div className="p-10 text-slate-700">Loading...</div>;
+  }
+
+  if (!session?.user) {
+    return (
+      <div className="min-h-screen px-6 py-8">
+        <div className="mx-auto max-w-lg space-y-6">
+          <header className="rounded-3xl bg-white p-6 shadow-sm">
+            <p className="text-sm font-semibold text-cyan-700">Water Polo Platform</p>
+            <h1 className="text-3xl font-semibold">Sign in</h1>
+            <p className="mt-2 text-sm text-slate-500">We will send you a magic link.</p>
+          </header>
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <label className="text-xs font-semibold text-slate-500">Email</label>
+            <input
+              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder="you@example.com"
+              value={authEmail}
+              onChange={(event) => setAuthEmail(event.target.value)}
+            />
+            <button
+              className="mt-4 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+              onClick={handleMagicLink}
+            >
+              Send magic link
+            </button>
+            {authMessage && <div className="mt-3 text-sm text-slate-500">{authMessage}</div>}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loadingSeasons) {
     return <div className="p-10 text-slate-700">Loading...</div>;
@@ -466,20 +565,26 @@ const App = () => {
             >
               Switch team
             </button>
+            <button
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+              onClick={() => supabase.auth.signOut()}
+            >
+              <LogOut size={14} />
+            </button>
           </div>
         </header>
 
         {activeTab === 'shotmap' ? (
-          <ShotmapView seasonId={selectedSeasonId} teamId={selectedTeamId} />
+          <ShotmapView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
         ) : (
-          <AnalyticsView seasonId={selectedSeasonId} teamId={selectedTeamId} />
+          <AnalyticsView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
         )}
       </div>
     </div>
   );
 };
 
-const ShotmapView = ({ seasonId, teamId }) => {
+const ShotmapView = ({ seasonId, teamId, userId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [roster, setRoster] = useState([]);
@@ -498,40 +603,33 @@ const ShotmapView = ({ seasonId, teamId }) => {
   const fieldRef = useRef(null);
 
   useEffect(() => {
+    if (!teamId) return;
+    let active = true;
     const loadAll = async () => {
       try {
-        const storedRoster = (await storageGet(dataKey(seasonId, teamId, 'roster'))) || [];
-        const matchList = (await storageGet(dataKey(seasonId, teamId, 'match_list'))) || [];
-        let loadedMatches = [];
-        if (matchList.length) {
-          loadedMatches = await Promise.all(
-            matchList.map(async (info) => {
-              const match = await storageGet(dataKey(seasonId, teamId, `match_${info.id}`));
-              return match || { info, shots: [] };
-            })
-          );
-        }
-        const storedCurrent = await storageGet(dataKey(seasonId, teamId, 'current_match'));
-        let currentId = storedCurrent?.info?.id || loadedMatches[0]?.info?.id;
-        if (!currentId) {
-          const fresh = DEFAULT_MATCH();
-          loadedMatches = [fresh];
-          currentId = fresh.info.id;
-          await storageSet(dataKey(seasonId, teamId, `match_${fresh.info.id}`), fresh);
-          await storageSet(dataKey(seasonId, teamId, 'match_list'), [fresh.info]);
-          await storageSet(dataKey(seasonId, teamId, 'current_match'), fresh);
-        }
-        setRoster(storedRoster);
-        setMatches(loadedMatches);
-        setCurrentMatchId(currentId);
+        setLoading(true);
+        const payload = await loadTeamData(teamId);
+        if (!active) return;
+        const mappedRoster = payload.roster.map((player) => ({
+          id: player.id,
+          name: player.name,
+          capNumber: player.cap_number
+        }));
+        setRoster(mappedRoster);
+        setMatches(payload.matches);
+        setCurrentMatchId(payload.matches[0]?.info?.id || '');
+        setError('');
       } catch (e) {
-        setError('Could not load storage.');
+        if (active) setError('Could not load data.');
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
     loadAll();
-  }, [seasonId, teamId]);
+    return () => {
+      active = false;
+    };
+  }, [teamId]);
 
   const currentMatch = useMemo(
     () => matches.find((match) => match.info.id === currentMatchId) || matches[0],
@@ -543,23 +641,23 @@ const ShotmapView = ({ seasonId, teamId }) => {
     setCurrentMatchId(currentMatch.info.id);
   }, [currentMatch]);
 
-  const persistMatches = async (nextMatches, nextCurrentId) => {
-    const list = nextMatches.map((match) => match.info);
-    await storageSet(dataKey(seasonId, teamId, 'match_list'), list);
-    const current = nextMatches.find((match) => match.info.id === nextCurrentId) || nextMatches[0];
-    if (current) {
-      await storageSet(dataKey(seasonId, teamId, 'current_match'), current);
-    }
-    await Promise.all(
-      nextMatches.map((match) =>
-        storageSet(dataKey(seasonId, teamId, `match_${match.info.id}`), match)
-      )
-    );
-    notifyDataUpdated();
+  const refreshData = async () => {
+    const payload = await loadTeamData(teamId);
+    const mappedRoster = payload.roster.map((player) => ({
+      id: player.id,
+      name: player.name,
+      capNumber: player.cap_number
+    }));
+    setRoster(mappedRoster);
+    setMatches(payload.matches);
   };
 
   const handleFieldClick = (event) => {
     if (!fieldRef.current) return;
+    if (!currentMatch) {
+      setError('Create a match first.');
+      return;
+    }
     const rect = fieldRef.current.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width) * 100;
     const y = ((event.clientY - rect.top) / rect.height) * 100;
@@ -579,6 +677,10 @@ const ShotmapView = ({ seasonId, teamId }) => {
   };
 
   const handlePenaltyClick = () => {
+    if (!currentMatch) {
+      setError('Create a match first.');
+      return;
+    }
     setPendingShot({
       x: 90,
       y: 87.5,
@@ -597,31 +699,62 @@ const ShotmapView = ({ seasonId, teamId }) => {
       setError('Select a player.');
       return;
     }
-    const shot = {
-      id: `shot_${Date.now()}`,
-      ...pendingShot,
-      time: normalizeTime(pendingShot.time)
+    const payload = {
+      team_id: teamId,
+      season_id: seasonId,
+      match_id: currentMatch.info.id,
+      user_id: userId,
+      x: pendingShot.x,
+      y: pendingShot.y,
+      zone: pendingShot.zone,
+      result: pendingShot.result,
+      player_cap: pendingShot.playerCap,
+      attack_type: pendingShot.attackType,
+      time: normalizeTime(pendingShot.time),
+      period: pendingShot.period
     };
+    const { data, error: insertError } = await supabase.from('shots').insert(payload).select('*').single();
+    if (insertError) {
+      setError('Failed to save shot.');
+      return;
+    }
     const nextMatches = matches.map((match) =>
       match.info.id === currentMatch.info.id
-        ? { ...match, shots: [...match.shots, shot] }
+        ? {
+            ...match,
+            shots: [
+              ...match.shots,
+              {
+                id: data.id,
+                x: data.x,
+                y: data.y,
+                zone: data.zone,
+                result: data.result,
+                playerCap: data.player_cap,
+                attackType: data.attack_type,
+                time: data.time,
+                period: data.period
+              }
+            ]
+          }
         : match
     );
     setMatches(nextMatches);
     setPendingShot(null);
     setError('');
-    await persistMatches(nextMatches, currentMatch.info.id);
+    notifyDataUpdated();
   };
 
   const deleteShot = async (shotId) => {
-    if (!currentMatch) return;
+    const { error: deleteError } = await supabase.from('shots').delete().eq('id', shotId);
+    if (deleteError) return;
     const nextMatches = matches.map((match) =>
       match.info.id === currentMatch.info.id
         ? { ...match, shots: match.shots.filter((shot) => shot.id !== shotId) }
         : match
     );
     setMatches(nextMatches);
-    await persistMatches(nextMatches, currentMatch.info.id);
+    notifyDataUpdated();
   };
 
   const handleRosterAdd = async () => {
@@ -629,50 +762,76 @@ const ShotmapView = ({ seasonId, teamId }) => {
       setError('Enter name and cap number.');
       return;
     }
-    const nextRoster = [
-      ...roster,
-      { id: `player_${Date.now()}`, name: rosterForm.name, capNumber: rosterForm.capNumber }
-    ];
+    const { data, error: insertError } = await supabase
+      .from('roster')
+      .insert({
+        team_id: teamId,
+        user_id: userId,
+        name: rosterForm.name,
+        cap_number: rosterForm.capNumber
+      })
+      .select('*')
+      .single();
+    if (insertError) return;
+    const nextRoster = [...roster, { id: data.id, name: data.name, capNumber: data.cap_number }];
     setRoster(nextRoster);
     setRosterForm({ name: '', capNumber: '' });
     setError('');
-    await storageSet(dataKey(seasonId, teamId, 'roster'), nextRoster);
     notifyDataUpdated();
   };
 
   const removeRosterPlayer = async (playerId) => {
+    const { error: deleteError } = await supabase.from('roster').delete().eq('id', playerId);
+    if (deleteError) return;
     const nextRoster = roster.filter((player) => player.id !== playerId);
     setRoster(nextRoster);
-    await storageSet(dataKey(seasonId, teamId, 'roster'), nextRoster);
     notifyDataUpdated();
   };
 
   const addMatch = async () => {
-    const fresh = DEFAULT_MATCH();
+    const draft = DEFAULT_MATCH();
+    const { data, error: insertError } = await supabase
+      .from('matches')
+      .insert({
+        name: draft.info.name,
+        date: draft.info.date,
+        season_id: seasonId,
+        team_id: teamId,
+        user_id: userId
+      })
+      .select('*')
+      .single();
+    if (insertError) return;
+    const fresh = { info: { id: data.id, name: data.name, date: data.date }, shots: [] };
     const nextMatches = [...matches, fresh];
     setMatches(nextMatches);
     setCurrentMatchId(fresh.info.id);
-    await persistMatches(nextMatches, fresh.info.id);
+    notifyDataUpdated();
   };
 
   const deleteMatch = async (matchId) => {
+    const { error: deleteError } = await supabase.from('matches').delete().eq('id', matchId);
+    if (deleteError) return;
     const nextMatches = matches.filter((match) => match.info.id !== matchId);
-    if (!nextMatches.length) return;
     setMatches(nextMatches);
-    setCurrentMatchId(nextMatches[0].info.id);
-    await storageDelete(dataKey(seasonId, teamId, `match_${matchId}`));
-    await persistMatches(nextMatches, nextMatches[0].info.id);
+    setCurrentMatchId(nextMatches[0]?.info?.id || '');
+    notifyDataUpdated();
   };
 
   const updateMatchInfo = async (field, value) => {
     if (!currentMatch) return;
+    const { error: updateError } = await supabase
+      .from('matches')
+      .update({ [field]: value })
+      .eq('id', currentMatch.info.id);
+    if (updateError) return;
     const nextMatches = matches.map((match) =>
       match.info.id === currentMatch.info.id
         ? { ...match, info: { ...match.info, [field]: value } }
         : match
     );
     setMatches(nextMatches);
-    await persistMatches(nextMatches, currentMatch.info.id);
+    notifyDataUpdated();
   };
 
   const filteredShots = useMemo(() => {
@@ -699,7 +858,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
     return [...filteredShots].sort((a, b) => {
       const periodA = PERIODS.indexOf(a.period);
       const periodB = PERIODS.indexOf(b.period);
-      if (periodA !== periodB) return periodA - periodB;
+    if (periodA !== periodB) return periodA - periodB;
       return timeToSeconds(b.time) - timeToSeconds(a.time);
     });
   }, [filteredShots]);
@@ -730,18 +889,57 @@ const ShotmapView = ({ seasonId, teamId }) => {
       const text = await file.text();
       const data = JSON.parse(text);
       if (!data?.matches) throw new Error('Invalid');
-      const nextRoster = data.roster || [];
-      const nextMatches = data.matches.map((match) => ({
-        info: match.info,
-        shots: match.shots || []
+
+      const rosterPayload = (data.roster || []).map((player) => ({
+        team_id: teamId,
+        user_id: userId,
+        name: player.name,
+        cap_number: player.capNumber
       }));
-      setRoster(nextRoster);
-      setMatches(nextMatches);
-      setCurrentMatchId(nextMatches[0]?.info?.id || '');
-      await storageSet(dataKey(seasonId, teamId, 'roster'), nextRoster);
-      await persistMatches(nextMatches, nextMatches[0]?.info?.id || '');
-      notifyDataUpdated();
+      if (rosterPayload.length) {
+        await supabase.from('roster').insert(rosterPayload);
+      }
+
+      const matchIdMap = new Map();
+      const matchPayload = (data.matches || []).map((match) => {
+        const newId = crypto.randomUUID();
+        matchIdMap.set(match.info.id, newId);
+        return {
+          id: newId,
+          name: match.info.name,
+          date: match.info.date,
+          season_id: seasonId,
+          team_id: teamId,
+          user_id: userId
+        };
+      });
+      if (matchPayload.length) {
+        await supabase.from('matches').insert(matchPayload);
+      }
+
+      const shotPayload = (data.matches || []).flatMap((match) =>
+        (match.shots || []).map((shot) => ({
+          team_id: teamId,
+          season_id: seasonId,
+          match_id: matchIdMap.get(match.info.id),
+          user_id: userId,
+          x: shot.x,
+          y: shot.y,
+          zone: shot.zone,
+          result: shot.result,
+          player_cap: shot.playerCap,
+          attack_type: shot.attackType,
+          time: shot.time,
+          period: shot.period
+        }))
+      );
+      if (shotPayload.length) {
+        await supabase.from('shots').insert(shotPayload);
+      }
+
+      await refreshData();
       setError('');
+      notifyDataUpdated();
     } catch (e) {
       setError('Import failed. Check the JSON file.');
     }
@@ -782,555 +980,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-cyan-700">Water Polo Shotmap</p>
-          <h2 className="text-2xl font-semibold">Shot Tracking & Recording</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-            onClick={downloadPNG}
-          >
-            <Download size={16} />
-            Download PNG
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-full bg-cyan-600 px-4 py-2 text-sm font-semibold text-white"
-            onClick={exportJSON}
-          >
-            <Download size={16} />
-            Export JSON
-          </button>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-cyan-200 bg-white px-4 py-2 text-sm font-semibold text-cyan-700">
-            <Upload size={16} />
-            Import
-            <input type="file" accept="application/json" className="hidden" onChange={importJSON} />
-          </label>
-        </div>
-      </div>
-
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <button
-                className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                  seasonMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-900 text-white'
-                }`}
-                onClick={() => setSeasonMode(false)}
-              >
-                Match mode
-              </button>
-              <button
-                className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                  seasonMode ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
-                onClick={() => setSeasonMode(true)}
-              >
-                Season mode
-              </button>
-            </div>
-            <button
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
-              onClick={addMatch}
-            >
-              <Plus size={16} />
-              New match
-            </button>
-          </div>
-
-          {!seasonMode && currentMatch && (
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex-1">
-                  <label className="text-xs font-semibold text-slate-500">Match name</label>
-                  <input
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    value={currentMatch.info.name}
-                    onChange={(event) => updateMatchInfo('name', event.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Date</label>
-                  <input
-                    type="date"
-                    className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    value={currentMatch.info.date}
-                    onChange={(event) => updateMatchInfo('date', event.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                {matches.map((match) => (
-                  <button
-                    key={match.info.id}
-                    className={`rounded-full px-3 py-1 ${
-                      match.info.id === currentMatch.info.id
-                        ? 'bg-cyan-600 text-white'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
-                    onClick={() => setCurrentMatchId(match.info.id)}
-                  >
-                    {match.info.name}
-                  </button>
-                ))}
-                {matches.length > 1 && (
-                  <button
-                    className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-red-500"
-                    onClick={() => deleteMatch(currentMatch.info.id)}
-                  >
-                    <X size={14} />
-                    Delete match
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {seasonMode && (
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-700">Season filters</h3>
-              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Matches</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {matches.map((match) => (
-                      <button
-                        key={match.info.id}
-                        className={`rounded-full px-3 py-1 text-xs ${
-                          filters.matches.includes(match.info.id)
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                        onClick={() =>
-                          setFilters((prev) => ({
-                            ...prev,
-                            matches: prev.matches.includes(match.info.id)
-                              ? prev.matches.filter((id) => id !== match.info.id)
-                              : [...prev.matches, match.info.id]
-                          }))
-                        }
-                      >
-                        {match.info.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Players</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {roster.map((player) => (
-                      <button
-                        key={player.id}
-                        className={`rounded-full px-3 py-1 text-xs ${
-                          filters.players.includes(player.capNumber)
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                        onClick={() =>
-                          setFilters((prev) => ({
-                            ...prev,
-                            players: prev.players.includes(player.capNumber)
-                              ? prev.players.filter((cap) => cap !== player.capNumber)
-                              : [...prev.players, player.capNumber]
-                          }))
-                        }
-                      >
-                        #{player.capNumber}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Outcome</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {[
-                      { value: 'raak', label: 'Goal' },
-                      { value: 'redding', label: 'Saved' },
-                      { value: 'mis', label: 'Miss' }
-                    ].map((result) => (
-                      <button
-                        key={result.value}
-                        className={`rounded-full px-3 py-1 text-xs ${
-                          filters.results.includes(result.value)
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                        onClick={() =>
-                          setFilters((prev) => ({
-                            ...prev,
-                            results: prev.results.includes(result.value)
-                              ? prev.results.filter((value) => value !== result.value)
-                              : [...prev.results, result.value]
-                          }))
-                        }
-                      >
-                        {result.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Period</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {PERIODS.map((period) => (
-                      <button
-                        key={period}
-                        className={`rounded-full px-3 py-1 text-xs ${
-                          filters.periods.includes(period)
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                        onClick={() =>
-                          setFilters((prev) => ({
-                            ...prev,
-                            periods: prev.periods.includes(period)
-                              ? prev.periods.filter((value) => value !== period)
-                              : [...prev.periods, period]
-                          }))
-                        }
-                      >
-                        P{period}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Attack type</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {ATTACK_TYPES.map((type) => (
-                      <button
-                        key={type}
-                        className={`rounded-full px-3 py-1 text-xs ${
-                          filters.attackTypes.includes(type)
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                        onClick={() =>
-                          setFilters((prev) => ({
-                            ...prev,
-                            attackTypes: prev.attackTypes.includes(type)
-                              ? prev.attackTypes.filter((value) => value !== type)
-                              : [...prev.attackTypes, type]
-                          }))
-                        }
-                      >
-                        {type}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-700">Interactive field</h3>
-              <div className="text-xs text-slate-500">Click to add a shot</div>
-            </div>
-            <div className="mt-4 flex justify-center">
-              <div
-                ref={fieldRef}
-                className="relative h-[600px] w-full max-w-[720px] cursor-crosshair overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
-                onClick={handleFieldClick}
-              >
-                <div className="absolute left-0 top-[48%] h-[2px] w-full bg-yellow-300" />
-                <div className="absolute left-[40%] top-0 h-[6%] w-[20%] border-2 border-white bg-white/10" />
-
-                {ZONES.map((zone) => (
-                  <div
-                    key={zone.id}
-                    className={`absolute border border-white/40 ${zone.id === 14 ? 'bg-slate-900/40' : ''}`}
-                    style={{
-                      left: `${zone.left}%`,
-                      top: `${zone.top}%`,
-                      width: `${zone.width}%`,
-                      height: `${zone.height}%`
-                    }}
-                  >
-                    <div className="absolute left-2 top-2 text-xs font-semibold text-white/70">
-                      {zone.label}
-                    </div>
-                    {zone.id === 14 && (
-                      <div className="absolute inset-0 grid grid-cols-3 place-items-center gap-1 p-2">
-                        <button
-                          className="col-span-3 rounded-lg bg-yellow-400 px-2 py-1 text-xs font-semibold text-slate-900"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handlePenaltyClick();
-                          }}
-                        >
-                          + Penalty
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {filteredShots.map((shot) => {
-                  const isPenalty = shot.attackType === 'strafworp';
-                  const position = isPenalty
-                    ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id))
-                    : { x: shot.x, y: shot.y };
-                  return (
-                    <div
-                      key={shot.id}
-                      className={`absolute flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-lg ${
-                        RESULT_COLORS[shot.result]
-                      } ${isPenalty ? 'rounded-md' : ''}`}
-                      style={{
-                        left: `calc(${position.x}% - 14px)`,
-                        top: `calc(${position.y}% - 14px)`
-                      }}
-                      title={`${shot.playerCap} - ${shot.result}`}
-                    >
-                      {isPenalty ? `P${shot.playerCap}` : shot.playerCap}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Add shot</h3>
-            {pendingShot ? (
-              <div className="mt-3 space-y-3 text-sm">
-                <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  Zone {pendingShot.zone} · {pendingShot.attackType}
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Player</label>
-                  <select
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-                    value={pendingShot.playerCap}
-                    onChange={(event) =>
-                      setPendingShot((prev) => ({ ...prev, playerCap: event.target.value }))
-                    }
-                  >
-                    <option value="">Select player</option>
-                    {roster.map((player) => (
-                      <option key={player.id} value={player.capNumber}>
-                        #{player.capNumber} {player.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-500">Result</label>
-                    <select
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-                      value={pendingShot.result}
-                      onChange={(event) =>
-                        setPendingShot((prev) => ({ ...prev, result: event.target.value }))
-                      }
-                    >
-                      <option value="raak">Goal</option>
-                      <option value="redding">Saved</option>
-                      <option value="mis">Miss</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-500">Attack</label>
-                    <select
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-                      value={pendingShot.attackType}
-                      onChange={(event) =>
-                        setPendingShot((prev) => ({ ...prev, attackType: event.target.value }))
-                      }
-                      disabled={pendingShot.zone === 14}
-                    >
-                      {ATTACK_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-500">Period</label>
-                    <select
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-                      value={pendingShot.period}
-                      onChange={(event) =>
-                        setPendingShot((prev) => ({ ...prev, period: event.target.value }))
-                      }
-                    >
-                      {PERIODS.map((period) => (
-                        <option key={period} value={period}>
-                          P{period}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-500">Time</label>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          max="7"
-                          className="w-20 rounded-lg border border-slate-200 px-3 py-2"
-                          value={splitTimeParts(pendingShot.time).minutes}
-                          onChange={(event) => {
-                            const minutes = Math.min(7, Math.max(0, Number(event.target.value)));
-                            const seconds = splitTimeParts(pendingShot.time).seconds;
-                            setPendingShot((prev) => ({
-                              ...prev,
-                              time: `${minutes}:${String(seconds).padStart(2, '0')}`
-                            }));
-                          }}
-                        />
-                        <span className="text-sm font-semibold text-slate-500">min</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          max="59"
-                          className="w-20 rounded-lg border border-slate-200 px-3 py-2"
-                          value={splitTimeParts(pendingShot.time).seconds}
-                          onChange={(event) => {
-                            const minutes = splitTimeParts(pendingShot.time).minutes;
-                            const seconds = Math.min(59, Math.max(0, Number(event.target.value)));
-                            setPendingShot((prev) => ({
-                              ...prev,
-                              time: `${minutes}:${String(seconds).padStart(2, '0')}`
-                            }));
-                          }}
-                        />
-                        <span className="text-sm font-semibold text-slate-500">sec</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-xs">
-                        {['7:00', '6:00', '5:00'].map((preset) => (
-                          <button
-                            key={preset}
-                            className="rounded-full border border-slate-200 px-2 py-1"
-                            onClick={() => setPendingShot((prev) => ({ ...prev, time: preset }))}
-                          >
-                            {preset}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    className="flex-1 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                    onClick={addShot}
-                  >
-                    Save
-                  </button>
-                  <button
-                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
-                    onClick={() => setPendingShot(null)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-3 text-sm text-slate-500">Click on the field to add a shot.</div>
-            )}
-          </div>
-
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Roster</h3>
-            <div className="mt-3 grid grid-cols-[1fr_110px] gap-2">
-              <input
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                placeholder="Naam"
-                value={rosterForm.name}
-                onChange={(event) => setRosterForm((prev) => ({ ...prev, name: event.target.value }))}
-              />
-              <input
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                placeholder="Cap #"
-                value={rosterForm.capNumber}
-                onChange={(event) =>
-                  setRosterForm((prev) => ({ ...prev, capNumber: event.target.value }))
-                }
-              />
-            </div>
-            <button
-              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white"
-              onClick={handleRosterAdd}
-            >
-              <Plus size={16} />
-              Add player
-            </button>
-            <div className="mt-3 space-y-2">
-              {roster.map((player) => (
-                <div
-                  key={player.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm"
-                >
-                  <span>
-                    #{player.capNumber} {player.name}
-                  </span>
-                  <button
-                    className="text-xs font-semibold text-red-500"
-                    onClick={() => removeRosterPlayer(player.id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Shots</h3>
-            <div className="mt-3 max-h-[280px] space-y-2 overflow-y-auto text-sm">
-              {displayShots.length === 0 && (
-                <div className="text-slate-500">No shots recorded.</div>
-              )}
-              {displayShots.map((shot) => (
-                <div
-                  key={shot.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2"
-                >
-                  <div>
-                    <div className="font-semibold text-slate-700">
-                      Zone {shot.zone} · #{shot.playerCap}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      {shot.result} · {shot.attackType} · P{shot.period} · {shot.time}
-                    </div>
-                  </div>
-                  <button
-                    className="text-xs font-semibold text-red-500"
-                    onClick={() => deleteShot(shot.id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const AnalyticsView = ({ seasonId, teamId }) => {
+const AnalyticsView = ({ seasonId, teamId, userId }) => {
   const [data, setData] = useState({ roster: [], matches: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1346,12 +996,18 @@ const AnalyticsView = ({ seasonId, teamId }) => {
   const fieldRef = useRef(null);
 
   useEffect(() => {
+    if (!teamId) return;
     let active = true;
     const load = async () => {
       try {
-        const payload = await loadShotmapData(seasonId, teamId);
+        const payload = await loadTeamData(teamId);
         if (active) {
-          setData(payload);
+          const mappedRoster = payload.roster.map((player) => ({
+            id: player.id,
+            name: player.name,
+            capNumber: player.cap_number
+          }));
+          setData({ roster: mappedRoster, matches: payload.matches });
           setError('');
         }
       } catch (e) {
@@ -1367,7 +1023,7 @@ const AnalyticsView = ({ seasonId, teamId }) => {
       active = false;
       window.removeEventListener('waterpolo-data-updated', handleUpdate);
     };
-  }, [seasonId, teamId]);
+  }, [teamId]);
 
   const matches = data.matches || [];
   const roster = data.roster || [];
@@ -1491,358 +1147,4 @@ const AnalyticsView = ({ seasonId, teamId }) => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-cyan-700">Water Polo Analytics</p>
-          <h2 className="text-2xl font-semibold">Heatmaps & Analysis</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-            onClick={downloadPNG}
-          >
-            <Download size={16} />
-            Download PNG
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_1fr]">
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                {HEAT_TYPES.map((type) => (
-                  <button
-                    key={type.key}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                      heatType === type.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-                    }`}
-                    onClick={() => setHeatType(type.key)}
-                  >
-                    {type.label}
-                  </button>
-                ))}
-              </div>
-              {heatType !== 'distance' && (
-                <button
-                  className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
-                  onClick={() => setShowShots((prev) => !prev)}
-                >
-                  👁️ {showShots ? 'Hide shots' : 'Show shots'}
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Heatmap field</h3>
-            <div className="mt-4 flex justify-center">
-              <div
-                ref={fieldRef}
-                className="relative h-[600px] w-full max-w-[720px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
-              >
-                <div className="absolute left-0 top-[48%] h-[2px] w-full bg-yellow-300" />
-                <div className="absolute left-[40%] top-0 h-[6%] w-[20%] border-2 border-white bg-white/10" />
-
-                {ZONES.map((zone) => {
-                  const value = zoneValues[zone.id];
-                  const colorScheme = HEAT_TYPES.find((t) => t.key === heatType)?.color;
-                  const fillColor =
-                    zone.id === 14 || heatType === 'distance' || colorScheme === 'none'
-                      ? 'transparent'
-                      : valueToColor(value, maxValue, colorScheme);
-                  return (
-                    <div
-                      key={zone.id}
-                      className={`absolute border border-white/40 ${zone.id === 14 ? 'bg-slate-900/40' : ''}`}
-                      style={{
-                        left: `${zone.left}%`,
-                        top: `${zone.top}%`,
-                        width: `${zone.width}%`,
-                        height: `${zone.height}%`,
-                        backgroundColor: fillColor
-                      }}
-                    >
-                      <div className="absolute left-2 top-2 text-xs font-semibold text-white/70">
-                        {zone.label}
-                      </div>
-                      {zone.id === 14 && (
-                        <div className="absolute bottom-2 left-2 text-[10px] text-white/70">Penalties</div>
-                      )}
-                      {heatType === 'distance' && zone.id !== 14 && zoneValues[zone.id] != null && (
-                        <div className="absolute bottom-2 right-2 rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold text-slate-700">
-                          Ø {zoneValues[zone.id].toFixed(1)}m
-                        </div>
-                      )}
-                      {heatType !== 'distance' && zone.id !== 14 && value != null && (
-                        <div className="absolute bottom-2 right-2 rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold text-slate-700">
-                          {heatType === 'count' ? value : `${value.toFixed(0)}%`}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {heatType !== 'distance' && showShots &&
-                  analyticsShots.map((shot) => {
-                    const isPenalty = shot.attackType === 'strafworp';
-                    const position = isPenalty
-                      ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id))
-                      : { x: shot.x, y: shot.y };
-                    return (
-                    <div
-                      key={shot.id}
-                      className={`absolute flex h-4 w-4 items-center justify-center rounded-full border border-white/80 text-[9px] font-semibold text-white ${
-                        shot.result === 'raak'
-                          ? 'bg-green-500/80'
-                          : shot.result === 'redding'
-                          ? 'bg-orange-400/80'
-                          : 'bg-red-500/80'
-                      }`}
-                      style={{
-                        left: `calc(${position.x}% - 8px)`,
-                        top: `calc(${position.y}% - 8px)`
-                      }}
-                    >
-                      {shot.playerCap}
-                    </div>
-                    );
-                  })}
-
-                {heatType === 'distance' &&
-                  analyticsShots.map((shot) => {
-                    const isPenalty = shot.attackType === 'strafworp';
-                    const position = isPenalty
-                      ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id))
-                      : { x: shot.x, y: shot.y };
-                    return (
-                    <div
-                      key={shot.id}
-                      className="absolute flex flex-col items-center text-[10px] font-semibold text-white"
-                      style={{
-                        left: `calc(${position.x}% - 12px)`,
-                        top: `calc(${position.y}% - 20px)`
-                      }}
-                    >
-                      <div className="rounded-full bg-blue-100/80 px-2 py-1 text-[10px] text-slate-700">
-                        #{shot.playerCap}
-                      </div>
-                      <div className="mt-1 rounded-full bg-amber-100/90 px-2 py-1 text-[10px] text-amber-900">
-                        {distanceMeters(shot).toFixed(1)}m
-                      </div>
-                    </div>
-                    );
-                  })}
-              </div>
-            </div>
-            {heatType !== 'distance' && (
-              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                <div className="font-semibold text-slate-700">Legend</div>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full bg-red-500/60" />
-                    Low
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full bg-amber-400/60" />
-                    Mid
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full bg-green-500/60" />
-                    High
-                  </div>
-                </div>
-                <div className="mt-2 text-[11px] text-slate-500">
-                  Gradient based on max value in zones 1-13.
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Filters</h3>
-            <div className="mt-3 space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Matches</label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {matches.map((match) => (
-                    <button
-                      key={match.info.id}
-                      className={`rounded-full px-3 py-1 text-xs ${
-                        filters.matches.includes(match.info.id)
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                      onClick={() =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          matches: prev.matches.includes(match.info.id)
-                            ? prev.matches.filter((id) => id !== match.info.id)
-                            : [...prev.matches, match.info.id]
-                        }))
-                      }
-                    >
-                      {match.info.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Players</label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {roster.map((player) => (
-                    <button
-                      key={player.id}
-                      className={`rounded-full px-3 py-1 text-xs ${
-                        filters.players.includes(player.capNumber)
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                      onClick={() =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          players: prev.players.includes(player.capNumber)
-                            ? prev.players.filter((cap) => cap !== player.capNumber)
-                            : [...prev.players, player.capNumber]
-                        }))
-                      }
-                    >
-                      #{player.capNumber}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Outcome</label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {[
-                    { value: 'raak', label: 'Goal' },
-                    { value: 'redding', label: 'Saved' },
-                    { value: 'mis', label: 'Miss' }
-                  ].map((result) => (
-                    <button
-                      key={result.value}
-                      className={`rounded-full px-3 py-1 text-xs ${
-                        filters.results.includes(result.value)
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                      onClick={() =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          results: prev.results.includes(result.value)
-                            ? prev.results.filter((value) => value !== result.value)
-                            : [...prev.results, result.value]
-                        }))
-                      }
-                    >
-                      {result.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Period</label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {PERIODS.map((period) => (
-                    <button
-                      key={period}
-                      className={`rounded-full px-3 py-1 text-xs ${
-                        filters.periods.includes(period)
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                      onClick={() =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          periods: prev.periods.includes(period)
-                            ? prev.periods.filter((value) => value !== period)
-                            : [...prev.periods, period]
-                        }))
-                      }
-                    >
-                      P{period}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Attack type</label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {ATTACK_TYPES.map((type) => (
-                    <button
-                      key={type}
-                      className={`rounded-full px-3 py-1 text-xs ${
-                        filters.attackTypes.includes(type)
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                      onClick={() =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          attackTypes: prev.attackTypes.includes(type)
-                            ? prev.attackTypes.filter((value) => value !== type)
-                            : [...prev.attackTypes, type]
-                        }))
-                      }
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Zone 14 stats</h3>
-            <div className="mt-3 text-sm text-slate-600">
-              {zone14Stats?.total ? (
-                <div className="space-y-1">
-                  <div>Total: {zone14Stats.total}</div>
-                  <div>Goal: {zone14Stats.success}</div>
-                  <div>Saved: {zone14Stats.save}</div>
-                  <div>Miss: {zone14Stats.miss}</div>
-                </div>
-              ) : (
-                <div>No penalties in selection.</div>
-              )}
-            </div>
-          </div>
-
-          {heatType === 'distance' && distanceByResult && (
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-700">Average distance</h3>
-              <div className="mt-3 space-y-2 text-sm text-slate-600">
-                <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span>Goal</span>
-                  <span className="font-semibold text-emerald-700">{distanceByResult.raak}m</span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span>Saved</span>
-                  <span className="font-semibold text-amber-700">{distanceByResult.redding}m</span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span>Miss</span>
-                  <span className="font-semibold text-red-700">{distanceByResult.mis}m</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export default App;

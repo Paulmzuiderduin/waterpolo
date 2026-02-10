@@ -626,360 +626,555 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
       }
     };
     loadAll();
-    return () => {
-      active = false;
-    };
-  }, [teamId]);
+    return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-cyan-700">Water Polo Shotmap</p>
+          <h2 className="text-2xl font-semibold">Shot Tracking & Recording</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            onClick={downloadPNG}
+          >
+            <Download size={16} />
+            Download PNG
+          </button>
+          <button
+            className="inline-flex items-center gap-2 rounded-full bg-cyan-600 px-4 py-2 text-sm font-semibold text-white"
+            onClick={exportJSON}
+          >
+            <Download size={16} />
+            Export JSON
+          </button>
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-cyan-200 bg-white px-4 py-2 text-sm font-semibold text-cyan-700">
+            <Upload size={16} />
+            Import
+            <input type="file" accept="application/json" className="hidden" onChange={importJSON} />
+          </label>
+        </div>
+      </div>
 
-  const currentMatch = useMemo(
-    () => matches.find((match) => match.info.id === currentMatchId) || matches[0],
-    [matches, currentMatchId]
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <button
+                className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                  seasonMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-900 text-white'
+                }`}
+                onClick={() => setSeasonMode(false)}
+              >
+                Match mode
+              </button>
+              <button
+                className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                  seasonMode ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+                onClick={() => setSeasonMode(true)}
+              >
+                Season mode
+              </button>
+            </div>
+            <button
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+              onClick={addMatch}
+            >
+              <Plus size={16} />
+              New match
+            </button>
+          </div>
+
+          {!seasonMode && currentMatch && (
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex-1">
+                  <label className="text-xs font-semibold text-slate-500">Match name</label>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    value={currentMatch.info.name}
+                    onChange={(event) => updateMatchInfo('name', event.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Date</label>
+                  <input
+                    type="date"
+                    className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    value={currentMatch.info.date}
+                    onChange={(event) => updateMatchInfo('date', event.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                {matches.map((match) => (
+                  <button
+                    key={match.info.id}
+                    className={`rounded-full px-3 py-1 ${
+                      match.info.id === currentMatch.info.id
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                    onClick={() => setCurrentMatchId(match.info.id)}
+                  >
+                    {match.info.name}
+                  </button>
+                ))}
+                {matches.length > 1 && (
+                  <button
+                    className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-red-500"
+                    onClick={() => deleteMatch(currentMatch.info.id)}
+                  >
+                    <X size={14} />
+                    Delete match
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {seasonMode && (
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-700">Season filters</h3>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Matches</label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {matches.map((match) => (
+                      <button
+                        key={match.info.id}
+                        className={`rounded-full px-3 py-1 text-xs ${
+                          filters.matches.includes(match.info.id)
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                        onClick={() =>
+                          setFilters((prev) => ({
+                            ...prev,
+                            matches: prev.matches.includes(match.info.id)
+                              ? prev.matches.filter((id) => id !== match.info.id)
+                              : [...prev.matches, match.info.id]
+                          }))
+                        }
+                      >
+                        {match.info.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Players</label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {roster.map((player) => (
+                      <button
+                        key={player.id}
+                        className={`rounded-full px-3 py-1 text-xs ${
+                          filters.players.includes(player.capNumber)
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                        onClick={() =>
+                          setFilters((prev) => ({
+                            ...prev,
+                            players: prev.players.includes(player.capNumber)
+                              ? prev.players.filter((cap) => cap !== player.capNumber)
+                              : [...prev.players, player.capNumber]
+                          }))
+                        }
+                      >
+                        #{player.capNumber}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Outcome</label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[
+                      { value: 'raak', label: 'Goal' },
+                      { value: 'redding', label: 'Saved' },
+                      { value: 'mis', label: 'Miss' }
+                    ].map((result) => (
+                      <button
+                        key={result.value}
+                        className={`rounded-full px-3 py-1 text-xs ${
+                          filters.results.includes(result.value)
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                        onClick={() =>
+                          setFilters((prev) => ({
+                            ...prev,
+                            results: prev.results.includes(result.value)
+                              ? prev.results.filter((value) => value !== result.value)
+                              : [...prev.results, result.value]
+                          }))
+                        }
+                      >
+                        {result.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Period</label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {PERIODS.map((period) => (
+                      <button
+                        key={period}
+                        className={`rounded-full px-3 py-1 text-xs ${
+                          filters.periods.includes(period)
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                        onClick={() =>
+                          setFilters((prev) => ({
+                            ...prev,
+                            periods: prev.periods.includes(period)
+                              ? prev.periods.filter((value) => value !== period)
+                              : [...prev.periods, period]
+                          }))
+                        }
+                      >
+                        P{period}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Attack type</label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {ATTACK_TYPES.map((type) => (
+                      <button
+                        key={type}
+                        className={`rounded-full px-3 py-1 text-xs ${
+                          filters.attackTypes.includes(type)
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                        onClick={() =>
+                          setFilters((prev) => ({
+                            ...prev,
+                            attackTypes: prev.attackTypes.includes(type)
+                              ? prev.attackTypes.filter((value) => value !== type)
+                              : [...prev.attackTypes, type]
+                          }))
+                        }
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-700">Interactive field</h3>
+              <div className="text-xs text-slate-500">Click to add a shot</div>
+            </div>
+            <div className="mt-4 flex justify-center">
+              <div
+                ref={fieldRef}
+                className="relative h-[600px] w-full max-w-[720px] cursor-crosshair overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
+                onClick={handleFieldClick}
+              >
+                <div className="absolute left-0 top-[48%] h-[2px] w-full bg-yellow-300" />
+                <div className="absolute left-[40%] top-0 h-[6%] w-[20%] border-2 border-white bg-white/10" />
+
+                {ZONES.map((zone) => (
+                  <div
+                    key={zone.id}
+                    className={`absolute border border-white/40 ${zone.id === 14 ? 'bg-slate-900/40' : ''}`}
+                    style={{
+                      left: `${zone.left}%`,
+                      top: `${zone.top}%`,
+                      width: `${zone.width}%`,
+                      height: `${zone.height}%`
+                    }}
+                  >
+                    <div className="absolute left-2 top-2 text-xs font-semibold text-white/70">
+                      {zone.label}
+                    </div>
+                    {zone.id === 14 && (
+                      <div className="absolute inset-0 grid grid-cols-3 place-items-center gap-1 p-2">
+                        <button
+                          className="col-span-3 rounded-lg bg-yellow-400 px-2 py-1 text-xs font-semibold text-slate-900"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handlePenaltyClick();
+                          }}
+                        >
+                          + Penalty
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {filteredShots.map((shot) => {
+                  const isPenalty = shot.attackType === 'strafworp';
+                  const position = isPenalty
+                    ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id))
+                    : { x: shot.x, y: shot.y };
+                  return (
+                    <div
+                      key={shot.id}
+                      className={`absolute flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-lg ${
+                        RESULT_COLORS[shot.result]
+                      } ${isPenalty ? 'rounded-md' : ''}`}
+                      style={{
+                        left: `calc(${position.x}% - 14px)`,
+                        top: `calc(${position.y}% - 14px)`
+                      }}
+                      title={`${shot.playerCap} - ${shot.result}`}
+                    >
+                      {isPenalty ? `P${shot.playerCap}` : shot.playerCap}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Add shot</h3>
+            {pendingShot ? (
+              <div className="mt-3 space-y-3 text-sm">
+                <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  Zone {pendingShot.zone} · {pendingShot.attackType}
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Player</label>
+                  <select
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                    value={pendingShot.playerCap}
+                    onChange={(event) =>
+                      setPendingShot((prev) => ({ ...prev, playerCap: event.target.value }))
+                    }
+                  >
+                    <option value="">Select player</option>
+                    {roster.map((player) => (
+                      <option key={player.id} value={player.capNumber}>
+                        #{player.capNumber} {player.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500">Result</label>
+                    <select
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                      value={pendingShot.result}
+                      onChange={(event) =>
+                        setPendingShot((prev) => ({ ...prev, result: event.target.value }))
+                      }
+                    >
+                      <option value="raak">Goal</option>
+                      <option value="redding">Saved</option>
+                      <option value="mis">Miss</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500">Attack</label>
+                    <select
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                      value={pendingShot.attackType}
+                      onChange={(event) =>
+                        setPendingShot((prev) => ({ ...prev, attackType: event.target.value }))
+                      }
+                      disabled={pendingShot.zone === 14}
+                    >
+                      {ATTACK_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500">Period</label>
+                    <select
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                      value={pendingShot.period}
+                      onChange={(event) =>
+                        setPendingShot((prev) => ({ ...prev, period: event.target.value }))
+                      }
+                    >
+                      {PERIODS.map((period) => (
+                        <option key={period} value={period}>
+                          P{period}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500">Time</label>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="7"
+                          className="w-20 rounded-lg border border-slate-200 px-3 py-2"
+                          value={splitTimeParts(pendingShot.time).minutes}
+                          onChange={(event) => {
+                            const minutes = Math.min(7, Math.max(0, Number(event.target.value)));
+                            const seconds = splitTimeParts(pendingShot.time).seconds;
+                            setPendingShot((prev) => ({
+                              ...prev,
+                              time: `${minutes}:${String(seconds).padStart(2, '0')}`
+                            }));
+                          }}
+                        />
+                        <span className="text-sm font-semibold text-slate-500">min</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          className="w-20 rounded-lg border border-slate-200 px-3 py-2"
+                          value={splitTimeParts(pendingShot.time).seconds}
+                          onChange={(event) => {
+                            const minutes = splitTimeParts(pendingShot.time).minutes;
+                            const seconds = Math.min(59, Math.max(0, Number(event.target.value)));
+                            setPendingShot((prev) => ({
+                              ...prev,
+                              time: `${minutes}:${String(seconds).padStart(2, '0')}`
+                            }));
+                          }}
+                        />
+                        <span className="text-sm font-semibold text-slate-500">sec</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs">
+                        {['7:00', '6:00', '5:00'].map((preset) => (
+                          <button
+                            key={preset}
+                            className="rounded-full border border-slate-200 px-2 py-1"
+                            onClick={() => setPendingShot((prev) => ({ ...prev, time: preset }))}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className="flex-1 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                    onClick={addShot}
+                  >
+                    Save
+                  </button>
+                  <button
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
+                    onClick={() => setPendingShot(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 text-sm text-slate-500">Click on the field to add a shot.</div>
+            )}
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Roster</h3>
+            <div className="mt-3 grid grid-cols-[1fr_110px] gap-2">
+              <input
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                placeholder="Name"
+                value={rosterForm.name}
+                onChange={(event) => setRosterForm((prev) => ({ ...prev, name: event.target.value }))}
+              />
+              <input
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                placeholder="Cap #"
+                value={rosterForm.capNumber}
+                onChange={(event) =>
+                  setRosterForm((prev) => ({ ...prev, capNumber: event.target.value }))
+                }
+              />
+            </div>
+            <button
+              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white"
+              onClick={handleRosterAdd}
+            >
+              <Plus size={16} />
+              Add player
+            </button>
+            <div className="mt-3 space-y-2">
+              {roster.map((player) => (
+                <div
+                  key={player.id}
+                  className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm"
+                >
+                  <span>
+                    #{player.capNumber} {player.name}
+                  </span>
+                  <button
+                    className="text-xs font-semibold text-red-500"
+                    onClick={() => removeRosterPlayer(player.id)}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Shots</h3>
+            <div className="mt-3 max-h-[280px] space-y-2 overflow-y-auto text-sm">
+              {displayShots.length === 0 && (
+                <div className="text-slate-500">No shots recorded.</div>
+              )}
+              {displayShots.map((shot) => (
+                <div
+                  key={shot.id}
+                  className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2"
+                >
+                  <div>
+                    <div className="font-semibold text-slate-700">
+                      Zone {shot.zone} · #{shot.playerCap}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {shot.result} · {shot.attackType} · P{shot.period} · {shot.time}
+                    </div>
+                  </div>
+                  <button
+                    className="text-xs font-semibold text-red-500"
+                    onClick={() => deleteShot(shot.id)}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
+};
 
-  useEffect(() => {
-    if (!currentMatch) return;
-    setCurrentMatchId(currentMatch.info.id);
-  }, [currentMatch]);
-
-  const refreshData = async () => {
-    const payload = await loadTeamData(teamId);
-    const mappedRoster = payload.roster.map((player) => ({
-      id: player.id,
-      name: player.name,
-      capNumber: player.cap_number
-    }));
-    setRoster(mappedRoster);
-    setMatches(payload.matches);
-  };
-
-  const handleFieldClick = (event) => {
-    if (!fieldRef.current) return;
-    if (!currentMatch) {
-      setError('Create a match first.');
-      return;
-    }
-    const rect = fieldRef.current.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 100;
-    const y = ((event.clientY - rect.top) / rect.height) * 100;
-    if (x >= 80 && y >= 75) return;
-    const zone = detectZone(x, y);
-    if (!zone) return;
-    setPendingShot({
-      x,
-      y,
-      zone,
-      attackType: '6vs6',
-      result: 'raak',
-      playerCap: roster[0]?.capNumber || '',
-      period: '1',
-      time: formatShotTime()
-    });
-  };
-
-  const handlePenaltyClick = () => {
-    if (!currentMatch) {
-      setError('Create a match first.');
-      return;
-    }
-    setPendingShot({
-      x: 90,
-      y: 87.5,
-      zone: 14,
-      attackType: 'strafworp',
-      result: 'raak',
-      playerCap: roster[0]?.capNumber || '',
-      period: '1',
-      time: formatShotTime()
-    });
-  };
-
-  const addShot = async () => {
-    if (!pendingShot || !currentMatch) return;
-    if (!pendingShot.playerCap) {
-      setError('Select a player.');
-      return;
-    }
-    const payload = {
-      team_id: teamId,
-      season_id: seasonId,
-      match_id: currentMatch.info.id,
-      user_id: userId,
-      x: pendingShot.x,
-      y: pendingShot.y,
-      zone: pendingShot.zone,
-      result: pendingShot.result,
-      player_cap: pendingShot.playerCap,
-      attack_type: pendingShot.attackType,
-      time: normalizeTime(pendingShot.time),
-      period: pendingShot.period
-    };
-    const { data, error: insertError } = await supabase.from('shots').insert(payload).select('*').single();
-    if (insertError) {
-      setError('Failed to save shot.');
-      return;
-    }
-    const nextMatches = matches.map((match) =>
-      match.info.id === currentMatch.info.id
-        ? {
-            ...match,
-            shots: [
-              ...match.shots,
-              {
-                id: data.id,
-                x: data.x,
-                y: data.y,
-                zone: data.zone,
-                result: data.result,
-                playerCap: data.player_cap,
-                attackType: data.attack_type,
-                time: data.time,
-                period: data.period
-              }
-            ]
-          }
-        : match
-    );
-    setMatches(nextMatches);
-    setPendingShot(null);
-    setError('');
-    notifyDataUpdated();
-  };
-
-  const deleteShot = async (shotId) => {
-    const { error: deleteError } = await supabase.from('shots').delete().eq('id', shotId);
-    if (deleteError) return;
-    const nextMatches = matches.map((match) =>
-      match.info.id === currentMatch.info.id
-        ? { ...match, shots: match.shots.filter((shot) => shot.id !== shotId) }
-        : match
-    );
-    setMatches(nextMatches);
-    notifyDataUpdated();
-  };
-
-  const handleRosterAdd = async () => {
-    if (!rosterForm.name || !rosterForm.capNumber) {
-      setError('Enter name and cap number.');
-      return;
-    }
-    const { data, error: insertError } = await supabase
-      .from('roster')
-      .insert({
-        team_id: teamId,
-        user_id: userId,
-        name: rosterForm.name,
-        cap_number: rosterForm.capNumber
-      })
-      .select('*')
-      .single();
-    if (insertError) return;
-    const nextRoster = [...roster, { id: data.id, name: data.name, capNumber: data.cap_number }];
-    setRoster(nextRoster);
-    setRosterForm({ name: '', capNumber: '' });
-    setError('');
-    notifyDataUpdated();
-  };
-
-  const removeRosterPlayer = async (playerId) => {
-    const { error: deleteError } = await supabase.from('roster').delete().eq('id', playerId);
-    if (deleteError) return;
-    const nextRoster = roster.filter((player) => player.id !== playerId);
-    setRoster(nextRoster);
-    notifyDataUpdated();
-  };
-
-  const addMatch = async () => {
-    const draft = DEFAULT_MATCH();
-    const { data, error: insertError } = await supabase
-      .from('matches')
-      .insert({
-        name: draft.info.name,
-        date: draft.info.date,
-        season_id: seasonId,
-        team_id: teamId,
-        user_id: userId
-      })
-      .select('*')
-      .single();
-    if (insertError) return;
-    const fresh = { info: { id: data.id, name: data.name, date: data.date }, shots: [] };
-    const nextMatches = [...matches, fresh];
-    setMatches(nextMatches);
-    setCurrentMatchId(fresh.info.id);
-    notifyDataUpdated();
-  };
-
-  const deleteMatch = async (matchId) => {
-    const { error: deleteError } = await supabase.from('matches').delete().eq('id', matchId);
-    if (deleteError) return;
-    const nextMatches = matches.filter((match) => match.info.id !== matchId);
-    setMatches(nextMatches);
-    setCurrentMatchId(nextMatches[0]?.info?.id || '');
-    notifyDataUpdated();
-  };
-
-  const updateMatchInfo = async (field, value) => {
-    if (!currentMatch) return;
-    const { error: updateError } = await supabase
-      .from('matches')
-      .update({ [field]: value })
-      .eq('id', currentMatch.info.id);
-    if (updateError) return;
-    const nextMatches = matches.map((match) =>
-      match.info.id === currentMatch.info.id
-        ? { ...match, info: { ...match.info, [field]: value } }
-        : match
-    );
-    setMatches(nextMatches);
-    notifyDataUpdated();
-  };
-
-  const filteredShots = useMemo(() => {
-    const relevantMatches = seasonMode
-      ? matches.filter((match) =>
-          filters.matches.length ? filters.matches.includes(match.info.id) : true
-        )
-      : currentMatch
-      ? [currentMatch]
-      : [];
-    const shots = relevantMatches.flatMap((match) => match.shots);
-    return shots.filter((shot) => {
-      if (seasonMode) {
-        if (filters.players.length && !filters.players.includes(shot.playerCap)) return false;
-        if (filters.results.length && !filters.results.includes(shot.result)) return false;
-        if (filters.periods.length && !filters.periods.includes(shot.period)) return false;
-        if (filters.attackTypes.length && !filters.attackTypes.includes(shot.attackType)) return false;
-      }
-      return true;
-    });
-  }, [seasonMode, matches, currentMatch, filters]);
-
-  const displayShots = useMemo(() => {
-    return [...filteredShots].sort((a, b) => {
-      const periodA = PERIODS.indexOf(a.period);
-      const periodB = PERIODS.indexOf(b.period);
-    if (periodA !== periodB) return periodA - periodB;
-      return timeToSeconds(b.time) - timeToSeconds(a.time);
-    });
-  }, [filteredShots]);
-
-  const exportJSON = async () => {
-    try {
-      const payload = {
-        roster,
-        matches: matches.map((match) => ({ info: match.info, shots: match.shots })),
-        exportDate: new Date().toISOString()
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `waterpolo_shotmap_${new Date().toISOString().slice(0, 10)}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setError('Export failed.');
-    }
-  };
-
-  const importJSON = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      if (!data?.matches) throw new Error('Invalid');
-
-      const rosterPayload = (data.roster || []).map((player) => ({
-        team_id: teamId,
-        user_id: userId,
-        name: player.name,
-        cap_number: player.capNumber
-      }));
-      if (rosterPayload.length) {
-        await supabase.from('roster').insert(rosterPayload);
-      }
-
-      const matchIdMap = new Map();
-      const matchPayload = (data.matches || []).map((match) => {
-        const newId = crypto.randomUUID();
-        matchIdMap.set(match.info.id, newId);
-        return {
-          id: newId,
-          name: match.info.name,
-          date: match.info.date,
-          season_id: seasonId,
-          team_id: teamId,
-          user_id: userId
-        };
-      });
-      if (matchPayload.length) {
-        await supabase.from('matches').insert(matchPayload);
-      }
-
-      const shotPayload = (data.matches || []).flatMap((match) =>
-        (match.shots || []).map((shot) => ({
-          team_id: teamId,
-          season_id: seasonId,
-          match_id: matchIdMap.get(match.info.id),
-          user_id: userId,
-          x: shot.x,
-          y: shot.y,
-          zone: shot.zone,
-          result: shot.result,
-          player_cap: shot.playerCap,
-          attack_type: shot.attackType,
-          time: shot.time,
-          period: shot.period
-        }))
-      );
-      if (shotPayload.length) {
-        await supabase.from('shots').insert(shotPayload);
-      }
-
-      await refreshData();
-      setError('');
-      notifyDataUpdated();
-    } catch (e) {
-      setError('Import failed. Check the JSON file.');
-    }
-  };
-
-  const downloadPNG = async () => {
-    if (!fieldRef.current) return;
-    try {
-      const canvas = await html2canvas(fieldRef.current, {
-        backgroundColor: '#0b4a7a',
-        scale: 2
-      });
-      const output = document.createElement('canvas');
-      output.width = 1440;
-      output.height = 1450;
-      const ctx = output.getContext('2d');
-      ctx.fillStyle = '#f8fbff';
-      ctx.fillRect(0, 0, output.width, output.height);
-      ctx.fillStyle = '#0b1c2c';
-      ctx.font = '600 36px Space Grotesk, sans-serif';
-      const title = seasonMode ? 'Water Polo Shotmap (Season)' : `Water Polo Shotmap - ${currentMatch?.info?.name || ''}`;
-      ctx.fillText(title, 40, 64);
-      ctx.drawImage(canvas, 0, 100, 1440, 1200);
-      const url = output.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `shotmap_${new Date().toISOString().slice(0, 10)}.png`;
-      link.click();
-    } catch (e) {
-      setError('PNG export failed.');
-    }
-  };
-
-  const penaltyShots = filteredShots.filter((shot) => shot.attackType === 'strafworp');
-
-  if (loading) {
-    return <div className="p-10 text-slate-700">Loading...</div>;
-  }
-
-  return (
 const AnalyticsView = ({ seasonId, teamId, userId }) => {
   const [data, setData] = useState({ roster: [], matches: [] });
   const [loading, setLoading] = useState(true);

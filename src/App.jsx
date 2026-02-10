@@ -1967,6 +1967,11 @@ const RosterView = ({ seasonId, teamId, userId }) => {
   };
 
   const uploadPhoto = async (playerId, file) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      setError('Please upload a JPG, PNG, or WEBP image.');
+      return;
+    }
     const ext = file.name.split('.').pop();
     const path = `${userId}/${teamId}/${playerId}.${ext}`;
     const { error: uploadError } = await supabase.storage.from('player-photos').upload(path, file, {

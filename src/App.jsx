@@ -608,6 +608,7 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
     matches: []
   });
   const [rosterForm, setRosterForm] = useState({ name: '', capNumber: '' });
+  const [editingRosterId, setEditingRosterId] = useState(null);
   const fieldRef = useRef(null);
 
   useEffect(() => {
@@ -813,25 +814,50 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
       setError('Enter name and cap number.');
       return;
     }
-    const { data, error: insertError } = await supabase
-      .from('roster')
-      .insert({
-        team_id: teamId,
-        user_id: userId,
-        name: rosterForm.name,
-        cap_number: rosterForm.capNumber
-      })
-      .select('*')
-      .single();
-    if (insertError) return;
-    const nextRoster = [...roster, { id: data.id, name: data.name, capNumber: data.cap_number }];
+    let data;
+    if (editingRosterId) {
+      const { data: updated, error: updateError } = await supabase
+        .from('roster')
+        .update({ name: rosterForm.name, cap_number: rosterForm.capNumber })
+        .eq('id', editingRosterId)
+        .select('*')
+        .single();
+      if (updateError) return;
+      data = updated;
+    } else {
+      const { data: inserted, error: insertError } = await supabase
+        .from('roster')
+        .insert({
+          team_id: teamId,
+          user_id: userId,
+          name: rosterForm.name,
+          cap_number: rosterForm.capNumber
+        })
+        .select('*')
+        .single();
+      if (insertError) return;
+      data = inserted;
+    }
+    const nextRoster = roster
+      .map((player) =>
+        player.id === editingRosterId
+          ? { id: data.id, name: data.name, capNumber: data.cap_number }
+          : player
+      )
+      .concat(
+        editingRosterId
+          ? []
+          : [{ id: data.id, name: data.name, capNumber: data.cap_number }]
+      );
     setRoster(nextRoster);
     setRosterForm({ name: '', capNumber: '' });
+    setEditingRosterId(null);
     setError('');
     notifyDataUpdated();
   };
 
   const removeRosterPlayer = async (playerId) => {
+    if (!window.confirm('Delete this player?')) return;
     const { error: deleteError } = await supabase.from('roster').delete().eq('id', playerId);
     if (deleteError) return;
     const nextRoster = roster.filter((player) => player.id !== playerId);
@@ -1466,10 +1492,13 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
               onClick={handleRosterAdd}
             >
               <Plus size={16} />
-              Add player
+              {editingRosterId ? 'Update player' : 'Add player'}
             </button>
             <div className="mt-3 space-y-2">
-              {roster.map((player) => (
+              {roster
+                .slice()
+                .sort((a, b) => Number(a.capNumber) - Number(b.capNumber))
+                .map((player) => (
                 <div
                   key={player.id}
                   className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm"
@@ -1477,12 +1506,23 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
                   <span>
                     #{player.capNumber} {player.name}
                   </span>
-                  <button
-                    className="text-xs font-semibold text-red-500"
-                    onClick={() => removeRosterPlayer(player.id)}
-                  >
-                    Delete
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="text-xs font-semibold text-slate-600"
+                      onClick={() => {
+                        setRosterForm({ name: player.name, capNumber: player.capNumber });
+                        setEditingRosterId(player.id);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="text-xs font-semibold text-red-500"
+                      onClick={() => removeRosterPlayer(player.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

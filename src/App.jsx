@@ -56,20 +56,19 @@ const notifyDataUpdated = () => {
 
 const loadTeamData = async (teamId) => {
   if (!teamId) return { roster: [], matches: [] };
-  const [{ data: roster, error: rosterError }, { data: matches, error: matchError }, { data: shots, error: shotError }] =
-    await Promise.all([
-      supabase.from('roster').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
-      supabase.from('matches').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
-      supabase.from('shots').select('*').eq('team_id', teamId)
-    ]);
-  if (rosterError || matchError || shotError) {
+  const [rosterRes, matchRes, shotRes] = await Promise.all([
+    supabase.from('roster').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
+    supabase.from('matches').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
+    supabase.from('shots').select('*').eq('team_id', teamId)
+  ]);
+  if (rosterRes.error || matchRes.error || shotRes.error) {
     throw new Error('Failed to load team data');
   }
   const matchMap = new Map();
-  (matches || []).forEach((match) => {
+  (matchRes.data || []).forEach((match) => {
     matchMap.set(match.id, { info: { id: match.id, name: match.name, date: match.date }, shots: [] });
   });
-  (shots || []).forEach((shot) => {
+  (shotRes.data || []).forEach((shot) => {
     const target = matchMap.get(shot.match_id);
     if (!target) return;
     target.shots.push({
@@ -84,7 +83,7 @@ const loadTeamData = async (teamId) => {
       period: shot.period
     });
   });
-  return { roster: roster || [], matches: Array.from(matchMap.values()) };
+  return { roster: rosterRes.data || [], matches: Array.from(matchMap.values()) };
 };
 
 const detectZone = (x, y) => {
@@ -188,16 +187,15 @@ const App = () => {
   }, []);
 
   const loadSeasons = async (userId) => {
-    const [{ data: seasonsData, error: seasonsError }, { data: teamsData, error: teamsError }] =
-      await Promise.all([
-        supabase.from('seasons').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
-        supabase.from('teams').select('*').eq('user_id', userId).order('created_at', { ascending: true })
-      ]);
-    if (seasonsError || teamsError) throw new Error('Failed to load seasons');
-    const seasonsWithTeams = (seasonsData || []).map((season) => ({
+    const [seasonsRes, teamsRes] = await Promise.all([
+      supabase.from('seasons').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
+      supabase.from('teams').select('*').eq('user_id', userId).order('created_at', { ascending: true })
+    ]);
+    if (seasonsRes.error || teamsRes.error) throw new Error('Failed to load seasons');
+    const seasonsWithTeams = (seasonsRes.data || []).map((season) => ({
       id: season.id,
       name: season.name,
-      teams: (teamsData || []).filter((team) => team.season_id === season.id)
+      teams: (teamsRes.data || []).filter((team) => team.season_id === season.id)
     }));
     return seasonsWithTeams;
   };
@@ -626,7 +624,360 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
       }
     };
     loadAll();
-    return (
+    return () => {
+      active = false;
+    };
+  }, [teamId]);
+
+  const currentMatch = useMemo(
+    () => matches.find((match) => match.info.id === currentMatchId) || matches[0],
+    [matches, currentMatchId]
+  );
+
+  useEffect(() => {
+    if (!currentMatch) return;
+    setCurrentMatchId(currentMatch.info.id);
+  }, [currentMatch]);
+
+  const refreshData = async () => {
+    const payload = await loadTeamData(teamId);
+    const mappedRoster = payload.roster.map((player) => ({
+      id: player.id,
+      name: player.name,
+      capNumber: player.cap_number
+    }));
+    setRoster(mappedRoster);
+    setMatches(payload.matches);
+  };
+
+  const handleFieldClick = (event) => {
+    if (!fieldRef.current) return;
+    if (!currentMatch) {
+      setError('Create a match first.');
+      return;
+    }
+    const rect = fieldRef.current.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    if (x >= 80 && y >= 75) return;
+    const zone = detectZone(x, y);
+    if (!zone) return;
+    setPendingShot({
+      x,
+      y,
+      zone,
+      attackType: '6vs6',
+      result: 'raak',
+      playerCap: roster[0]?.capNumber || '',
+      period: '1',
+      time: formatShotTime()
+    });
+  };
+
+  const handlePenaltyClick = () => {
+    if (!currentMatch) {
+      setError('Create a match first.');
+      return;
+    }
+    setPendingShot({
+      x: 90,
+      y: 87.5,
+      zone: 14,
+      attackType: 'strafworp',
+      result: 'raak',
+      playerCap: roster[0]?.capNumber || '',
+      period: '1',
+      time: formatShotTime()
+    });
+  };
+
+  const addShot = async () => {
+    if (!pendingShot || !currentMatch) return;
+    if (!pendingShot.playerCap) {
+      setError('Select a player.');
+      return;
+    }
+    const payload = {
+      team_id: teamId,
+      season_id: seasonId,
+      match_id: currentMatch.info.id,
+      user_id: userId,
+      x: pendingShot.x,
+      y: pendingShot.y,
+      zone: pendingShot.zone,
+      result: pendingShot.result,
+      player_cap: pendingShot.playerCap,
+      attack_type: pendingShot.attackType,
+      time: normalizeTime(pendingShot.time),
+      period: pendingShot.period
+    };
+    const { data, error: insertError } = await supabase.from('shots').insert(payload).select('*').single();
+    if (insertError) {
+      setError('Failed to save shot.');
+      return;
+    }
+    const nextMatches = matches.map((match) =>
+      match.info.id === currentMatch.info.id
+        ? {
+            ...match,
+            shots: [
+              ...match.shots,
+              {
+                id: data.id,
+                x: data.x,
+                y: data.y,
+                zone: data.zone,
+                result: data.result,
+                playerCap: data.player_cap,
+                attackType: data.attack_type,
+                time: data.time,
+                period: data.period
+              }
+            ]
+          }
+        : match
+    );
+    setMatches(nextMatches);
+    setPendingShot(null);
+    setError('');
+    notifyDataUpdated();
+  };
+
+  const deleteShot = async (shotId) => {
+    const { error: deleteError } = await supabase.from('shots').delete().eq('id', shotId);
+    if (deleteError) return;
+    const nextMatches = matches.map((match) =>
+      match.info.id === currentMatch.info.id
+        ? { ...match, shots: match.shots.filter((shot) => shot.id !== shotId) }
+        : match
+    );
+    setMatches(nextMatches);
+    notifyDataUpdated();
+  };
+
+  const handleRosterAdd = async () => {
+    if (!rosterForm.name || !rosterForm.capNumber) {
+      setError('Enter name and cap number.');
+      return;
+    }
+    const { data, error: insertError } = await supabase
+      .from('roster')
+      .insert({
+        team_id: teamId,
+        user_id: userId,
+        name: rosterForm.name,
+        cap_number: rosterForm.capNumber
+      })
+      .select('*')
+      .single();
+    if (insertError) return;
+    const nextRoster = [...roster, { id: data.id, name: data.name, capNumber: data.cap_number }];
+    setRoster(nextRoster);
+    setRosterForm({ name: '', capNumber: '' });
+    setError('');
+    notifyDataUpdated();
+  };
+
+  const removeRosterPlayer = async (playerId) => {
+    const { error: deleteError } = await supabase.from('roster').delete().eq('id', playerId);
+    if (deleteError) return;
+    const nextRoster = roster.filter((player) => player.id !== playerId);
+    setRoster(nextRoster);
+    notifyDataUpdated();
+  };
+
+  const addMatch = async () => {
+    const draft = DEFAULT_MATCH();
+    const { data, error: insertError } = await supabase
+      .from('matches')
+      .insert({
+        name: draft.info.name,
+        date: draft.info.date,
+        season_id: seasonId,
+        team_id: teamId,
+        user_id: userId
+      })
+      .select('*')
+      .single();
+    if (insertError) return;
+    const fresh = { info: { id: data.id, name: data.name, date: data.date }, shots: [] };
+    const nextMatches = [...matches, fresh];
+    setMatches(nextMatches);
+    setCurrentMatchId(fresh.info.id);
+    notifyDataUpdated();
+  };
+
+  const deleteMatch = async (matchId) => {
+    const { error: deleteError } = await supabase.from('matches').delete().eq('id', matchId);
+    if (deleteError) return;
+    const nextMatches = matches.filter((match) => match.info.id !== matchId);
+    setMatches(nextMatches);
+    setCurrentMatchId(nextMatches[0]?.info?.id || '');
+    notifyDataUpdated();
+  };
+
+  const updateMatchInfo = async (field, value) => {
+    if (!currentMatch) return;
+    const { error: updateError } = await supabase
+      .from('matches')
+      .update({ [field]: value })
+      .eq('id', currentMatch.info.id);
+    if (updateError) return;
+    const nextMatches = matches.map((match) =>
+      match.info.id === currentMatch.info.id
+        ? { ...match, info: { ...match.info, [field]: value } }
+        : match
+    );
+    setMatches(nextMatches);
+    notifyDataUpdated();
+  };
+
+  const filteredShots = useMemo(() => {
+    const relevantMatches = seasonMode
+      ? matches.filter((match) =>
+          filters.matches.length ? filters.matches.includes(match.info.id) : true
+        )
+      : currentMatch
+      ? [currentMatch]
+      : [];
+    const shots = relevantMatches.flatMap((match) => match.shots);
+    return shots.filter((shot) => {
+      if (seasonMode) {
+        if (filters.players.length && !filters.players.includes(shot.playerCap)) return false;
+        if (filters.results.length && !filters.results.includes(shot.result)) return false;
+        if (filters.periods.length && !filters.periods.includes(shot.period)) return false;
+        if (filters.attackTypes.length && !filters.attackTypes.includes(shot.attackType)) return false;
+      }
+      return true;
+    });
+  }, [seasonMode, matches, currentMatch, filters]);
+
+  const displayShots = useMemo(() => {
+    return [...filteredShots].sort((a, b) => {
+      const periodA = PERIODS.indexOf(a.period);
+      const periodB = PERIODS.indexOf(b.period);
+      if (periodA !== periodB) return periodA - periodB;
+      return timeToSeconds(b.time) - timeToSeconds(a.time);
+    });
+  }, [filteredShots]);
+
+  const exportJSON = async () => {
+    try {
+      const payload = {
+        roster,
+        matches: matches.map((match) => ({ info: match.info, shots: match.shots })),
+        exportDate: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `waterpolo_shotmap_${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError('Export failed.');
+    }
+  };
+
+  const importJSON = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data?.matches) throw new Error('Invalid');
+
+      const rosterPayload = (data.roster || []).map((player) => ({
+        team_id: teamId,
+        user_id: userId,
+        name: player.name,
+        cap_number: player.capNumber
+      }));
+      if (rosterPayload.length) {
+        await supabase.from('roster').insert(rosterPayload);
+      }
+
+      const matchIdMap = new Map();
+      const matchPayload = (data.matches || []).map((match) => {
+        const newId = crypto.randomUUID();
+        matchIdMap.set(match.info.id, newId);
+        return {
+          id: newId,
+          name: match.info.name,
+          date: match.info.date,
+          season_id: seasonId,
+          team_id: teamId,
+          user_id: userId
+        };
+      });
+      if (matchPayload.length) {
+        await supabase.from('matches').insert(matchPayload);
+      }
+
+      const shotPayload = (data.matches || []).flatMap((match) =>
+        (match.shots || []).map((shot) => ({
+          team_id: teamId,
+          season_id: seasonId,
+          match_id: matchIdMap.get(match.info.id),
+          user_id: userId,
+          x: shot.x,
+          y: shot.y,
+          zone: shot.zone,
+          result: shot.result,
+          player_cap: shot.playerCap,
+          attack_type: shot.attackType,
+          time: shot.time,
+          period: shot.period
+        }))
+      );
+      if (shotPayload.length) {
+        await supabase.from('shots').insert(shotPayload);
+      }
+
+      await refreshData();
+      setError('');
+      notifyDataUpdated();
+    } catch (e) {
+      setError('Import failed. Check the JSON file.');
+    }
+  };
+
+  const downloadPNG = async () => {
+    if (!fieldRef.current) return;
+    try {
+      const canvas = await html2canvas(fieldRef.current, {
+        backgroundColor: '#0b4a7a',
+        scale: 2
+      });
+      const output = document.createElement('canvas');
+      output.width = 1440;
+      output.height = 1450;
+      const ctx = output.getContext('2d');
+      ctx.fillStyle = '#f8fbff';
+      ctx.fillRect(0, 0, output.width, output.height);
+      ctx.fillStyle = '#0b1c2c';
+      ctx.font = '600 36px Space Grotesk, sans-serif';
+      const title = seasonMode ? 'Water Polo Shotmap (Season)' : `Water Polo Shotmap - ${currentMatch?.info?.name || ''}`;
+      ctx.fillText(title, 40, 64);
+      ctx.drawImage(canvas, 0, 100, 1440, 1200);
+      const url = output.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `shotmap_${new Date().toISOString().slice(0, 10)}.png`;
+      link.click();
+    } catch (e) {
+      setError('PNG export failed.');
+    }
+  };
+
+  const penaltyShots = filteredShots.filter((shot) => shot.attackType === 'strafworp');
+
+  if (loading) {
+    return <div className="p-10 text-slate-700">Loading...</div>;
+  }
+
+  return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -1338,15 +1689,15 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
   }, [analyticsShots, heatType]);
 
   if (loading) {
-    return <div className="p-10 text-slate-700">Laden...</div>;
+    return <div className="p-10 text-slate-700">Loading...</div>;
   }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-cyan-700">Waterpolo Analytics</p>
-          <h2 className="text-2xl font-semibold">Heatmaps & Analyse</h2>
+          <p className="text-sm font-semibold text-cyan-700">Water Polo Analytics</p>
+          <h2 className="text-2xl font-semibold">Heatmaps & Analysis</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -1387,14 +1738,14 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                   className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
                   onClick={() => setShowShots((prev) => !prev)}
                 >
-                  👁️ {showShots ? 'Verberg schoten' : 'Toon schoten'}
+                  👁️ {showShots ? 'Hide shots' : 'Show shots'}
                 </button>
               )}
             </div>
           </div>
 
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Heatmap veld</h3>
+            <h3 className="text-sm font-semibold text-slate-700">Heatmap field</h3>
             <div className="mt-4 flex justify-center">
               <div
                 ref={fieldRef}
@@ -1426,7 +1777,7 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                         {zone.label}
                       </div>
                       {zone.id === 14 && (
-                        <div className="absolute bottom-2 left-2 text-[10px] text-white/70">Strafworpen</div>
+                        <div className="absolute bottom-2 left-2 text-[10px] text-white/70">Penalties</div>
                       )}
                       {heatType === 'distance' && zone.id !== 14 && zoneValues[zone.id] != null && (
                         <div className="absolute bottom-2 right-2 rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold text-slate-700">
@@ -1449,22 +1800,22 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                       ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id))
                       : { x: shot.x, y: shot.y };
                     return (
-                    <div
-                      key={shot.id}
-                      className={`absolute flex h-4 w-4 items-center justify-center rounded-full border border-white/80 text-[9px] font-semibold text-white ${
-                        shot.result === 'raak'
-                          ? 'bg-green-500/80'
-                          : shot.result === 'redding'
-                          ? 'bg-orange-400/80'
-                          : 'bg-red-500/80'
-                      }`}
-                      style={{
-                        left: `calc(${position.x}% - 8px)`,
-                        top: `calc(${position.y}% - 8px)`
-                      }}
-                    >
-                      {shot.playerCap}
-                    </div>
+                      <div
+                        key={shot.id}
+                        className={`absolute flex h-4 w-4 items-center justify-center rounded-full border border-white/80 text-[9px] font-semibold text-white ${
+                          shot.result === 'raak'
+                            ? 'bg-green-500/80'
+                            : shot.result === 'redding'
+                            ? 'bg-orange-400/80'
+                            : 'bg-red-500/80'
+                        }`}
+                        style={{
+                          left: `calc(${position.x}% - 8px)`,
+                          top: `calc(${position.y}% - 8px)`
+                        }}
+                      >
+                        {shot.playerCap}
+                      </div>
                     );
                   })}
 
@@ -1475,44 +1826,44 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                       ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id))
                       : { x: shot.x, y: shot.y };
                     return (
-                    <div
-                      key={shot.id}
-                      className="absolute flex flex-col items-center text-[10px] font-semibold text-white"
-                      style={{
-                        left: `calc(${position.x}% - 12px)`,
-                        top: `calc(${position.y}% - 20px)`
-                      }}
-                    >
-                      <div className="rounded-full bg-blue-100/80 px-2 py-1 text-[10px] text-slate-700">
-                        #{shot.playerCap}
+                      <div
+                        key={shot.id}
+                        className="absolute flex flex-col items-center text-[10px] font-semibold text-white"
+                        style={{
+                          left: `calc(${position.x}% - 12px)`,
+                          top: `calc(${position.y}% - 20px)`
+                        }}
+                      >
+                        <div className="rounded-full bg-blue-100/80 px-2 py-1 text-[10px] text-slate-700">
+                          #{shot.playerCap}
+                        </div>
+                        <div className="mt-1 rounded-full bg-amber-100/90 px-2 py-1 text-[10px] text-amber-900">
+                          {distanceMeters(shot).toFixed(1)}m
+                        </div>
                       </div>
-                      <div className="mt-1 rounded-full bg-amber-100/90 px-2 py-1 text-[10px] text-amber-900">
-                        {distanceMeters(shot).toFixed(1)}m
-                      </div>
-                    </div>
                     );
                   })}
               </div>
             </div>
             {heatType !== 'distance' && (
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                <div className="font-semibold text-slate-700">Legenda</div>
+                <div className="font-semibold text-slate-700">Legend</div>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full bg-red-500/60" />
-                    Laag
+                    Low
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full bg-amber-400/60" />
-                    Midden
+                    Mid
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full bg-green-500/60" />
-                    Hoog
+                    High
                   </div>
                 </div>
                 <div className="mt-2 text-[11px] text-slate-500">
-                  Kleurverloop gebaseerd op hoogste waarde in zones 1-13.
+                  Gradient based on max value in zones 1-13.
                 </div>
               </div>
             )}
@@ -1524,7 +1875,7 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
             <h3 className="text-sm font-semibold text-slate-700">Filters</h3>
             <div className="mt-3 space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-500">Wedstrijden</label>
+                <label className="text-xs font-semibold text-slate-500">Matches</label>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {matches.map((match) => (
                     <button
@@ -1549,7 +1900,7 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">Spelers</label>
+                <label className="text-xs font-semibold text-slate-500">Players</label>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {roster.map((player) => (
                     <button
@@ -1574,32 +1925,36 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">Uitkomst</label>
+                <label className="text-xs font-semibold text-slate-500">Outcome</label>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {['raak', 'redding', 'mis'].map((result) => (
+                  {[
+                    { value: 'raak', label: 'Goal' },
+                    { value: 'redding', label: 'Saved' },
+                    { value: 'mis', label: 'Miss' }
+                  ].map((result) => (
                     <button
-                      key={result}
+                      key={result.value}
                       className={`rounded-full px-3 py-1 text-xs ${
-                        filters.results.includes(result)
+                        filters.results.includes(result.value)
                           ? 'bg-slate-900 text-white'
                           : 'bg-slate-100 text-slate-600'
                       }`}
                       onClick={() =>
                         setFilters((prev) => ({
                           ...prev,
-                          results: prev.results.includes(result)
-                            ? prev.results.filter((value) => value !== result)
-                            : [...prev.results, result]
+                          results: prev.results.includes(result.value)
+                            ? prev.results.filter((value) => value !== result.value)
+                            : [...prev.results, result.value]
                         }))
                       }
                     >
-                      {result}
+                      {result.label}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">Periode</label>
+                <label className="text-xs font-semibold text-slate-500">Period</label>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {PERIODS.map((period) => (
                     <button
@@ -1624,7 +1979,7 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">Aanval type</label>
+                <label className="text-xs font-semibold text-slate-500">Attack type</label>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {ATTACK_TYPES.map((type) => (
                     <button
@@ -1652,35 +2007,35 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
           </div>
 
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Zone 14 statistieken</h3>
+            <h3 className="text-sm font-semibold text-slate-700">Zone 14 stats</h3>
             <div className="mt-3 text-sm text-slate-600">
               {zone14Stats?.total ? (
                 <div className="space-y-1">
-                  <div>Totaal: {zone14Stats.total}</div>
-                  <div>Raak: {zone14Stats.success}</div>
-                  <div>Redding: {zone14Stats.save}</div>
-                  <div>Mis: {zone14Stats.miss}</div>
+                  <div>Total: {zone14Stats.total}</div>
+                  <div>Goal: {zone14Stats.success}</div>
+                  <div>Saved: {zone14Stats.save}</div>
+                  <div>Miss: {zone14Stats.miss}</div>
                 </div>
               ) : (
-                <div>Geen strafworpen in selectie.</div>
+                <div>No penalties in selection.</div>
               )}
             </div>
           </div>
 
           {heatType === 'distance' && distanceByResult && (
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-700">Gemiddelde afstand</h3>
+              <h3 className="text-sm font-semibold text-slate-700">Average distance</h3>
               <div className="mt-3 space-y-2 text-sm text-slate-600">
                 <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span>Raak</span>
+                  <span>Goal</span>
                   <span className="font-semibold text-emerald-700">{distanceByResult.raak}m</span>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span>Redding</span>
+                  <span>Saved</span>
                   <span className="font-semibold text-amber-700">{distanceByResult.redding}m</span>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span>Mis</span>
+                  <span>Miss</span>
                   <span className="font-semibold text-red-700">{distanceByResult.mis}m</span>
                 </div>
               </div>

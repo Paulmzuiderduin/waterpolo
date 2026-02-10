@@ -80,13 +80,16 @@ const notifyDataUpdated = () => {
   window.dispatchEvent(new Event('waterpolo-data-updated'));
 };
 
-const loadShotmapData = async () => {
-  const roster = (await storageGet('waterpolo_roster')) || [];
-  const matchList = (await storageGet('waterpolo_match_list')) || [];
+const dataKey = (seasonId, teamId, key) => `waterpolo_${seasonId}_${teamId}_${key}`;
+
+const loadShotmapData = async (seasonId, teamId) => {
+  if (!seasonId || !teamId) return { roster: [], matches: [] };
+  const roster = (await storageGet(dataKey(seasonId, teamId, 'roster'))) || [];
+  const matchList = (await storageGet(dataKey(seasonId, teamId, 'match_list'))) || [];
   const matches = matchList.length
     ? await Promise.all(
         matchList.map(async (info) => {
-          const match = await storageGet(`waterpolo_match_${info.id}`);
+          const match = await storageGet(dataKey(seasonId, teamId, `match_${info.id}`));
           return match || { info, shots: [] };
         })
       )
@@ -105,9 +108,7 @@ const detectZone = (x, y) => {
   return null;
 };
 
-const formatShotTime = () => {
-  return '7:00';
-};
+const formatShotTime = () => '7:00';
 
 const normalizeTime = (value) => {
   if (!value) return '7:00';
@@ -147,6 +148,153 @@ const valueToColor = (value, max, scheme) => {
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('shotmap');
+  const [seasons, setSeasons] = useState([]);
+  const [selectedSeasonId, setSelectedSeasonId] = useState('');
+  const [selectedTeamId, setSelectedTeamId] = useState('');
+  const [seasonForm, setSeasonForm] = useState('');
+  const [teamForm, setTeamForm] = useState('');
+  const [loadingSeasons, setLoadingSeasons] = useState(true);
+
+  useEffect(() => {
+    const loadSeasons = async () => {
+      const stored = (await storageGet('waterpolo_seasons')) || [];
+      setSeasons(stored);
+      setLoadingSeasons(false);
+    };
+    loadSeasons();
+  }, []);
+
+  const selectedSeason = seasons.find((season) => season.id === selectedSeasonId);
+  const selectedTeam = selectedSeason?.teams?.find((team) => team.id === selectedTeamId);
+
+  const createSeason = async () => {
+    if (!seasonForm.trim()) return;
+    const newSeason = { id: `season_${Date.now()}`, name: seasonForm.trim(), teams: [] };
+    const nextSeasons = [...seasons, newSeason];
+    setSeasons(nextSeasons);
+    setSeasonForm('');
+    await storageSet('waterpolo_seasons', nextSeasons);
+    setSelectedSeasonId(newSeason.id);
+    setSelectedTeamId('');
+  };
+
+  const createTeam = async () => {
+    if (!teamForm.trim() || !selectedSeason) return;
+    const newTeam = { id: `team_${Date.now()}`, name: teamForm.trim() };
+    const nextSeasons = seasons.map((season) =>
+      season.id === selectedSeason.id
+        ? { ...season, teams: [...(season.teams || []), newTeam] }
+        : season
+    );
+    setSeasons(nextSeasons);
+    setTeamForm('');
+    await storageSet('waterpolo_seasons', nextSeasons);
+    setSelectedTeamId(newTeam.id);
+  };
+
+  if (loadingSeasons) {
+    return <div className="p-10 text-slate-700">Laden...</div>;
+  }
+
+  if (!selectedSeason || !selectedTeam) {
+    return (
+      <div className="min-h-screen px-6 py-8">
+        <div className="mx-auto max-w-5xl space-y-6">
+          <header className="rounded-3xl bg-white p-6 shadow-sm">
+            <p className="text-sm font-semibold text-cyan-700">Waterpolo Platform</p>
+            <h1 className="text-3xl font-semibold">Seizoenen & Teams</h1>
+            <p className="mt-2 text-sm text-slate-500">
+              Kies een seizoen en team, of maak nieuwe folders aan.
+            </p>
+          </header>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr]">
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold text-slate-700">Seizoenen</h2>
+              <div className="mt-3 space-y-2">
+                {seasons.length === 0 && (
+                  <div className="text-sm text-slate-500">Nog geen seizoenen.</div>
+                )}
+                {seasons.map((season) => (
+                  <button
+                    key={season.id}
+                    className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${
+                      selectedSeasonId === season.id
+                        ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
+                        : 'border-slate-100 text-slate-600'
+                    }`}
+                    onClick={() => {
+                      setSelectedSeasonId(season.id);
+                      setSelectedTeamId('');
+                    }}
+                  >
+                    <span>{season.name}</span>
+                    <span className="text-xs text-slate-400">{season.teams?.length || 0} teams</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 flex gap-2">
+                <input
+                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  placeholder="Nieuw seizoen"
+                  value={seasonForm}
+                  onChange={(event) => setSeasonForm(event.target.value)}
+                />
+                <button
+                  className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
+                  onClick={createSeason}
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold text-slate-700">Teams</h2>
+              {selectedSeason ? (
+                <div className="mt-3 space-y-2">
+                  {(selectedSeason.teams || []).length === 0 && (
+                    <div className="text-sm text-slate-500">Nog geen teams in dit seizoen.</div>
+                  )}
+                  {(selectedSeason.teams || []).map((team) => (
+                    <button
+                      key={team.id}
+                      className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${
+                        selectedTeamId === team.id
+                          ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
+                          : 'border-slate-100 text-slate-600'
+                      }`}
+                      onClick={() => setSelectedTeamId(team.id)}
+                    >
+                      {team.name}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 text-sm text-slate-500">Kies eerst een seizoen.</div>
+              )}
+              <div className="mt-4 flex gap-2">
+                <input
+                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  placeholder={selectedSeason ? 'Nieuw team' : 'Selecteer seizoen eerst'}
+                  value={teamForm}
+                  onChange={(event) => setTeamForm(event.target.value)}
+                  disabled={!selectedSeason}
+                />
+                <button
+                  className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  onClick={createTeam}
+                  disabled={!selectedSeason}
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen px-6 py-8">
@@ -155,6 +303,9 @@ const App = () => {
           <div>
             <p className="text-sm font-semibold text-cyan-700">Waterpolo Platform</p>
             <h1 className="text-3xl font-semibold">Shotmap & Analytics</h1>
+            <p className="text-xs text-slate-500">
+              {selectedSeason.name} · {selectedTeam.name}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -174,16 +325,29 @@ const App = () => {
               <BarChart2 size={16} />
               Analytics
             </button>
+            <button
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+              onClick={() => {
+                setSelectedSeasonId('');
+                setSelectedTeamId('');
+              }}
+            >
+              Wissel team
+            </button>
           </div>
         </header>
 
-        {activeTab === 'shotmap' ? <ShotmapView /> : <AnalyticsView />}
+        {activeTab === 'shotmap' ? (
+          <ShotmapView seasonId={selectedSeasonId} teamId={selectedTeamId} />
+        ) : (
+          <AnalyticsView seasonId={selectedSeasonId} teamId={selectedTeamId} />
+        )}
       </div>
     </div>
   );
 };
 
-const ShotmapView = () => {
+const ShotmapView = ({ seasonId, teamId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [roster, setRoster] = useState([]);
@@ -204,26 +368,26 @@ const ShotmapView = () => {
   useEffect(() => {
     const loadAll = async () => {
       try {
-        const storedRoster = (await storageGet('waterpolo_roster')) || [];
-        const matchList = (await storageGet('waterpolo_match_list')) || [];
+        const storedRoster = (await storageGet(dataKey(seasonId, teamId, 'roster'))) || [];
+        const matchList = (await storageGet(dataKey(seasonId, teamId, 'match_list'))) || [];
         let loadedMatches = [];
         if (matchList.length) {
           loadedMatches = await Promise.all(
             matchList.map(async (info) => {
-              const match = await storageGet(`waterpolo_match_${info.id}`);
+              const match = await storageGet(dataKey(seasonId, teamId, `match_${info.id}`));
               return match || { info, shots: [] };
             })
           );
         }
-        const storedCurrent = await storageGet('waterpolo_current_match');
+        const storedCurrent = await storageGet(dataKey(seasonId, teamId, 'current_match'));
         let currentId = storedCurrent?.info?.id || loadedMatches[0]?.info?.id;
         if (!currentId) {
           const fresh = DEFAULT_MATCH();
           loadedMatches = [fresh];
           currentId = fresh.info.id;
-          await storageSet(`waterpolo_match_${fresh.info.id}`, fresh);
-          await storageSet('waterpolo_match_list', [fresh.info]);
-          await storageSet('waterpolo_current_match', fresh);
+          await storageSet(dataKey(seasonId, teamId, `match_${fresh.info.id}`), fresh);
+          await storageSet(dataKey(seasonId, teamId, 'match_list'), [fresh.info]);
+          await storageSet(dataKey(seasonId, teamId, 'current_match'), fresh);
         }
         setRoster(storedRoster);
         setMatches(loadedMatches);
@@ -235,7 +399,7 @@ const ShotmapView = () => {
       }
     };
     loadAll();
-  }, []);
+  }, [seasonId, teamId]);
 
   const currentMatch = useMemo(
     () => matches.find((match) => match.info.id === currentMatchId) || matches[0],
@@ -249,13 +413,15 @@ const ShotmapView = () => {
 
   const persistMatches = async (nextMatches, nextCurrentId) => {
     const list = nextMatches.map((match) => match.info);
-    await storageSet('waterpolo_match_list', list);
+    await storageSet(dataKey(seasonId, teamId, 'match_list'), list);
     const current = nextMatches.find((match) => match.info.id === nextCurrentId) || nextMatches[0];
     if (current) {
-      await storageSet('waterpolo_current_match', current);
+      await storageSet(dataKey(seasonId, teamId, 'current_match'), current);
     }
     await Promise.all(
-      nextMatches.map((match) => storageSet(`waterpolo_match_${match.info.id}`, match))
+      nextMatches.map((match) =>
+        storageSet(dataKey(seasonId, teamId, `match_${match.info.id}`), match)
+      )
     );
     notifyDataUpdated();
   };
@@ -338,14 +504,14 @@ const ShotmapView = () => {
     setRoster(nextRoster);
     setRosterForm({ name: '', capNumber: '' });
     setError('');
-    await storageSet('waterpolo_roster', nextRoster);
+    await storageSet(dataKey(seasonId, teamId, 'roster'), nextRoster);
     notifyDataUpdated();
   };
 
   const removeRosterPlayer = async (playerId) => {
     const nextRoster = roster.filter((player) => player.id !== playerId);
     setRoster(nextRoster);
-    await storageSet('waterpolo_roster', nextRoster);
+    await storageSet(dataKey(seasonId, teamId, 'roster'), nextRoster);
     notifyDataUpdated();
   };
 
@@ -362,7 +528,7 @@ const ShotmapView = () => {
     if (!nextMatches.length) return;
     setMatches(nextMatches);
     setCurrentMatchId(nextMatches[0].info.id);
-    await storageDelete(`waterpolo_match_${matchId}`);
+    await storageDelete(dataKey(seasonId, teamId, `match_${matchId}`));
     await persistMatches(nextMatches, nextMatches[0].info.id);
   };
 
@@ -440,7 +606,7 @@ const ShotmapView = () => {
       setRoster(nextRoster);
       setMatches(nextMatches);
       setCurrentMatchId(nextMatches[0]?.info?.id || '');
-      await storageSet('waterpolo_roster', nextRoster);
+      await storageSet(dataKey(seasonId, teamId, 'roster'), nextRoster);
       await persistMatches(nextMatches, nextMatches[0]?.info?.id || '');
       notifyDataUpdated();
       setError('');
@@ -995,14 +1161,14 @@ const ShotmapView = () => {
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-700">Schoten</h3>
             <div className="mt-3 max-h-[280px] space-y-2 overflow-y-auto text-sm">
-                {displayShots.length === 0 && (
-                  <div className="text-slate-500">Geen schoten geregistreerd.</div>
-                )}
-                {displayShots.map((shot) => (
-                  <div
-                    key={shot.id}
-                    className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2"
-                  >
+              {displayShots.length === 0 && (
+                <div className="text-slate-500">Geen schoten geregistreerd.</div>
+              )}
+              {displayShots.map((shot) => (
+                <div
+                  key={shot.id}
+                  className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2"
+                >
                   <div>
                     <div className="font-semibold text-slate-700">
                       Zone {shot.zone} · #{shot.playerCap}
@@ -1027,7 +1193,7 @@ const ShotmapView = () => {
   );
 };
 
-const AnalyticsView = () => {
+const AnalyticsView = ({ seasonId, teamId }) => {
   const [data, setData] = useState({ roster: [], matches: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1046,7 +1212,7 @@ const AnalyticsView = () => {
     let active = true;
     const load = async () => {
       try {
-        const payload = await loadShotmapData();
+        const payload = await loadShotmapData(seasonId, teamId);
         if (active) {
           setData(payload);
           setError('');
@@ -1064,7 +1230,7 @@ const AnalyticsView = () => {
       active = false;
       window.removeEventListener('waterpolo-data-updated', handleUpdate);
     };
-  }, []);
+  }, [seasonId, teamId]);
 
   const matches = data.matches || [];
   const roster = data.roster || [];
@@ -1167,21 +1333,21 @@ const AnalyticsView = () => {
 
   return (
     <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-cyan-700">Waterpolo Analytics</p>
-            <h2 className="text-2xl font-semibold">Heatmaps & Analyse</h2>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-              onClick={downloadPNG}
-            >
-              <Download size={16} />
-              Download PNG
-            </button>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-cyan-700">Waterpolo Analytics</p>
+          <h2 className="text-2xl font-semibold">Heatmaps & Analyse</h2>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            onClick={downloadPNG}
+          >
+            <Download size={16} />
+            Download PNG
+          </button>
+        </div>
+      </div>
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

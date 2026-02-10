@@ -23,35 +23,17 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: |
-            waterpolo-shotmap/package-lock.json
-            waterpolo-analytics/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Install shotmap
-        working-directory: waterpolo-shotmap
+      - name: Install deps
         run: npm ci
 
-      - name: Build shotmap
-        working-directory: waterpolo-shotmap
+      - name: Build
         run: npm run build
-
-      - name: Install analytics
-        working-directory: waterpolo-analytics
-        run: npm ci
-
-      - name: Build analytics
-        working-directory: waterpolo-analytics
-        run: npm run build
-
-      - name: Prepare pages content
-        run: |
-          mkdir -p public/shotmap public/analytics
-          cp -R waterpolo-shotmap/dist/* public/shotmap/
-          cp -R waterpolo-analytics/dist/* public/analytics/
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: public
+          path: dist
 
   deploy:
     environment:

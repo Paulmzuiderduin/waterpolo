@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Plus, Upload, X, BarChart2, LogOut } from 'lucide-react';
+import { Download, Plus, X, BarChart2, LogOut } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { supabase } from './lib/supabase';
 
@@ -73,6 +73,7 @@ const loadTeamData = async (teamId) => {
     if (!target) return;
     target.shots.push({
       id: shot.id,
+      matchId: shot.match_id,
       x: shot.x,
       y: shot.y,
       zone: shot.zone,
@@ -349,7 +350,14 @@ const App = () => {
             >
               Send magic link
             </button>
+            <button
+              className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+              onClick={handleMagicLink}
+            >
+              Resend link
+            </button>
             {authMessage && <div className="mt-3 text-sm text-slate-500">{authMessage}</div>}
+            <div className="mt-2 text-xs text-slate-400">If you don’t see it, check spam.</div>
           </div>
         </div>
       </div>
@@ -507,6 +515,7 @@ const App = () => {
             <p className="text-xs text-slate-500">
               {selectedSeason.name} · {selectedTeam.name}
             </p>
+            <p className="text-xs text-slate-400">{session.user.email}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -589,6 +598,7 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
   const [matches, setMatches] = useState([]);
   const [currentMatchId, setCurrentMatchId] = useState('');
   const [pendingShot, setPendingShot] = useState(null);
+  const [editingShotId, setEditingShotId] = useState(null);
   const [seasonMode, setSeasonMode] = useState(false);
   const [filters, setFilters] = useState({
     players: [],
@@ -691,7 +701,7 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
     });
   };
 
-  const addShot = async () => {
+  const saveShot = async () => {
     if (!pendingShot || !currentMatch) return;
     if (!pendingShot.playerCap) {
       setError('Select a player.');
@@ -711,39 +721,82 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
       time: normalizeTime(pendingShot.time),
       period: pendingShot.period
     };
-    const { data, error: insertError } = await supabase.from('shots').insert(payload).select('*').single();
-    if (insertError) {
-      setError('Failed to save shot.');
-      return;
+    let data;
+    if (editingShotId) {
+      const { data: updated, error: updateError } = await supabase
+        .from('shots')
+        .update(payload)
+        .eq('id', editingShotId)
+        .select('*')
+        .single();
+      if (updateError) {
+        setError('Failed to update shot.');
+        return;
+      }
+      data = updated;
+    } else {
+      const { data: inserted, error: insertError } = await supabase
+        .from('shots')
+        .insert(payload)
+        .select('*')
+        .single();
+      if (insertError) {
+        setError('Failed to save shot.');
+        return;
+      }
+      data = inserted;
     }
     const nextMatches = matches.map((match) =>
       match.info.id === currentMatch.info.id
         ? {
             ...match,
-            shots: [
-              ...match.shots,
-              {
-                id: data.id,
-                x: data.x,
-                y: data.y,
-                zone: data.zone,
-                result: data.result,
-                playerCap: data.player_cap,
-                attackType: data.attack_type,
-                time: data.time,
-                period: data.period
-              }
-            ]
+            shots: match.shots
+              .map((shot) =>
+                shot.id === editingShotId
+                  ? {
+                      id: data.id,
+                      x: data.x,
+                      y: data.y,
+                      zone: data.zone,
+                      result: data.result,
+                      playerCap: data.player_cap,
+                      attackType: data.attack_type,
+                    time: data.time,
+                    period: data.period,
+                    matchId: currentMatch.info.id
+                    }
+                  : shot
+              )
+              .concat(
+                editingShotId
+                  ? []
+                  : [
+                      {
+                        id: data.id,
+                        x: data.x,
+                        y: data.y,
+                        zone: data.zone,
+                        result: data.result,
+                        playerCap: data.player_cap,
+                        attackType: data.attack_type,
+                        time: data.time,
+                        period: data.period,
+                        matchId: currentMatch.info.id
+                      }
+                    ]
+              )
           }
         : match
     );
     setMatches(nextMatches);
     setPendingShot(null);
+    setEditingShotId(null);
     setError('');
     notifyDataUpdated();
   };
 
   const deleteShot = async (shotId) => {
+    if (!window.confirm('Delete this shot?')) return;
     const { error: deleteError } = await supabase.from('shots').delete().eq('id', shotId);
     if (deleteError) return;
     const nextMatches = matches.map((match) =>
@@ -808,6 +861,7 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
   };
 
   const deleteMatch = async (matchId) => {
+    if (!window.confirm('Delete this match?')) return;
     const { error: deleteError } = await supabase.from('matches').delete().eq('id', matchId);
     if (deleteError) return;
     const nextMatches = matches.filter((match) => match.info.id !== matchId);
@@ -861,88 +915,6 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
     });
   }, [filteredShots]);
 
-  const exportJSON = async () => {
-    try {
-      const payload = {
-        roster,
-        matches: matches.map((match) => ({ info: match.info, shots: match.shots })),
-        exportDate: new Date().toISOString()
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `waterpolo_shotmap_${new Date().toISOString().slice(0, 10)}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setError('Export failed.');
-    }
-  };
-
-  const importJSON = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      if (!data?.matches) throw new Error('Invalid');
-
-      const rosterPayload = (data.roster || []).map((player) => ({
-        team_id: teamId,
-        user_id: userId,
-        name: player.name,
-        cap_number: player.capNumber
-      }));
-      if (rosterPayload.length) {
-        await supabase.from('roster').insert(rosterPayload);
-      }
-
-      const matchIdMap = new Map();
-      const matchPayload = (data.matches || []).map((match) => {
-        const newId = crypto.randomUUID();
-        matchIdMap.set(match.info.id, newId);
-        return {
-          id: newId,
-          name: match.info.name,
-          date: match.info.date,
-          season_id: seasonId,
-          team_id: teamId,
-          user_id: userId
-        };
-      });
-      if (matchPayload.length) {
-        await supabase.from('matches').insert(matchPayload);
-      }
-
-      const shotPayload = (data.matches || []).flatMap((match) =>
-        (match.shots || []).map((shot) => ({
-          team_id: teamId,
-          season_id: seasonId,
-          match_id: matchIdMap.get(match.info.id),
-          user_id: userId,
-          x: shot.x,
-          y: shot.y,
-          zone: shot.zone,
-          result: shot.result,
-          player_cap: shot.playerCap,
-          attack_type: shot.attackType,
-          time: shot.time,
-          period: shot.period
-        }))
-      );
-      if (shotPayload.length) {
-        await supabase.from('shots').insert(shotPayload);
-      }
-
-      await refreshData();
-      setError('');
-      notifyDataUpdated();
-    } catch (e) {
-      setError('Import failed. Check the JSON file.');
-    }
-  };
-
   const downloadPNG = async () => {
     if (!fieldRef.current) return;
     try {
@@ -971,6 +943,34 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
     }
   };
 
+  const exportCSV = () => {
+    const matchNameById = new Map(matches.map((match) => [match.info.id, match.info.name]));
+    const rows = [
+      ['match', 'playerCap', 'result', 'attackType', 'period', 'time', 'zone', 'x', 'y']
+    ];
+    filteredShots.forEach((shot) => {
+      rows.push([
+        matchNameById.get(shot.matchId) || '',
+        shot.playerCap,
+        shot.result,
+        shot.attackType,
+        shot.period,
+        shot.time,
+        shot.zone,
+        shot.x,
+        shot.y
+      ]);
+    });
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/\"/g, '""')}"`).join(',')).join('\\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `analytics_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const penaltyShots = filteredShots.filter((shot) => shot.attackType === 'strafworp');
 
   if (loading) {
@@ -993,17 +993,11 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
             Download PNG
           </button>
           <button
-            className="inline-flex items-center gap-2 rounded-full bg-cyan-600 px-4 py-2 text-sm font-semibold text-white"
-            onClick={exportJSON}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+            onClick={exportCSV}
           >
-            <Download size={16} />
-            Export JSON
+            Export CSV
           </button>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-cyan-200 bg-white px-4 py-2 text-sm font-semibold text-cyan-700">
-            <Upload size={16} />
-            Import
-            <input type="file" accept="application/json" className="hidden" onChange={importJSON} />
-          </label>
         </div>
       </div>
 
@@ -1429,13 +1423,16 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
                 <div className="flex gap-2">
                   <button
                     className="flex-1 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                    onClick={addShot}
+                    onClick={saveShot}
                   >
-                    Save
+                    {editingShotId ? 'Update' : 'Save'}
                   </button>
                   <button
                     className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
-                    onClick={() => setPendingShot(null)}
+                    onClick={() => {
+                      setPendingShot(null);
+                      setEditingShotId(null);
+                    }}
                   >
                     Cancel
                   </button>
@@ -1510,12 +1507,32 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
                       {shot.result} · {shot.attackType} · P{shot.period} · {shot.time}
                     </div>
                   </div>
-                  <button
-                    className="text-xs font-semibold text-red-500"
-                    onClick={() => deleteShot(shot.id)}
-                  >
-                    Delete
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="text-xs font-semibold text-slate-600"
+                      onClick={() => {
+                        setPendingShot({
+                          x: shot.x,
+                          y: shot.y,
+                          zone: shot.zone,
+                          attackType: shot.attackType,
+                          result: shot.result,
+                          playerCap: shot.playerCap,
+                          period: shot.period,
+                          time: shot.time
+                        });
+                        setEditingShotId(shot.id);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="text-xs font-semibold text-red-500"
+                      onClick={() => deleteShot(shot.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

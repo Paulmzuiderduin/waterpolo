@@ -192,6 +192,54 @@ const App = () => {
     setSelectedTeamId(newTeam.id);
   };
 
+  const renameSeason = async (seasonId, name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const nextSeasons = seasons.map((season) =>
+      season.id === seasonId ? { ...season, name: trimmed } : season
+    );
+    setSeasons(nextSeasons);
+    await storageSet('waterpolo_seasons', nextSeasons);
+  };
+
+  const deleteSeason = async (seasonId) => {
+    if (!window.confirm('Seizoen verwijderen? Alle teams en data verdwijnen.')) return;
+    const nextSeasons = seasons.filter((season) => season.id !== seasonId);
+    setSeasons(nextSeasons);
+    await storageSet('waterpolo_seasons', nextSeasons);
+    if (selectedSeasonId === seasonId) {
+      setSelectedSeasonId('');
+      setSelectedTeamId('');
+    }
+  };
+
+  const renameTeam = async (seasonId, teamId, name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const nextSeasons = seasons.map((season) => {
+      if (season.id !== seasonId) return season;
+      const teams = (season.teams || []).map((team) =>
+        team.id === teamId ? { ...team, name: trimmed } : team
+      );
+      return { ...season, teams };
+    });
+    setSeasons(nextSeasons);
+    await storageSet('waterpolo_seasons', nextSeasons);
+  };
+
+  const deleteTeam = async (seasonId, teamId) => {
+    if (!window.confirm('Team verwijderen? Alle data voor dit team verdwijnen.')) return;
+    const nextSeasons = seasons.map((season) => {
+      if (season.id !== seasonId) return season;
+      return { ...season, teams: (season.teams || []).filter((team) => team.id !== teamId) };
+    });
+    setSeasons(nextSeasons);
+    await storageSet('waterpolo_seasons', nextSeasons);
+    if (selectedTeamId === teamId) {
+      setSelectedTeamId('');
+    }
+  };
+
   if (loadingSeasons) {
     return <div className="p-10 text-slate-700">Laden...</div>;
   }
@@ -216,21 +264,42 @@ const App = () => {
                   <div className="text-sm text-slate-500">Nog geen seizoenen.</div>
                 )}
                 {seasons.map((season) => (
-                  <button
+                  <div
                     key={season.id}
                     className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${
                       selectedSeasonId === season.id
                         ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
                         : 'border-slate-100 text-slate-600'
                     }`}
-                    onClick={() => {
-                      setSelectedSeasonId(season.id);
-                      setSelectedTeamId('');
-                    }}
                   >
-                    <span>{season.name}</span>
-                    <span className="text-xs text-slate-400">{season.teams?.length || 0} teams</span>
-                  </button>
+                    <button
+                      className="flex-1 text-left"
+                      onClick={() => {
+                        setSelectedSeasonId(season.id);
+                        setSelectedTeamId('');
+                      }}
+                    >
+                      <span className="font-medium">{season.name}</span>
+                    </button>
+                    <span className="mr-3 text-xs text-slate-400">
+                      {season.teams?.length || 0} teams
+                    </span>
+                    <button
+                      className="text-xs font-semibold text-slate-500"
+                      onClick={() => {
+                        const next = window.prompt('Nieuwe seizoennaam', season.name);
+                        if (next != null) renameSeason(season.id, next);
+                      }}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      className="ml-2 text-xs font-semibold text-red-500"
+                      onClick={() => deleteSeason(season.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 ))}
               </div>
               <div className="mt-4 flex gap-2">
@@ -257,17 +326,33 @@ const App = () => {
                     <div className="text-sm text-slate-500">Nog geen teams in dit seizoen.</div>
                   )}
                   {(selectedSeason.teams || []).map((team) => (
-                    <button
+                    <div
                       key={team.id}
                       className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${
                         selectedTeamId === team.id
                           ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
                           : 'border-slate-100 text-slate-600'
                       }`}
-                      onClick={() => setSelectedTeamId(team.id)}
                     >
-                      {team.name}
-                    </button>
+                      <button className="flex-1 text-left" onClick={() => setSelectedTeamId(team.id)}>
+                        <span className="font-medium">{team.name}</span>
+                      </button>
+                      <button
+                        className="text-xs font-semibold text-slate-500"
+                        onClick={() => {
+                          const next = window.prompt('Nieuwe teamnaam', team.name);
+                          if (next != null) renameTeam(selectedSeason.id, team.id, next);
+                        }}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        className="ml-2 text-xs font-semibold text-red-500"
+                        onClick={() => deleteTeam(selectedSeason.id, team.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -308,6 +393,34 @@ const App = () => {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm"
+              value={selectedSeasonId}
+              onChange={(event) => {
+                const nextSeasonId = event.target.value;
+                const nextSeason = seasons.find((season) => season.id === nextSeasonId);
+                setSelectedSeasonId(nextSeasonId);
+                setSelectedTeamId(nextSeason?.teams?.[0]?.id || '');
+              }}
+            >
+              {seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm"
+              value={selectedTeamId}
+              onChange={(event) => setSelectedTeamId(event.target.value)}
+              disabled={(selectedSeason.teams || []).length === 0}
+            >
+              {(selectedSeason.teams || []).map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
             <button
               className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
                 activeTab === 'shotmap' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
@@ -917,11 +1030,9 @@ const ShotmapView = ({ seasonId, teamId }) => {
             <div className="mt-4 flex justify-center">
               <div
                 ref={fieldRef}
-                className="relative h-[600px] w-full max-w-[720px] cursor-crosshair overflow-hidden rounded-2xl bg-gradient-to-b from-[#0c5d98] via-[#0b4a7a] to-[#0a3b62]"
+                className="relative h-[600px] w-full max-w-[720px] cursor-crosshair overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
                 onClick={handleFieldClick}
               >
-                <div className="absolute left-0 top-0 h-full w-[20%] bg-red-600/20" />
-                <div className="absolute right-0 top-0 h-full w-[20%] bg-red-600/20" />
                 <div className="absolute left-0 top-[48%] h-[2px] w-full bg-yellow-300" />
                 <div className="absolute left-[40%] top-0 h-[6%] w-[20%] border-2 border-white bg-white/10" />
 
@@ -1388,10 +1499,8 @@ const AnalyticsView = ({ seasonId, teamId }) => {
             <div className="mt-4 flex justify-center">
               <div
                 ref={fieldRef}
-                className="relative h-[600px] w-full max-w-[720px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#0c5d98] via-[#0b4a7a] to-[#0a3b62]"
+                className="relative h-[600px] w-full max-w-[720px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
               >
-                <div className="absolute left-0 top-0 h-full w-[20%] bg-red-600/20" />
-                <div className="absolute right-0 top-0 h-full w-[20%] bg-red-600/20" />
                 <div className="absolute left-0 top-[48%] h-[2px] w-full bg-yellow-300" />
                 <div className="absolute left-[40%] top-0 h-[6%] w-[20%] border-2 border-white bg-white/10" />
 

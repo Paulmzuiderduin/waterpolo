@@ -75,6 +75,25 @@ const storageDelete = async (key) => {
   window.localStorage.removeItem(key);
 };
 
+const notifyDataUpdated = () => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event('waterpolo-data-updated'));
+};
+
+const loadShotmapData = async () => {
+  const roster = (await storageGet('waterpolo_roster')) || [];
+  const matchList = (await storageGet('waterpolo_match_list')) || [];
+  const matches = matchList.length
+    ? await Promise.all(
+        matchList.map(async (info) => {
+          const match = await storageGet(`waterpolo_match_${info.id}`);
+          return match || { info, shots: [] };
+        })
+      )
+    : [];
+  return { roster, matches };
+};
+
 const detectZone = (x, y) => {
   if (x >= 80 && y >= 75) return 14;
   for (const zone of ZONES) {
@@ -225,6 +244,7 @@ const ShotmapView = () => {
     await Promise.all(
       nextMatches.map((match) => storageSet(`waterpolo_match_${match.info.id}`, match))
     );
+    notifyDataUpdated();
   };
 
   const handleFieldClick = (event) => {
@@ -305,12 +325,14 @@ const ShotmapView = () => {
     setRosterForm({ name: '', capNumber: '' });
     setError('');
     await storageSet('waterpolo_roster', nextRoster);
+    notifyDataUpdated();
   };
 
   const removeRosterPlayer = async (playerId) => {
     const nextRoster = roster.filter((player) => player.id !== playerId);
     setRoster(nextRoster);
     await storageSet('waterpolo_roster', nextRoster);
+    notifyDataUpdated();
   };
 
   const addMatch = async () => {
@@ -397,6 +419,7 @@ const ShotmapView = () => {
       setCurrentMatchId(nextMatches[0]?.info?.id || '');
       await storageSet('waterpolo_roster', nextRoster);
       await persistMatches(nextMatches, nextMatches[0]?.info?.id || '');
+      notifyDataUpdated();
       setError('');
     } catch (e) {
       setError('Import mislukt. Controleer het JSON bestand.');
@@ -970,17 +993,27 @@ const AnalyticsView = () => {
   const fieldRef = useRef(null);
 
   useEffect(() => {
+    let active = true;
     const load = async () => {
       try {
-        const stored = await storageGet('waterpolo_analytics_data');
-        if (stored) setData(stored);
+        const payload = await loadShotmapData();
+        if (active) {
+          setData(payload);
+          setError('');
+        }
       } catch (e) {
-        setError('Kon analytics data niet laden.');
+        if (active) setError('Kon analytics data niet laden.');
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
+    const handleUpdate = () => load();
     load();
+    window.addEventListener('waterpolo-data-updated', handleUpdate);
+    return () => {
+      active = false;
+      window.removeEventListener('waterpolo-data-updated', handleUpdate);
+    };
   }, []);
 
   const matches = data.matches || [];
@@ -1049,22 +1082,6 @@ const AnalyticsView = () => {
     return vals.length ? Math.max(...vals) : 0;
   }, [zoneValues, heatType]);
 
-  const handleImport = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      if (!parsed?.matches) throw new Error('Invalid');
-      const payload = { roster: parsed.roster || [], matches: parsed.matches || [] };
-      setData(payload);
-      await storageSet('waterpolo_analytics_data', payload);
-      setError('');
-    } catch (e) {
-      setError('Import mislukt.');
-    }
-  };
-
   const downloadPNG = async () => {
     if (!fieldRef.current) return;
     try {
@@ -1100,26 +1117,21 @@ const AnalyticsView = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-cyan-700">Waterpolo Analytics</p>
-          <h2 className="text-2xl font-semibold">Heatmaps & Analyse</h2>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-cyan-700">Waterpolo Analytics</p>
+            <h2 className="text-2xl font-semibold">Heatmaps & Analyse</h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+              onClick={downloadPNG}
+            >
+              <Download size={16} />
+              Download PNG
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-            onClick={downloadPNG}
-          >
-            <Download size={16} />
-            Download PNG
-          </button>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-cyan-200 bg-white px-4 py-2 text-sm font-semibold text-cyan-700">
-            <Upload size={16} />
-            Import JSON
-            <input type="file" accept="application/json" className="hidden" onChange={handleImport} />
-          </label>
-        </div>
-      </div>
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

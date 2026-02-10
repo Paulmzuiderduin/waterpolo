@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Plus, X, BarChart2, LogOut } from 'lucide-react';
+import { Download, Plus, X, BarChart2, LogOut, Users, IdCard } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { supabase } from './lib/supabase';
 
 const FIELD_WIDTH = 15;
@@ -564,6 +565,24 @@ const App = () => {
               Analytics
             </button>
             <button
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
+                activeTab === 'players' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+              }`}
+              onClick={() => setActiveTab('players')}
+            >
+              <IdCard size={16} />
+              Players
+            </button>
+            <button
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
+                activeTab === 'roster' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+              }`}
+              onClick={() => setActiveTab('roster')}
+            >
+              <Users size={16} />
+              Roster
+            </button>
+            <button
               className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
               onClick={() => {
                 setSelectedSeasonId('');
@@ -581,10 +600,17 @@ const App = () => {
           </div>
         </header>
 
-        {activeTab === 'shotmap' ? (
+        {activeTab === 'shotmap' && (
           <ShotmapView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
-        ) : (
+        )}
+        {activeTab === 'analytics' && (
           <AnalyticsView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
+        )}
+        {activeTab === 'players' && (
+          <PlayersView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
+        )}
+        {activeTab === 'roster' && (
+          <RosterView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
         )}
       </div>
     </div>
@@ -1576,6 +1602,575 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PlayersView = ({ seasonId, teamId, userId }) => {
+  const [data, setData] = useState({ roster: [], matches: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedPlayerId, setSelectedPlayerId] = useState('');
+  const [compareA, setCompareA] = useState('');
+  const [compareB, setCompareB] = useState('');
+  const reportRef = useRef(null);
+
+  useEffect(() => {
+    if (!teamId) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const payload = await loadTeamData(teamId);
+        if (!active) return;
+        const mappedRoster = payload.roster.map((player) => ({
+          id: player.id,
+          name: player.name,
+          capNumber: player.cap_number,
+          age: player.age,
+          preferredPosition: player.preferred_position,
+          heightCm: player.height_cm,
+          weightKg: player.weight_kg,
+          dominantHand: player.dominant_hand,
+          notes: player.notes,
+          photoUrl: player.photo_url
+        }));
+        setData({ roster: mappedRoster, matches: payload.matches });
+        setSelectedPlayerId(mappedRoster[0]?.id || '');
+        setCompareA(mappedRoster[0]?.id || '');
+        setCompareB(mappedRoster[1]?.id || '');
+        setError('');
+      } catch (e) {
+        if (active) setError('Could not load player data.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [teamId]);
+
+  const matches = data.matches || [];
+  const roster = data.roster || [];
+
+  const shots = useMemo(() => matches.flatMap((match) => match.shots || []), [matches]);
+
+  const buildStats = (player) => {
+    if (!player) return null;
+    const playerShots = shots.filter((shot) => shot.playerCap === player.capNumber);
+    const goals = playerShots.filter((shot) => shot.result === 'raak');
+    const saves = playerShots.filter((shot) => shot.result === 'redding');
+    const misses = playerShots.filter((shot) => shot.result === 'mis');
+    const goalPct = playerShots.length ? ((goals.length / playerShots.length) * 100).toFixed(1) : '0.0';
+    const avgDistance = goals.length
+      ? (goals.reduce((sum, shot) => sum + distanceMeters(shot), 0) / goals.length).toFixed(1)
+      : '—';
+    const zoneCount = {};
+    goals.forEach((shot) => {
+      zoneCount[shot.zone] = (zoneCount[shot.zone] || 0) + 1;
+    });
+    const preferredZone = Object.keys(zoneCount).sort((a, b) => zoneCount[b] - zoneCount[a])[0] || '—';
+    return {
+      total: playerShots.length,
+      goals: goals.length,
+      saves: saves.length,
+      misses: misses.length,
+      goalPct,
+      avgDistance,
+      preferredZone,
+      shots: playerShots
+    };
+  };
+
+  const selectedPlayer = roster.find((player) => player.id === selectedPlayerId);
+  const selectedStats = buildStats(selectedPlayer);
+  const comparePlayerA = roster.find((player) => player.id === compareA);
+  const comparePlayerB = roster.find((player) => player.id === compareB);
+  const compareStatsA = buildStats(comparePlayerA);
+  const compareStatsB = buildStats(comparePlayerB);
+
+  const exportPDF = async () => {
+    if (!reportRef.current) return;
+    const canvas = await html2canvas(reportRef.current, { backgroundColor: '#ffffff', scale: 2 });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
+    const imgWidth = canvas.width * ratio;
+    const imgHeight = canvas.height * ratio;
+    pdf.addImage(imgData, 'PNG', (pageWidth - imgWidth) / 2, 20, imgWidth, imgHeight);
+    pdf.save(`player_report_${selectedPlayer?.capNumber || 'player'}.pdf`);
+  };
+
+  if (loading) {
+    return <div className="p-10 text-slate-700">Loading...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-cyan-700">Players</p>
+          <h2 className="text-2xl font-semibold">Player Report Card</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            onClick={exportPDF}
+            disabled={!selectedPlayer}
+          >
+            <Download size={16} />
+            Export PDF
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_1fr]">
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <label className="text-xs font-semibold text-slate-500">Select player</label>
+            <select
+              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2"
+              value={selectedPlayerId}
+              onChange={(event) => setSelectedPlayerId(event.target.value)}
+            >
+              {roster.map((player) => (
+                <option key={player.id} value={player.id}>
+                  #{player.capNumber} {player.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div ref={reportRef} className="rounded-2xl bg-white p-6 shadow-sm">
+            {selectedPlayer ? (
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-20 w-20 overflow-hidden rounded-2xl bg-slate-100">
+                    {selectedPlayer.photoUrl ? (
+                      <img src={selectedPlayer.photoUrl} alt={selectedPlayer.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">No photo</div>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold">#{selectedPlayer.capNumber} {selectedPlayer.name}</h3>
+                    <div className="text-sm text-slate-500">
+                      {selectedPlayer.preferredPosition || 'Position n/a'} · {selectedPlayer.dominantHand || 'Hand n/a'}
+                    </div>
+                  </div>
+                </div>
+
+                {selectedStats && (
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Shots</div>
+                      <div className="text-lg font-semibold">{selectedStats.total}</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Goal %</div>
+                      <div className="text-lg font-semibold">{selectedStats.goalPct}%</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Goals</div>
+                      <div className="text-lg font-semibold">{selectedStats.goals}</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Saved</div>
+                      <div className="text-lg font-semibold">{selectedStats.saves}</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Miss</div>
+                      <div className="text-lg font-semibold">{selectedStats.misses}</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Avg goal distance</div>
+                      <div className="text-lg font-semibold">{selectedStats.avgDistance}m</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Preferred zone (goals)</div>
+                      <div className="text-lg font-semibold">{selectedStats.preferredZone}</div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="rounded-xl border border-slate-100 p-3">
+                    <div className="text-xs text-slate-500">Age</div>
+                    <div className="text-lg font-semibold">{selectedPlayer.age || '—'}</div>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 p-3">
+                    <div className="text-xs text-slate-500">Height</div>
+                    <div className="text-lg font-semibold">{selectedPlayer.heightCm ? `${selectedPlayer.heightCm} cm` : '—'}</div>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 p-3">
+                    <div className="text-xs text-slate-500">Weight</div>
+                    <div className="text-lg font-semibold">{selectedPlayer.weightKg ? `${selectedPlayer.weightKg} kg` : '—'}</div>
+                  </div>
+                </div>
+
+                {selectedPlayer.notes && (
+                  <div className="rounded-xl border border-slate-100 p-3 text-sm text-slate-600">
+                    {selectedPlayer.notes}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-sm text-slate-500">No player selected.</div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Player comparison</h3>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <select
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={compareA}
+                onChange={(event) => setCompareA(event.target.value)}
+              >
+                {roster.map((player) => (
+                  <option key={player.id} value={player.id}>
+                    #{player.capNumber} {player.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={compareB}
+                onChange={(event) => setCompareB(event.target.value)}
+              >
+                {roster.map((player) => (
+                  <option key={player.id} value={player.id}>
+                    #{player.capNumber} {player.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {compareStatsA && compareStatsB && (
+              <div className="mt-4 space-y-2 text-sm">
+                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                  <span className="text-slate-500">Shots</span>
+                  <span className="font-semibold">{compareStatsA.total}</span>
+                  <span className="font-semibold">{compareStatsB.total}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                  <span className="text-slate-500">Goal %</span>
+                  <span className="font-semibold">{compareStatsA.goalPct}%</span>
+                  <span className="font-semibold">{compareStatsB.goalPct}%</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                  <span className="text-slate-500">Avg distance</span>
+                  <span className="font-semibold">{compareStatsA.avgDistance}m</span>
+                  <span className="font-semibold">{compareStatsB.avgDistance}m</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RosterView = ({ seasonId, teamId, userId }) => {
+  const [roster, setRoster] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState({
+    name: '',
+    capNumber: '',
+    age: '',
+    preferredPosition: '',
+    heightCm: '',
+    weightKg: '',
+    dominantHand: '',
+    notes: ''
+  });
+
+  useEffect(() => {
+    if (!teamId) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const payload = await loadTeamData(teamId);
+        if (!active) return;
+        const mappedRoster = payload.roster.map((player) => ({
+          id: player.id,
+          name: player.name,
+          capNumber: player.cap_number,
+          age: player.age || '',
+          preferredPosition: player.preferred_position || '',
+          heightCm: player.height_cm || '',
+          weightKg: player.weight_kg || '',
+          dominantHand: player.dominant_hand || '',
+          notes: player.notes || '',
+          photoUrl: player.photo_url || ''
+        }));
+        setRoster(mappedRoster);
+      } catch (e) {
+        if (active) setError('Could not load roster.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [teamId]);
+
+  const resetForm = () => {
+    setForm({
+      name: '',
+      capNumber: '',
+      age: '',
+      preferredPosition: '',
+      heightCm: '',
+      weightKg: '',
+      dominantHand: '',
+      notes: ''
+    });
+    setEditingId(null);
+  };
+
+  const savePlayer = async () => {
+    if (!form.name || !form.capNumber) {
+      setError('Enter name and cap number.');
+      return;
+    }
+    const payload = {
+      name: form.name,
+      cap_number: form.capNumber,
+      age: form.age ? Number(form.age) : null,
+      preferred_position: form.preferredPosition,
+      height_cm: form.heightCm ? Number(form.heightCm) : null,
+      weight_kg: form.weightKg ? Number(form.weightKg) : null,
+      dominant_hand: form.dominantHand,
+      notes: form.notes
+    };
+    let data;
+    if (editingId) {
+      const { data: updated, error: updateError } = await supabase
+        .from('roster')
+        .update(payload)
+        .eq('id', editingId)
+        .select('*')
+        .single();
+      if (updateError) return;
+      data = updated;
+    } else {
+      const { data: inserted, error: insertError } = await supabase
+        .from('roster')
+        .insert({ ...payload, team_id: teamId, user_id: userId })
+        .select('*')
+        .single();
+      if (insertError) return;
+      data = inserted;
+    }
+    const nextRoster = roster
+      .map((player) => (player.id === editingId ? { ...player, ...form, id: data.id } : player))
+      .concat(editingId ? [] : [{ ...form, id: data.id, photoUrl: data.photo_url || '' }]);
+    setRoster(nextRoster);
+    resetForm();
+    notifyDataUpdated();
+  };
+
+  const deletePlayer = async (playerId) => {
+    if (!window.confirm('Delete this player?')) return;
+    const { error: deleteError } = await supabase.from('roster').delete().eq('id', playerId);
+    if (deleteError) return;
+    setRoster(roster.filter((player) => player.id !== playerId));
+    notifyDataUpdated();
+  };
+
+  const uploadPhoto = async (playerId, file) => {
+    const ext = file.name.split('.').pop();
+    const path = `${userId}/${teamId}/${playerId}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from('player-photos').upload(path, file, {
+      upsert: true
+    });
+    if (uploadError) {
+      setError('Photo upload failed.');
+      return;
+    }
+    const { data } = supabase.storage.from('player-photos').getPublicUrl(path);
+    const { error: updateError } = await supabase
+      .from('roster')
+      .update({ photo_url: data.publicUrl })
+      .eq('id', playerId);
+    if (updateError) return;
+    setRoster(
+      roster.map((player) => (player.id === playerId ? { ...player, photoUrl: data.publicUrl } : player))
+    );
+  };
+
+  if (loading) {
+    return <div className="p-10 text-slate-700">Loading...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-cyan-700">Roster</p>
+          <h2 className="text-2xl font-semibold">Player Info</h2>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_1fr]">
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-700">Player details</h3>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <input
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Name"
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+            />
+            <input
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Cap #"
+              value={form.capNumber}
+              onChange={(event) => setForm({ ...form, capNumber: event.target.value })}
+            />
+            <input
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Age"
+              value={form.age}
+              onChange={(event) => setForm({ ...form, age: event.target.value })}
+            />
+            <input
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Preferred position"
+              value={form.preferredPosition}
+              onChange={(event) => setForm({ ...form, preferredPosition: event.target.value })}
+            />
+            <input
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Height (cm)"
+              value={form.heightCm}
+              onChange={(event) => setForm({ ...form, heightCm: event.target.value })}
+            />
+            <input
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Weight (kg)"
+              value={form.weightKg}
+              onChange={(event) => setForm({ ...form, weightKg: event.target.value })}
+            />
+            <input
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Dominant hand"
+              value={form.dominantHand}
+              onChange={(event) => setForm({ ...form, dominantHand: event.target.value })}
+            />
+            <textarea
+              className="col-span-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Notes"
+              value={form.notes}
+              onChange={(event) => setForm({ ...form, notes: event.target.value })}
+              rows={3}
+            />
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+              onClick={savePlayer}
+            >
+              {editingId ? 'Update player' : 'Add player'}
+            </button>
+            <button
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
+              onClick={resetForm}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-700">Roster list</h3>
+          <div className="mt-3 space-y-3">
+            {roster
+              .slice()
+              .sort((a, b) => Number(a.capNumber) - Number(b.capNumber))
+              .map((player) => (
+                <div
+                  key={player.id}
+                  className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-100">
+                      {player.photoUrl ? (
+                        <img src={player.photoUrl} alt={player.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-400">No photo</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-semibold">#{player.capNumber} {player.name}</div>
+                      <div className="text-xs text-slate-500">{player.preferredPosition || '—'}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="cursor-pointer text-xs font-semibold text-slate-600">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) uploadPhoto(player.id, file);
+                        }}
+                      />
+                      Upload
+                    </label>
+                    <button
+                      className="text-xs font-semibold text-slate-600"
+                      onClick={() => {
+                        setForm({
+                          name: player.name,
+                          capNumber: player.capNumber,
+                          age: player.age,
+                          preferredPosition: player.preferredPosition,
+                          heightCm: player.heightCm,
+                          weightKg: player.weightKg,
+                          dominantHand: player.dominantHand,
+                          notes: player.notes
+                        });
+                        setEditingId(player.id);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="text-xs font-semibold text-red-500"
+                      onClick={() => deletePlayer(player.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
           </div>
         </div>
       </div>

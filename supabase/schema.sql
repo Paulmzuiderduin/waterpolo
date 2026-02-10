@@ -21,8 +21,23 @@ create table if not exists roster (
   team_id uuid not null references teams(id) on delete cascade,
   name text not null,
   cap_number text not null,
+  age integer,
+  preferred_position text,
+  height_cm integer,
+  weight_kg integer,
+  dominant_hand text,
+  notes text,
+  photo_url text,
   created_at timestamptz not null default now()
 );
+
+alter table roster add column if not exists age integer;
+alter table roster add column if not exists preferred_position text;
+alter table roster add column if not exists height_cm integer;
+alter table roster add column if not exists weight_kg integer;
+alter table roster add column if not exists dominant_hand text;
+alter table roster add column if not exists notes text;
+alter table roster add column if not exists photo_url text;
 
 create table if not exists matches (
   id uuid primary key default gen_random_uuid(),

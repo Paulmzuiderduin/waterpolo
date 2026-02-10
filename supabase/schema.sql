@@ -23,6 +23,7 @@ create table if not exists roster (
   cap_number text not null,
   age integer,
   preferred_position text,
+  birthday date,
   height_cm integer,
   weight_kg integer,
   dominant_hand text,
@@ -33,6 +34,7 @@ create table if not exists roster (
 
 alter table roster add column if not exists age integer;
 alter table roster add column if not exists preferred_position text;
+alter table roster add column if not exists birthday date;
 alter table roster add column if not exists height_cm integer;
 alter table roster add column if not exists weight_kg integer;
 alter table roster add column if not exists dominant_hand text;

@@ -1497,60 +1497,23 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
 
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-700">Roster</h3>
-            <div className="mt-3 grid grid-cols-[1fr_110px] gap-2">
-              <input
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                placeholder="Name"
-                value={rosterForm.name}
-                onChange={(event) => setRosterForm((prev) => ({ ...prev, name: event.target.value }))}
-              />
-              <input
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                placeholder="Cap #"
-                value={rosterForm.capNumber}
-                onChange={(event) =>
-                  setRosterForm((prev) => ({ ...prev, capNumber: event.target.value }))
-                }
-              />
-            </div>
-            <button
-              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white"
-              onClick={handleRosterAdd}
-            >
-              <Plus size={16} />
-              {editingRosterId ? 'Update player' : 'Add player'}
-            </button>
+            <p className="mt-2 text-sm text-slate-500">
+              Manage player details in the Roster tab.
+            </p>
             <div className="mt-3 space-y-2">
               {roster
                 .slice()
                 .sort((a, b) => Number(a.capNumber) - Number(b.capNumber))
                 .map((player) => (
-                <div
-                  key={player.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm"
-                >
-                  <span>
-                    #{player.capNumber} {player.name}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="text-xs font-semibold text-slate-600"
-                      onClick={() => {
-                        setRosterForm({ name: player.name, capNumber: player.capNumber });
-                        setEditingRosterId(player.id);
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="text-xs font-semibold text-red-500"
-                      onClick={() => removeRosterPlayer(player.id)}
-                    >
-                      Delete
-                    </button>
+                  <div
+                    key={player.id}
+                    className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm"
+                  >
+                    <span>
+                      #{player.capNumber} {player.name}
+                    </span>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
 
@@ -1629,8 +1592,7 @@ const PlayersView = ({ seasonId, teamId, userId }) => {
           id: player.id,
           name: player.name,
           capNumber: player.cap_number,
-          age: player.age,
-          preferredPosition: player.preferred_position,
+          birthday: player.birthday,
           heightCm: player.height_cm,
           weightKg: player.weight_kg,
           dominantHand: player.dominant_hand,
@@ -1767,7 +1729,7 @@ const PlayersView = ({ seasonId, teamId, userId }) => {
                   <div>
                     <h3 className="text-xl font-semibold">#{selectedPlayer.capNumber} {selectedPlayer.name}</h3>
                     <div className="text-sm text-slate-500">
-                      {selectedPlayer.preferredPosition || 'Position n/a'} · {selectedPlayer.dominantHand || 'Hand n/a'}
+                      {selectedPlayer.birthday ? `Born ${selectedPlayer.birthday}` : 'Birthday n/a'} · {selectedPlayer.dominantHand || 'Hand n/a'}
                     </div>
                   </div>
                 </div>
@@ -1808,7 +1770,17 @@ const PlayersView = ({ seasonId, teamId, userId }) => {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="rounded-xl border border-slate-100 p-3">
                     <div className="text-xs text-slate-500">Age</div>
-                    <div className="text-lg font-semibold">{selectedPlayer.age || '—'}</div>
+                    <div className="text-lg font-semibold">
+                      {selectedPlayer.birthday
+                        ? Math.max(
+                            0,
+                            Math.floor(
+                              (Date.now() - new Date(selectedPlayer.birthday).getTime()) /
+                                (365.25 * 24 * 60 * 60 * 1000)
+                            )
+                          )
+                        : '—'}
+                    </div>
                   </div>
                   <div className="rounded-xl border border-slate-100 p-3">
                     <div className="text-xs text-slate-500">Height</div>
@@ -1893,8 +1865,7 @@ const RosterView = ({ seasonId, teamId, userId }) => {
   const [form, setForm] = useState({
     name: '',
     capNumber: '',
-    age: '',
-    preferredPosition: '',
+    birthday: '',
     heightCm: '',
     weightKg: '',
     dominantHand: '',
@@ -1912,13 +1883,13 @@ const RosterView = ({ seasonId, teamId, userId }) => {
           id: player.id,
           name: player.name,
           capNumber: player.cap_number,
-          age: player.age || '',
-          preferredPosition: player.preferred_position || '',
+          birthday: player.birthday || '',
           heightCm: player.height_cm || '',
           weightKg: player.weight_kg || '',
           dominantHand: player.dominant_hand || '',
           notes: player.notes || '',
-          photoUrl: player.photo_url || ''
+          photoUrl: player.photo_url || '',
+          birthday: player.birthday || ''
         }));
         setRoster(mappedRoster);
       } catch (e) {
@@ -1937,8 +1908,7 @@ const RosterView = ({ seasonId, teamId, userId }) => {
     setForm({
       name: '',
       capNumber: '',
-      age: '',
-      preferredPosition: '',
+      birthday: '',
       heightCm: '',
       weightKg: '',
       dominantHand: '',
@@ -1955,8 +1925,7 @@ const RosterView = ({ seasonId, teamId, userId }) => {
     const payload = {
       name: form.name,
       cap_number: form.capNumber,
-      age: form.age ? Number(form.age) : null,
-      preferred_position: form.preferredPosition,
+      birthday: form.birthday || null,
       height_cm: form.heightCm ? Number(form.heightCm) : null,
       weight_kg: form.weightKg ? Number(form.weightKg) : null,
       dominant_hand: form.dominantHand,
@@ -2061,9 +2030,10 @@ const RosterView = ({ seasonId, teamId, userId }) => {
             />
             <input
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              placeholder="Preferred position"
-              value={form.preferredPosition}
-              onChange={(event) => setForm({ ...form, preferredPosition: event.target.value })}
+              type="date"
+              placeholder="Birthday"
+              value={form.birthday}
+              onChange={(event) => setForm({ ...form, birthday: event.target.value })}
             />
             <input
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
@@ -2077,12 +2047,16 @@ const RosterView = ({ seasonId, teamId, userId }) => {
               value={form.weightKg}
               onChange={(event) => setForm({ ...form, weightKg: event.target.value })}
             />
-            <input
+            <select
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              placeholder="Dominant hand"
               value={form.dominantHand}
               onChange={(event) => setForm({ ...form, dominantHand: event.target.value })}
-            />
+            >
+              <option value="">Dominant hand</option>
+              <option value="left">Left</option>
+              <option value="right">Right</option>
+              <option value="ambidextrous">Ambidextrous</option>
+            </select>
             <textarea
               className="col-span-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
               placeholder="Notes"
@@ -2128,7 +2102,7 @@ const RosterView = ({ seasonId, teamId, userId }) => {
                     </div>
                     <div>
                       <div className="font-semibold">#{player.capNumber} {player.name}</div>
-                      <div className="text-xs text-slate-500">{player.preferredPosition || '—'}</div>
+                      <div className="text-xs text-slate-500">{player.birthday || '—'}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -2150,8 +2124,7 @@ const RosterView = ({ seasonId, teamId, userId }) => {
                         setForm({
                           name: player.name,
                           capNumber: player.capNumber,
-                          age: player.age,
-                          preferredPosition: player.preferredPosition,
+                          birthday: player.birthday,
                           heightCm: player.heightCm,
                           weightKg: player.weightKg,
                           dominantHand: player.dominantHand,

@@ -106,8 +106,21 @@ const detectZone = (x, y) => {
 };
 
 const formatShotTime = () => {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  return '7:00';
+};
+
+const normalizeTime = (value) => {
+  if (!value) return '7:00';
+  const parts = value.split(':');
+  const minutes = Math.min(7, Math.max(0, Number(parts[0] || 0)));
+  const seconds = Math.min(59, Math.max(0, Number(parts[1] || 0)));
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
+const timeToSeconds = (value) => {
+  const normalized = normalizeTime(value);
+  const [min, sec] = normalized.split(':').map(Number);
+  return min * 60 + sec;
 };
 
 const distanceMeters = (shot) => {
@@ -288,7 +301,8 @@ const ShotmapView = () => {
     }
     const shot = {
       id: `shot_${Date.now()}`,
-      ...pendingShot
+      ...pendingShot,
+      time: normalizeTime(pendingShot.time)
     };
     const nextMatches = matches.map((match) =>
       match.info.id === currentMatch.info.id
@@ -382,6 +396,15 @@ const ShotmapView = () => {
       return true;
     });
   }, [seasonMode, matches, currentMatch, filters]);
+
+  const displayShots = useMemo(() => {
+    return [...filteredShots].sort((a, b) => {
+      const periodA = PERIODS.indexOf(a.period);
+      const periodB = PERIODS.indexOf(b.period);
+      if (periodA !== periodB) return periodA - periodB;
+      return timeToSeconds(b.time) - timeToSeconds(a.time);
+    });
+  }, [filteredShots]);
 
   const exportJSON = async () => {
     try {
@@ -869,13 +892,39 @@ const ShotmapView = () => {
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-slate-500">Tijd</label>
-                    <input
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-                      value={pendingShot.time}
-                      onChange={(event) =>
-                        setPendingShot((prev) => ({ ...prev, time: event.target.value }))
-                      }
-                    />
+                    <div className="mt-1 flex items-center gap-2">
+                      <select
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                        value={normalizeTime(pendingShot.time).split(':')[0]}
+                        onChange={(event) => {
+                          const minutes = event.target.value;
+                          const seconds = normalizeTime(pendingShot.time).split(':')[1];
+                          setPendingShot((prev) => ({ ...prev, time: `${minutes}:${seconds}` }));
+                        }}
+                      >
+                        {Array.from({ length: 8 }, (_, idx) => (
+                          <option key={idx} value={idx}>
+                            {idx}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-sm font-semibold text-slate-500">:</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                        value={normalizeTime(pendingShot.time).split(':')[1]}
+                        onChange={(event) => {
+                          const minutes = normalizeTime(pendingShot.time).split(':')[0];
+                          const seconds = event.target.value;
+                          setPendingShot((prev) => ({ ...prev, time: `${minutes}:${seconds}` }));
+                        }}
+                      >
+                        {Array.from({ length: 60 }, (_, idx) => (
+                          <option key={idx} value={String(idx).padStart(2, '0')}>
+                            {String(idx).padStart(2, '0')}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -946,14 +995,14 @@ const ShotmapView = () => {
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-700">Schoten</h3>
             <div className="mt-3 max-h-[280px] space-y-2 overflow-y-auto text-sm">
-              {filteredShots.length === 0 && (
-                <div className="text-slate-500">Geen schoten geregistreerd.</div>
-              )}
-              {filteredShots.map((shot) => (
-                <div
-                  key={shot.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2"
-                >
+                {displayShots.length === 0 && (
+                  <div className="text-slate-500">Geen schoten geregistreerd.</div>
+                )}
+                {displayShots.map((shot) => (
+                  <div
+                    key={shot.id}
+                    className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2"
+                  >
                   <div>
                     <div className="font-semibold text-slate-700">
                       Zone {shot.zone} · #{shot.playerCap}

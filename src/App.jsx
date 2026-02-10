@@ -1461,6 +1461,27 @@ const AnalyticsView = ({ seasonId, teamId }) => {
   const zone14Stats = zoneStats[14];
   const penaltyShots = analyticsShots.filter((shot) => shot.attackType === 'strafworp');
 
+  const distanceByResult = useMemo(() => {
+    if (heatType !== 'distance') return null;
+    const buckets = {
+      raak: { total: 0, count: 0 },
+      redding: { total: 0, count: 0 },
+      mis: { total: 0, count: 0 }
+    };
+    analyticsShots.forEach((shot) => {
+      const bucket = buckets[shot.result];
+      if (!bucket) return;
+      bucket.total += distanceMeters(shot);
+      bucket.count += 1;
+    });
+    const format = (bucket) => (bucket.count ? (bucket.total / bucket.count).toFixed(1) : '—');
+    return {
+      raak: format(buckets.raak),
+      redding: format(buckets.redding),
+      mis: format(buckets.mis)
+    };
+  }, [analyticsShots, heatType]);
+
   if (loading) {
     return <div className="p-10 text-slate-700">Laden...</div>;
   }
@@ -1618,6 +1639,28 @@ const AnalyticsView = ({ seasonId, teamId }) => {
                   })}
               </div>
             </div>
+            {heatType !== 'distance' && (
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <div className="font-semibold text-slate-700">Legenda</div>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-red-500/60" />
+                    Laag
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-amber-400/60" />
+                    Midden
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-green-500/60" />
+                    Hoog
+                  </div>
+                </div>
+                <div className="mt-2 text-[11px] text-slate-500">
+                  Kleurverloop gebaseerd op hoogste waarde in zones 1-13.
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1768,6 +1811,26 @@ const AnalyticsView = ({ seasonId, teamId }) => {
               )}
             </div>
           </div>
+
+          {heatType === 'distance' && distanceByResult && (
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-700">Gemiddelde afstand</h3>
+              <div className="mt-3 space-y-2 text-sm text-slate-600">
+                <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+                  <span>Raak</span>
+                  <span className="font-semibold text-emerald-700">{distanceByResult.raak}m</span>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+                  <span>Redding</span>
+                  <span className="font-semibold text-amber-700">{distanceByResult.redding}m</span>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+                  <span>Mis</span>
+                  <span className="font-semibold text-red-700">{distanceByResult.mis}m</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

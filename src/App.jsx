@@ -127,6 +127,13 @@ const distanceMeters = (shot) => {
   return Math.sqrt((x - 7.5) ** 2 + y ** 2);
 };
 
+const computeAge = (birthday) => {
+  if (!birthday) return null;
+  const birth = new Date(birthday);
+  if (Number.isNaN(birth.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000)));
+};
+
 const penaltyPosition = (index) => {
   const colCount = 3;
   const col = index % colCount;
@@ -1657,7 +1664,11 @@ const PlayersView = ({ seasonId, teamId, userId }) => {
 
   const exportPDF = async () => {
     if (!reportRef.current) return;
-    const canvas = await html2canvas(reportRef.current, { backgroundColor: '#ffffff', scale: 2 });
+    const canvas = await html2canvas(reportRef.current, {
+      backgroundColor: '#ffffff',
+      scale: 2,
+      useCORS: true
+    });
     const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
     const pageWidth = pdf.internal.pageSize.getWidth();
@@ -1721,7 +1732,12 @@ const PlayersView = ({ seasonId, teamId, userId }) => {
                 <div className="flex items-center gap-4">
                   <div className="h-20 w-20 overflow-hidden rounded-2xl bg-slate-100">
                     {selectedPlayer.photoUrl ? (
-                      <img src={selectedPlayer.photoUrl} alt={selectedPlayer.name} className="h-full w-full object-cover" />
+                      <img
+                        src={selectedPlayer.photoUrl}
+                        alt={selectedPlayer.name}
+                        crossOrigin="anonymous"
+                        className="h-full w-full object-cover"
+                      />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">No photo</div>
                     )}
@@ -1729,7 +1745,7 @@ const PlayersView = ({ seasonId, teamId, userId }) => {
                   <div>
                     <h3 className="text-xl font-semibold">#{selectedPlayer.capNumber} {selectedPlayer.name}</h3>
                     <div className="text-sm text-slate-500">
-                      {selectedPlayer.birthday ? `Born ${selectedPlayer.birthday}` : 'Birthday n/a'} · {selectedPlayer.dominantHand || 'Hand n/a'}
+                      {selectedPlayer.dominantHand || 'Hand n/a'}
                     </div>
                   </div>
                 </div>
@@ -1770,17 +1786,9 @@ const PlayersView = ({ seasonId, teamId, userId }) => {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="rounded-xl border border-slate-100 p-3">
                     <div className="text-xs text-slate-500">Age</div>
-                    <div className="text-lg font-semibold">
-                      {selectedPlayer.birthday
-                        ? Math.max(
-                            0,
-                            Math.floor(
-                              (Date.now() - new Date(selectedPlayer.birthday).getTime()) /
-                                (365.25 * 24 * 60 * 60 * 1000)
-                            )
-                          )
-                        : '—'}
-                    </div>
+                  <div className="text-lg font-semibold">
+                    {computeAge(selectedPlayer.birthday) ?? '—'}
+                  </div>
                   </div>
                   <div className="rounded-xl border border-slate-100 p-3">
                     <div className="text-xs text-slate-500">Height</div>
@@ -1883,7 +1891,6 @@ const RosterView = ({ seasonId, teamId, userId }) => {
           id: player.id,
           name: player.name,
           capNumber: player.cap_number,
-          birthday: player.birthday || '',
           heightCm: player.height_cm || '',
           weightKg: player.weight_kg || '',
           dominantHand: player.dominant_hand || '',
@@ -1975,10 +1982,11 @@ const RosterView = ({ seasonId, teamId, userId }) => {
     const ext = file.name.split('.').pop();
     const path = `${userId}/${teamId}/${playerId}.${ext}`;
     const { error: uploadError } = await supabase.storage.from('player-photos').upload(path, file, {
-      upsert: true
+      upsert: true,
+      contentType: file.type
     });
     if (uploadError) {
-      setError('Photo upload failed.');
+      setError(`Photo upload failed: ${uploadError.message}`);
       return;
     }
     const { data } = supabase.storage.from('player-photos').getPublicUrl(path);
@@ -2099,15 +2107,22 @@ const RosterView = ({ seasonId, teamId, userId }) => {
                 >
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-100">
-                      {player.photoUrl ? (
-                        <img src={player.photoUrl} alt={player.name} className="h-full w-full object-cover" />
+                    {player.photoUrl ? (
+                        <img
+                          src={player.photoUrl}
+                          alt={player.name}
+                          crossOrigin="anonymous"
+                          className="h-full w-full object-cover"
+                        />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-400">No photo</div>
                       )}
                     </div>
                     <div>
                       <div className="font-semibold">#{player.capNumber} {player.name}</div>
-                      <div className="text-xs text-slate-500">{player.birthday || '—'}</div>
+                      <div className="text-xs text-slate-500">
+                        {computeAge(player.birthday) ?? '—'} yrs
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

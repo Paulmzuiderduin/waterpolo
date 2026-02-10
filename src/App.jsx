@@ -118,6 +118,12 @@ const normalizeTime = (value) => {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 };
 
+const splitTimeParts = (value) => {
+  const normalized = normalizeTime(value);
+  const [min, sec] = normalized.split(':');
+  return { minutes: Number(min), seconds: Number(sec) };
+};
+
 const timeToSeconds = (value) => {
   const normalized = normalizeTime(value);
   const [min, sec] = normalized.split(':').map(Number);
@@ -128,6 +134,19 @@ const distanceMeters = (shot) => {
   const x = (shot.x / 100) * FIELD_WIDTH;
   const y = (shot.y / 100) * FIELD_HEIGHT;
   return Math.sqrt((x - 7.5) ** 2 + y ** 2);
+};
+
+const penaltyPosition = (index) => {
+  const colCount = 3;
+  const col = index % colCount;
+  const row = Math.floor(index / colCount);
+  const zone = ZONES.find((z) => z.id === 14);
+  const cellWidth = zone.width / colCount;
+  const cellHeight = zone.height / 4;
+  return {
+    x: zone.left + cellWidth * col + cellWidth / 2,
+    y: zone.top + cellHeight * row + cellHeight / 2
+  };
 };
 
 const valueToColor = (value, max, scheme) => {
@@ -143,7 +162,7 @@ const valueToColor = (value, max, scheme) => {
     r = clamp(80 + ratio * 175);
     g = clamp(255 - ratio * 155);
   }
-  return `rgba(${r}, ${g}, 90, 0.7)`;
+  return `rgba(${r}, ${g}, 90, 0.45)`;
 };
 
 const App = () => {
@@ -758,19 +777,6 @@ const ShotmapView = ({ seasonId, teamId }) => {
 
   const penaltyShots = filteredShots.filter((shot) => shot.attackType === 'strafworp');
 
-  const penaltyPosition = (index) => {
-    const colCount = 3;
-    const col = index % colCount;
-    const row = Math.floor(index / colCount);
-    const zone = ZONES.find((z) => z.id === 14);
-    const cellWidth = zone.width / colCount;
-    const cellHeight = zone.height / 4;
-    return {
-      x: zone.left + cellWidth * col + cellWidth / 2,
-      y: zone.top + cellHeight * row + cellHeight / 2
-    };
-  };
-
   if (loading) {
     return <div className="p-10 text-slate-700">Laden...</div>;
   }
@@ -1169,38 +1175,54 @@ const ShotmapView = ({ seasonId, teamId }) => {
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-slate-500">Tijd</label>
-                    <div className="mt-1 flex items-center gap-2">
-                      <select
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                        value={normalizeTime(pendingShot.time).split(':')[0]}
-                        onChange={(event) => {
-                          const minutes = event.target.value;
-                          const seconds = normalizeTime(pendingShot.time).split(':')[1];
-                          setPendingShot((prev) => ({ ...prev, time: `${minutes}:${seconds}` }));
-                        }}
-                      >
-                        {Array.from({ length: 8 }, (_, idx) => (
-                          <option key={idx} value={idx}>
-                            {idx}
-                          </option>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="7"
+                          className="w-20 rounded-lg border border-slate-200 px-3 py-2"
+                          value={splitTimeParts(pendingShot.time).minutes}
+                          onChange={(event) => {
+                            const minutes = Math.min(7, Math.max(0, Number(event.target.value)));
+                            const seconds = splitTimeParts(pendingShot.time).seconds;
+                            setPendingShot((prev) => ({
+                              ...prev,
+                              time: `${minutes}:${String(seconds).padStart(2, '0')}`
+                            }));
+                          }}
+                        />
+                        <span className="text-sm font-semibold text-slate-500">min</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          className="w-20 rounded-lg border border-slate-200 px-3 py-2"
+                          value={splitTimeParts(pendingShot.time).seconds}
+                          onChange={(event) => {
+                            const minutes = splitTimeParts(pendingShot.time).minutes;
+                            const seconds = Math.min(59, Math.max(0, Number(event.target.value)));
+                            setPendingShot((prev) => ({
+                              ...prev,
+                              time: `${minutes}:${String(seconds).padStart(2, '0')}`
+                            }));
+                          }}
+                        />
+                        <span className="text-sm font-semibold text-slate-500">sec</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs">
+                        {['7:00', '6:00', '5:00'].map((preset) => (
+                          <button
+                            key={preset}
+                            className="rounded-full border border-slate-200 px-2 py-1"
+                            onClick={() => setPendingShot((prev) => ({ ...prev, time: preset }))}
+                          >
+                            {preset}
+                          </button>
                         ))}
-                      </select>
-                      <span className="text-sm font-semibold text-slate-500">:</span>
-                      <select
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                        value={normalizeTime(pendingShot.time).split(':')[1]}
-                        onChange={(event) => {
-                          const minutes = normalizeTime(pendingShot.time).split(':')[0];
-                          const seconds = event.target.value;
-                          setPendingShot((prev) => ({ ...prev, time: `${minutes}:${seconds}` }));
-                        }}
-                      >
-                        {Array.from({ length: 60 }, (_, idx) => (
-                          <option key={idx} value={String(idx).padStart(2, '0')}>
-                            {String(idx).padStart(2, '0')}
-                          </option>
-                        ))}
-                      </select>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1437,6 +1459,7 @@ const AnalyticsView = ({ seasonId, teamId }) => {
   };
 
   const zone14Stats = zoneStats[14];
+  const penaltyShots = analyticsShots.filter((shot) => shot.attackType === 'strafworp');
 
   if (loading) {
     return <div className="p-10 text-slate-700">Laden...</div>;
@@ -1544,37 +1567,55 @@ const AnalyticsView = ({ seasonId, teamId }) => {
                 })}
 
                 {heatType !== 'distance' && showShots &&
-                  analyticsShots.map((shot) => (
+                  analyticsShots.map((shot) => {
+                    const isPenalty = shot.attackType === 'strafworp';
+                    const position = isPenalty
+                      ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id))
+                      : { x: shot.x, y: shot.y };
+                    return (
                     <div
                       key={shot.id}
-                      className="absolute flex h-4 w-4 items-center justify-center rounded-full border border-white/70 bg-white/80 text-[9px] font-semibold text-slate-700"
+                      className={`absolute flex h-4 w-4 items-center justify-center rounded-full border border-white/80 text-[9px] font-semibold text-white ${
+                        shot.result === 'raak'
+                          ? 'bg-green-500/80'
+                          : shot.result === 'redding'
+                          ? 'bg-orange-400/80'
+                          : 'bg-red-500/80'
+                      }`}
                       style={{
-                        left: `calc(${shot.x}% - 8px)`,
-                        top: `calc(${shot.y}% - 8px)`
+                        left: `calc(${position.x}% - 8px)`,
+                        top: `calc(${position.y}% - 8px)`
                       }}
                     >
                       {shot.playerCap}
                     </div>
-                  ))}
+                    );
+                  })}
 
                 {heatType === 'distance' &&
-                  analyticsShots.map((shot) => (
+                  analyticsShots.map((shot) => {
+                    const isPenalty = shot.attackType === 'strafworp';
+                    const position = isPenalty
+                      ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id))
+                      : { x: shot.x, y: shot.y };
+                    return (
                     <div
                       key={shot.id}
                       className="absolute flex flex-col items-center text-[10px] font-semibold text-white"
                       style={{
-                        left: `calc(${shot.x}% - 12px)`,
-                        top: `calc(${shot.y}% - 20px)`
+                        left: `calc(${position.x}% - 12px)`,
+                        top: `calc(${position.y}% - 20px)`
                       }}
                     >
                       <div className="rounded-full bg-blue-100/80 px-2 py-1 text-[10px] text-slate-700">
                         #{shot.playerCap}
                       </div>
-                      <div className="mt-1 rounded-full bg-white/80 px-2 py-1 text-[10px] text-slate-700">
+                      <div className="mt-1 rounded-full bg-amber-100/90 px-2 py-1 text-[10px] text-amber-900">
                         {distanceMeters(shot).toFixed(1)}m
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
               </div>
             </div>
           </div>

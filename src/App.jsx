@@ -671,6 +671,10 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
   });
   const [rosterForm, setRosterForm] = useState({ name: '', capNumber: '' });
   const [editingRosterId, setEditingRosterId] = useState(null);
+  const [lastShotMeta, setLastShotMeta] = useState(() => ({
+    period: '1',
+    time: formatShotTime()
+  }));
   const fieldRef = useRef(null);
 
   useEffect(() => {
@@ -742,8 +746,8 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
       attackType: '6vs6',
       result: 'raak',
       playerCap: roster[0]?.capNumber || '',
-      period: '1',
-      time: formatShotTime()
+      period: lastShotMeta?.period || '1',
+      time: lastShotMeta?.time || formatShotTime()
     });
   };
 
@@ -759,8 +763,8 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
       attackType: 'strafworp',
       result: 'raak',
       playerCap: roster[0]?.capNumber || '',
-      period: '1',
-      time: formatShotTime()
+      period: lastShotMeta?.period || '1',
+      time: lastShotMeta?.time || formatShotTime()
     });
   };
 
@@ -852,6 +856,7 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
         : match
     );
     setMatches(nextMatches);
+    setLastShotMeta({ period: pendingShot.period, time: normalizeTime(pendingShot.time) });
     setPendingShot(null);
     setEditingShotId(null);
     setError('');

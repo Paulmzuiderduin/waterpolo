@@ -33,16 +33,16 @@ const PERIODS = ['1', '2', '3', '4', 'OT'];
 
 const HEAT_TYPES = [
   { key: 'count', label: 'Aantal', metric: 'count', color: 'redToGreen' },
-  { key: 'success', label: '% Raak', metric: 'success', color: 'redToGreen' },
-  { key: 'save', label: '% Redding', metric: 'save', color: 'greenToRed' },
-  { key: 'miss', label: '% Mis', metric: 'miss', color: 'greenToRed' },
+  { key: 'success', label: '% Goal', metric: 'success', color: 'redToGreen' },
+  { key: 'save', label: '% Saved', metric: 'save', color: 'greenToRed' },
+  { key: 'miss', label: '% Miss', metric: 'miss', color: 'greenToRed' },
   { key: 'distance', label: '📏 Afstand', metric: 'distance', color: 'none' }
 ];
 
 const DEFAULT_MATCH = () => ({
   info: {
     id: `match_${Date.now()}`,
-    name: 'Nieuwe wedstrijd',
+    name: 'New match',
     date: new Date().toISOString().slice(0, 10)
   },
   shots: []
@@ -222,7 +222,7 @@ const App = () => {
   };
 
   const deleteSeason = async (seasonId) => {
-    if (!window.confirm('Seizoen verwijderen? Alle teams en data verdwijnen.')) return;
+    if (!window.confirm('Season verwijderen? Alle teams en data verdwijnen.')) return;
     const nextSeasons = seasons.filter((season) => season.id !== seasonId);
     setSeasons(nextSeasons);
     await storageSet('waterpolo_seasons', nextSeasons);
@@ -260,7 +260,7 @@ const App = () => {
   };
 
   if (loadingSeasons) {
-    return <div className="p-10 text-slate-700">Laden...</div>;
+    return <div className="p-10 text-slate-700">Loading...</div>;
   }
 
   if (!selectedSeason || !selectedTeam) {
@@ -268,19 +268,19 @@ const App = () => {
       <div className="min-h-screen px-6 py-8">
         <div className="mx-auto max-w-5xl space-y-6">
           <header className="rounded-3xl bg-white p-6 shadow-sm">
-            <p className="text-sm font-semibold text-cyan-700">Waterpolo Platform</p>
-            <h1 className="text-3xl font-semibold">Seizoenen & Teams</h1>
+            <p className="text-sm font-semibold text-cyan-700">Water Polo Platform</p>
+            <h1 className="text-3xl font-semibold">Seasons & Teams</h1>
             <p className="mt-2 text-sm text-slate-500">
-              Kies een seizoen en team, of maak nieuwe folders aan.
+              Select a season and team, or create new folders.
             </p>
           </header>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-700">Seizoenen</h2>
+              <h2 className="text-sm font-semibold text-slate-700">Seasons</h2>
               <div className="mt-3 space-y-2">
                 {seasons.length === 0 && (
-                  <div className="text-sm text-slate-500">Nog geen seizoenen.</div>
+                  <div className="text-sm text-slate-500">No seasons yet.</div>
                 )}
                 {seasons.map((season) => (
                   <div
@@ -324,7 +324,7 @@ const App = () => {
               <div className="mt-4 flex gap-2">
                 <input
                   className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  placeholder="Nieuw seizoen"
+                  placeholder="New season"
                   value={seasonForm}
                   onChange={(event) => setSeasonForm(event.target.value)}
                 />
@@ -342,7 +342,7 @@ const App = () => {
               {selectedSeason ? (
                 <div className="mt-3 space-y-2">
                   {(selectedSeason.teams || []).length === 0 && (
-                    <div className="text-sm text-slate-500">Nog geen teams in dit seizoen.</div>
+                    <div className="text-sm text-slate-500">No teams in this season.</div>
                   )}
                   {(selectedSeason.teams || []).map((team) => (
                     <div
@@ -375,12 +375,12 @@ const App = () => {
                   ))}
                 </div>
               ) : (
-                <div className="mt-3 text-sm text-slate-500">Kies eerst een seizoen.</div>
+                <div className="mt-3 text-sm text-slate-500">Select a season first.</div>
               )}
               <div className="mt-4 flex gap-2">
                 <input
                   className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  placeholder={selectedSeason ? 'Nieuw team' : 'Selecteer seizoen eerst'}
+                  placeholder={selectedSeason ? 'New team' : 'Select season first'}
                   value={teamForm}
                   onChange={(event) => setTeamForm(event.target.value)}
                   disabled={!selectedSeason}
@@ -405,7 +405,7 @@ const App = () => {
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-white p-4 shadow-sm">
           <div>
-            <p className="text-sm font-semibold text-cyan-700">Waterpolo Platform</p>
+            <p className="text-sm font-semibold text-cyan-700">Water Polo Platform</p>
             <h1 className="text-3xl font-semibold">Shotmap & Analytics</h1>
             <p className="text-xs text-slate-500">
               {selectedSeason.name} · {selectedTeam.name}
@@ -464,7 +464,7 @@ const App = () => {
                 setSelectedTeamId('');
               }}
             >
-              Wissel team
+              Switch team
             </button>
           </div>
         </header>
@@ -525,7 +525,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
         setMatches(loadedMatches);
         setCurrentMatchId(currentId);
       } catch (e) {
-        setError('Kon opslag niet laden.');
+        setError('Could not load storage.');
       } finally {
         setLoading(false);
       }
@@ -594,7 +594,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
   const addShot = async () => {
     if (!pendingShot || !currentMatch) return;
     if (!pendingShot.playerCap) {
-      setError('Selecteer een speler.');
+      setError('Select a player.');
       return;
     }
     const shot = {
@@ -626,7 +626,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
 
   const handleRosterAdd = async () => {
     if (!rosterForm.name || !rosterForm.capNumber) {
-      setError('Vul naam en cap nummer in.');
+      setError('Enter name and cap number.');
       return;
     }
     const nextRoster = [
@@ -719,7 +719,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
       link.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      setError('Export mislukt.');
+      setError('Export failed.');
     }
   };
 
@@ -743,7 +743,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
       notifyDataUpdated();
       setError('');
     } catch (e) {
-      setError('Import mislukt. Controleer het JSON bestand.');
+      setError('Import failed. Check the JSON file.');
     }
   };
 
@@ -762,7 +762,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
       ctx.fillRect(0, 0, output.width, output.height);
       ctx.fillStyle = '#0b1c2c';
       ctx.font = '600 36px Space Grotesk, sans-serif';
-      const title = seasonMode ? 'Waterpolo Shotmap (Seizoen)' : `Waterpolo Shotmap - ${currentMatch?.info?.name || ''}`;
+      const title = seasonMode ? 'Water Polo Shotmap (Season)' : `Water Polo Shotmap - ${currentMatch?.info?.name || ''}`;
       ctx.fillText(title, 40, 64);
       ctx.drawImage(canvas, 0, 100, 1440, 1200);
       const url = output.toDataURL('image/png');
@@ -771,22 +771,22 @@ const ShotmapView = ({ seasonId, teamId }) => {
       link.download = `shotmap_${new Date().toISOString().slice(0, 10)}.png`;
       link.click();
     } catch (e) {
-      setError('PNG export mislukt.');
+      setError('PNG export failed.');
     }
   };
 
   const penaltyShots = filteredShots.filter((shot) => shot.attackType === 'strafworp');
 
   if (loading) {
-    return <div className="p-10 text-slate-700">Laden...</div>;
+    return <div className="p-10 text-slate-700">Loading...</div>;
   }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-cyan-700">Waterpolo Shotmap</p>
-          <h2 className="text-2xl font-semibold">Shot Tracking & Registratie</h2>
+          <p className="text-sm font-semibold text-cyan-700">Water Polo Shotmap</p>
+          <h2 className="text-2xl font-semibold">Shot Tracking & Recording</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -827,7 +827,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                 }`}
                 onClick={() => setSeasonMode(false)}
               >
-                Wedstrijd modus
+                Match mode
               </button>
               <button
                 className={`rounded-full px-4 py-2 text-sm font-semibold ${
@@ -835,7 +835,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                 }`}
                 onClick={() => setSeasonMode(true)}
               >
-                Seizoen modus
+                Season mode
               </button>
             </div>
             <button
@@ -843,7 +843,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
               onClick={addMatch}
             >
               <Plus size={16} />
-              Nieuwe wedstrijd
+              New match
             </button>
           </div>
 
@@ -851,7 +851,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <div className="flex flex-wrap items-center gap-4">
                 <div className="flex-1">
-                  <label className="text-xs font-semibold text-slate-500">Wedstrijdnaam</label>
+                  <label className="text-xs font-semibold text-slate-500">Match name</label>
                   <input
                     className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                     value={currentMatch.info.name}
@@ -859,7 +859,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500">Datum</label>
+                  <label className="text-xs font-semibold text-slate-500">Date</label>
                   <input
                     type="date"
                     className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
@@ -888,7 +888,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                     onClick={() => deleteMatch(currentMatch.info.id)}
                   >
                     <X size={14} />
-                    Verwijder wedstrijd
+                    Delete match
                   </button>
                 )}
               </div>
@@ -897,10 +897,10 @@ const ShotmapView = ({ seasonId, teamId }) => {
 
           {seasonMode && (
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-700">Seizoen filters</h3>
+              <h3 className="text-sm font-semibold text-slate-700">Season filters</h3>
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
-                  <label className="text-xs font-semibold text-slate-500">Wedstrijden</label>
+                  <label className="text-xs font-semibold text-slate-500">Matches</label>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {matches.map((match) => (
                       <button
@@ -925,7 +925,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500">Spelers</label>
+                  <label className="text-xs font-semibold text-slate-500">Players</label>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {roster.map((player) => (
                       <button
@@ -950,7 +950,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500">Uitkomst</label>
+                  <label className="text-xs font-semibold text-slate-500">Outcome</label>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {['raak', 'redding', 'mis'].map((result) => (
                       <button
@@ -975,7 +975,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500">Periode</label>
+                  <label className="text-xs font-semibold text-slate-500">Period</label>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {PERIODS.map((period) => (
                       <button
@@ -1000,7 +1000,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500">Aanval type</label>
+                  <label className="text-xs font-semibold text-slate-500">Attack type</label>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {ATTACK_TYPES.map((type) => (
                       <button
@@ -1030,8 +1030,8 @@ const ShotmapView = ({ seasonId, teamId }) => {
 
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-700">Interactief veld</h3>
-              <div className="text-xs text-slate-500">Klik om schot toe te voegen</div>
+              <h3 className="text-sm font-semibold text-slate-700">Interactive field</h3>
+              <div className="text-xs text-slate-500">Click to add a shot</div>
             </div>
             <div className="mt-4 flex justify-center">
               <div
@@ -1065,7 +1065,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                             handlePenaltyClick();
                           }}
                         >
-                          + Strafworp
+                          + Penalty
                         </button>
                       </div>
                     )}
@@ -1100,14 +1100,14 @@ const ShotmapView = ({ seasonId, teamId }) => {
 
         <div className="space-y-4">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Schot toevoegen</h3>
+            <h3 className="text-sm font-semibold text-slate-700">Add shot</h3>
             {pendingShot ? (
               <div className="mt-3 space-y-3 text-sm">
                 <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                   Zone {pendingShot.zone} · {pendingShot.attackType}
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500">Speler</label>
+                  <label className="text-xs font-semibold text-slate-500">Player</label>
                   <select
                     className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
                     value={pendingShot.playerCap}
@@ -1115,7 +1115,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                       setPendingShot((prev) => ({ ...prev, playerCap: event.target.value }))
                     }
                   >
-                    <option value="">Selecteer speler</option>
+                    <option value="">Select player</option>
                     {roster.map((player) => (
                       <option key={player.id} value={player.capNumber}>
                         #{player.capNumber} {player.name}
@@ -1125,7 +1125,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs font-semibold text-slate-500">Resultaat</label>
+                    <label className="text-xs font-semibold text-slate-500">Result</label>
                     <select
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
                       value={pendingShot.result}
@@ -1133,13 +1133,13 @@ const ShotmapView = ({ seasonId, teamId }) => {
                         setPendingShot((prev) => ({ ...prev, result: event.target.value }))
                       }
                     >
-                      <option value="raak">Raak</option>
-                      <option value="redding">Redding</option>
-                      <option value="mis">Mis</option>
+                      <option value="raak">Goal</option>
+                      <option value="redding">Saved</option>
+                      <option value="mis">Miss</option>
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-slate-500">Aanval</label>
+                    <label className="text-xs font-semibold text-slate-500">Attack</label>
                     <select
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
                       value={pendingShot.attackType}
@@ -1158,7 +1158,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs font-semibold text-slate-500">Periode</label>
+                    <label className="text-xs font-semibold text-slate-500">Period</label>
                     <select
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
                       value={pendingShot.period}
@@ -1174,7 +1174,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-slate-500">Tijd</label>
+                    <label className="text-xs font-semibold text-slate-500">Time</label>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <div className="flex items-center gap-2">
                         <input
@@ -1231,18 +1231,18 @@ const ShotmapView = ({ seasonId, teamId }) => {
                     className="flex-1 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
                     onClick={addShot}
                   >
-                    Opslaan
+                    Save
                   </button>
                   <button
                     className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
                     onClick={() => setPendingShot(null)}
                   >
-                    Annuleer
+                    Cancel
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="mt-3 text-sm text-slate-500">Klik op het veld om een schot toe te voegen.</div>
+              <div className="mt-3 text-sm text-slate-500">Click on the field to add a shot.</div>
             )}
           </div>
 
@@ -1269,7 +1269,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
               onClick={handleRosterAdd}
             >
               <Plus size={16} />
-              Voeg speler toe
+              Add player
             </button>
             <div className="mt-3 space-y-2">
               {roster.map((player) => (
@@ -1284,7 +1284,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                     className="text-xs font-semibold text-red-500"
                     onClick={() => removeRosterPlayer(player.id)}
                   >
-                    Verwijder
+                    Delete
                   </button>
                 </div>
               ))}
@@ -1292,10 +1292,10 @@ const ShotmapView = ({ seasonId, teamId }) => {
           </div>
 
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Schoten</h3>
+            <h3 className="text-sm font-semibold text-slate-700">Shots</h3>
             <div className="mt-3 max-h-[280px] space-y-2 overflow-y-auto text-sm">
               {displayShots.length === 0 && (
-                <div className="text-slate-500">Geen schoten geregistreerd.</div>
+                <div className="text-slate-500">No shots recorded.</div>
               )}
               {displayShots.map((shot) => (
                 <div
@@ -1314,7 +1314,7 @@ const ShotmapView = ({ seasonId, teamId }) => {
                     className="text-xs font-semibold text-red-500"
                     onClick={() => deleteShot(shot.id)}
                   >
-                    Verwijder
+                    Delete
                   </button>
                 </div>
               ))}
@@ -1351,7 +1351,7 @@ const AnalyticsView = ({ seasonId, teamId }) => {
           setError('');
         }
       } catch (e) {
-        if (active) setError('Kon analytics data niet laden.');
+        if (active) setError('Could not load analytics data.');
       } finally {
         if (active) setLoading(false);
       }
@@ -1446,7 +1446,7 @@ const AnalyticsView = ({ seasonId, teamId }) => {
       ctx.fillRect(0, 0, output.width, output.height);
       ctx.fillStyle = '#0b1c2c';
       ctx.font = '600 36px Space Grotesk, sans-serif';
-      ctx.fillText(`Waterpolo Analytics - ${HEAT_TYPES.find((t) => t.key === heatType)?.label}`, 40, 64);
+      ctx.fillText(`Water Polo Analytics - ${HEAT_TYPES.find((t) => t.key === heatType)?.label}`, 40, 64);
       ctx.drawImage(canvas, 0, 100, 1440, 1200);
       const url = output.toDataURL('image/png');
       const link = document.createElement('a');
@@ -1454,7 +1454,7 @@ const AnalyticsView = ({ seasonId, teamId }) => {
       link.download = `heatmap_${new Date().toISOString().slice(0, 10)}.png`;
       link.click();
     } catch (e) {
-      setError('PNG export mislukt.');
+      setError('PNG export failed.');
     }
   };
 
@@ -1483,15 +1483,15 @@ const AnalyticsView = ({ seasonId, teamId }) => {
   }, [analyticsShots, heatType]);
 
   if (loading) {
-    return <div className="p-10 text-slate-700">Laden...</div>;
+    return <div className="p-10 text-slate-700">Loading...</div>;
   }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-cyan-700">Waterpolo Analytics</p>
-          <h2 className="text-2xl font-semibold">Heatmaps & Analyse</h2>
+          <p className="text-sm font-semibold text-cyan-700">Water Polo Analytics</p>
+          <h2 className="text-2xl font-semibold">Heatmaps & Analysis</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -1532,14 +1532,14 @@ const AnalyticsView = ({ seasonId, teamId }) => {
                   className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
                   onClick={() => setShowShots((prev) => !prev)}
                 >
-                  👁️ {showShots ? 'Verberg schoten' : 'Toon schoten'}
+                  👁️ {showShots ? 'Hide shots' : 'Show shots'}
                 </button>
               )}
             </div>
           </div>
 
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Heatmap veld</h3>
+            <h3 className="text-sm font-semibold text-slate-700">Heatmap field</h3>
             <div className="mt-4 flex justify-center">
               <div
                 ref={fieldRef}
@@ -1571,7 +1571,7 @@ const AnalyticsView = ({ seasonId, teamId }) => {
                         {zone.label}
                       </div>
                       {zone.id === 14 && (
-                        <div className="absolute bottom-2 left-2 text-[10px] text-white/70">Strafworpen</div>
+                        <div className="absolute bottom-2 left-2 text-[10px] text-white/70">Penalties</div>
                       )}
                       {heatType === 'distance' && zone.id !== 14 && zoneValues[zone.id] != null && (
                         <div className="absolute bottom-2 right-2 rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold text-slate-700">
@@ -1641,23 +1641,23 @@ const AnalyticsView = ({ seasonId, teamId }) => {
             </div>
             {heatType !== 'distance' && (
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                <div className="font-semibold text-slate-700">Legenda</div>
+                <div className="font-semibold text-slate-700">Legend</div>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full bg-red-500/60" />
-                    Laag
+                    Low
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full bg-amber-400/60" />
-                    Midden
+                    Mid
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full bg-green-500/60" />
-                    Hoog
+                    High
                   </div>
                 </div>
                 <div className="mt-2 text-[11px] text-slate-500">
-                  Kleurverloop gebaseerd op hoogste waarde in zones 1-13.
+                  Gradient based on max value in zones 1-13.
                 </div>
               </div>
             )}
@@ -1669,7 +1669,7 @@ const AnalyticsView = ({ seasonId, teamId }) => {
             <h3 className="text-sm font-semibold text-slate-700">Filters</h3>
             <div className="mt-3 space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-500">Wedstrijden</label>
+                <label className="text-xs font-semibold text-slate-500">Matches</label>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {matches.map((match) => (
                     <button
@@ -1694,7 +1694,7 @@ const AnalyticsView = ({ seasonId, teamId }) => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">Spelers</label>
+                <label className="text-xs font-semibold text-slate-500">Players</label>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {roster.map((player) => (
                     <button
@@ -1719,7 +1719,7 @@ const AnalyticsView = ({ seasonId, teamId }) => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">Uitkomst</label>
+                <label className="text-xs font-semibold text-slate-500">Outcome</label>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {['raak', 'redding', 'mis'].map((result) => (
                     <button
@@ -1744,7 +1744,7 @@ const AnalyticsView = ({ seasonId, teamId }) => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">Periode</label>
+                <label className="text-xs font-semibold text-slate-500">Period</label>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {PERIODS.map((period) => (
                     <button
@@ -1769,7 +1769,7 @@ const AnalyticsView = ({ seasonId, teamId }) => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">Aanval type</label>
+                <label className="text-xs font-semibold text-slate-500">Attack type</label>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {ATTACK_TYPES.map((type) => (
                     <button
@@ -1797,35 +1797,35 @@ const AnalyticsView = ({ seasonId, teamId }) => {
           </div>
 
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Zone 14 statistieken</h3>
+            <h3 className="text-sm font-semibold text-slate-700">Zone 14 stats</h3>
             <div className="mt-3 text-sm text-slate-600">
               {zone14Stats?.total ? (
                 <div className="space-y-1">
-                  <div>Totaal: {zone14Stats.total}</div>
-                  <div>Raak: {zone14Stats.success}</div>
-                  <div>Redding: {zone14Stats.save}</div>
-                  <div>Mis: {zone14Stats.miss}</div>
+                  <div>Total: {zone14Stats.total}</div>
+                  <div>Goal: {zone14Stats.success}</div>
+                  <div>Saved: {zone14Stats.save}</div>
+                  <div>Miss: {zone14Stats.miss}</div>
                 </div>
               ) : (
-                <div>Geen strafworpen in selectie.</div>
+                <div>No penalties in selection.</div>
               )}
             </div>
           </div>
 
           {heatType === 'distance' && distanceByResult && (
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-700">Gemiddelde afstand</h3>
+              <h3 className="text-sm font-semibold text-slate-700">Average distance</h3>
               <div className="mt-3 space-y-2 text-sm text-slate-600">
                 <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span>Raak</span>
+                  <span>Goal</span>
                   <span className="font-semibold text-emerald-700">{distanceByResult.raak}m</span>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span>Redding</span>
+                  <span>Saved</span>
                   <span className="font-semibold text-amber-700">{distanceByResult.redding}m</span>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span>Mis</span>
+                  <span>Miss</span>
                   <span className="font-semibold text-red-700">{distanceByResult.mis}m</span>
                 </div>
               </div>

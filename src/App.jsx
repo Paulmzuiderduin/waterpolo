@@ -733,7 +733,8 @@ const ShotmapView = () => {
               >
                 <div className="absolute left-0 top-0 h-full w-[20%] bg-red-600/20" />
                 <div className="absolute right-0 top-0 h-full w-[20%] bg-red-600/20" />
-                <div className="absolute left-0 top-[50%] h-[2px] w-full bg-yellow-300" />
+                <div className="absolute left-0 top-[48%] h-[2px] w-full bg-yellow-300" />
+                <div className="absolute left-[40%] top-0 h-[6%] w-[20%] border-2 border-white bg-white/10" />
 
                 {ZONES.map((zone) => (
                   <div
@@ -1176,7 +1177,8 @@ const AnalyticsView = () => {
               >
                 <div className="absolute left-0 top-0 h-full w-[20%] bg-red-600/20" />
                 <div className="absolute right-0 top-0 h-full w-[20%] bg-red-600/20" />
-                <div className="absolute left-0 top-[50%] h-[2px] w-full bg-yellow-300" />
+                <div className="absolute left-0 top-[48%] h-[2px] w-full bg-yellow-300" />
+                <div className="absolute left-[40%] top-0 h-[6%] w-[20%] border-2 border-white bg-white/10" />
 
                 {ZONES.map((zone) => {
                   const value = zoneValues[zone.id];

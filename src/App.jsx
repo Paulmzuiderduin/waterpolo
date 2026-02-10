@@ -521,6 +521,17 @@ const App = () => {
             </div>
           </div>
         </div>
+        <footer className="mx-auto mt-8 max-w-5xl px-6 pb-8 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white/70 px-4 py-3 shadow-sm">
+            <span>© {new Date().getFullYear()} Waterpolo Shotmap & Analytics</span>
+            <button
+              className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
+              onClick={() => setActiveTab('privacy')}
+            >
+              Privacy
+            </button>
+          </div>
+        </footer>
       </div>
     );
   }

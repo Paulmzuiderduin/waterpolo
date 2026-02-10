@@ -450,61 +450,73 @@ const App = () => {
               </div>
             </div>
 
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-700">Teams</h2>
-              {selectedSeason ? (
-                <div className="mt-3 space-y-2">
-                  {(selectedSeason.teams || []).length === 0 && (
-                    <div className="text-sm text-slate-500">No teams in this season.</div>
-                  )}
-                  {(selectedSeason.teams || []).map((team) => (
-                    <div
-                      key={team.id}
-                      className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${
-                        selectedTeamId === team.id
-                          ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
-                          : 'border-slate-100 text-slate-600'
-                      }`}
-                    >
-                      <button className="flex-1 text-left" onClick={() => setSelectedTeamId(team.id)}>
-                        <span className="font-medium">{team.name}</span>
-                      </button>
-                      <button
-                        className="text-xs font-semibold text-slate-500"
-                        onClick={() => {
-                          const next = window.prompt('New team name', team.name);
-                          if (next != null) renameTeam(selectedSeason.id, team.id, next);
-                        }}
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <h2 className="text-sm font-semibold text-slate-700">Teams</h2>
+                {selectedSeason ? (
+                  <div className="mt-3 space-y-2">
+                    {(selectedSeason.teams || []).length === 0 && (
+                      <div className="text-sm text-slate-500">No teams in this season.</div>
+                    )}
+                    {(selectedSeason.teams || []).map((team) => (
+                      <div
+                        key={team.id}
+                        className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${
+                          selectedTeamId === team.id
+                            ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
+                            : 'border-slate-100 text-slate-600'
+                        }`}
                       >
-                        Rename
-                      </button>
-                      <button
-                        className="ml-2 text-xs font-semibold text-red-500"
-                        onClick={() => deleteTeam(selectedSeason.id, team.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  ))}
+                        <button className="flex-1 text-left" onClick={() => setSelectedTeamId(team.id)}>
+                          <span className="font-medium">{team.name}</span>
+                        </button>
+                        <button
+                          className="text-xs font-semibold text-slate-500"
+                          onClick={() => {
+                            const next = window.prompt('New team name', team.name);
+                            if (next != null) renameTeam(selectedSeason.id, team.id, next);
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          className="ml-2 text-xs font-semibold text-red-500"
+                          onClick={() => deleteTeam(selectedSeason.id, team.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-3 text-sm text-slate-500">Select a season first.</div>
+                )}
+                <div className="mt-4 flex gap-2">
+                  <input
+                    className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    placeholder={selectedSeason ? 'New team' : 'Select season first'}
+                    value={teamForm}
+                    onChange={(event) => setTeamForm(event.target.value)}
+                    disabled={!selectedSeason}
+                  />
+                  <button
+                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    onClick={createTeam}
+                    disabled={!selectedSeason}
+                  >
+                    <Plus size={16} />
+                  </button>
                 </div>
-              ) : (
-                <div className="mt-3 text-sm text-slate-500">Select a season first.</div>
-              )}
-              <div className="mt-4 flex gap-2">
-                <input
-                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  placeholder={selectedSeason ? 'New team' : 'Select season first'}
-                  value={teamForm}
-                  onChange={(event) => setTeamForm(event.target.value)}
-                  disabled={!selectedSeason}
-                />
-                <button
-                  className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                  onClick={createTeam}
-                  disabled={!selectedSeason}
-                >
-                  <Plus size={16} />
-                </button>
+              </div>
+
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <h2 className="text-sm font-semibold text-slate-700">Getting started</h2>
+                <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-600">
+                  <li>Create a season on the left.</li>
+                  <li>Select the season and create a team.</li>
+                  <li>Open Roster to add players.</li>
+                  <li>Create a match in Shotmap to start tracking shots.</li>
+                </ol>
               </div>
             </div>
           </div>

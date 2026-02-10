@@ -32,11 +32,11 @@ const ATTACK_TYPES = ['6vs6', '6vs5', '6vs4', 'strafworp'];
 const PERIODS = ['1', '2', '3', '4', 'OT'];
 
 const HEAT_TYPES = [
-  { key: 'count', label: 'Aantal', metric: 'count', color: 'redToGreen' },
+  { key: 'count', label: 'Count', metric: 'count', color: 'redToGreen' },
   { key: 'success', label: '% Goal', metric: 'success', color: 'redToGreen' },
   { key: 'save', label: '% Saved', metric: 'save', color: 'greenToRed' },
   { key: 'miss', label: '% Miss', metric: 'miss', color: 'greenToRed' },
-  { key: 'distance', label: '📏 Afstand', metric: 'distance', color: 'none' }
+  { key: 'distance', label: '📏 Distance', metric: 'distance', color: 'none' }
 ];
 
 const DEFAULT_MATCH = () => ({
@@ -306,7 +306,7 @@ const App = () => {
                     <button
                       className="text-xs font-semibold text-slate-500"
                       onClick={() => {
-                        const next = window.prompt('Nieuwe seizoennaam', season.name);
+                        const next = window.prompt('New season name', season.name);
                         if (next != null) renameSeason(season.id, next);
                       }}
                     >
@@ -359,7 +359,7 @@ const App = () => {
                       <button
                         className="text-xs font-semibold text-slate-500"
                         onClick={() => {
-                          const next = window.prompt('Nieuwe teamnaam', team.name);
+                          const next = window.prompt('New team name', team.name);
                           if (next != null) renameTeam(selectedSeason.id, team.id, next);
                         }}
                       >
@@ -952,24 +952,28 @@ const ShotmapView = ({ seasonId, teamId }) => {
                 <div>
                   <label className="text-xs font-semibold text-slate-500">Outcome</label>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {['raak', 'redding', 'mis'].map((result) => (
+                    {[
+                      { value: 'raak', label: 'Goal' },
+                      { value: 'redding', label: 'Saved' },
+                      { value: 'mis', label: 'Miss' }
+                    ].map((result) => (
                       <button
-                        key={result}
+                        key={result.value}
                         className={`rounded-full px-3 py-1 text-xs ${
-                          filters.results.includes(result)
+                          filters.results.includes(result.value)
                             ? 'bg-slate-900 text-white'
                             : 'bg-slate-100 text-slate-600'
                         }`}
                         onClick={() =>
                           setFilters((prev) => ({
                             ...prev,
-                            results: prev.results.includes(result)
-                              ? prev.results.filter((value) => value !== result)
-                              : [...prev.results, result]
+                            results: prev.results.includes(result.value)
+                              ? prev.results.filter((value) => value !== result.value)
+                              : [...prev.results, result.value]
                           }))
                         }
                       >
-                        {result}
+                        {result.label}
                       </button>
                     ))}
                   </div>
@@ -1721,24 +1725,28 @@ const AnalyticsView = ({ seasonId, teamId }) => {
               <div>
                 <label className="text-xs font-semibold text-slate-500">Outcome</label>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {['raak', 'redding', 'mis'].map((result) => (
+                  {[
+                    { value: 'raak', label: 'Goal' },
+                    { value: 'redding', label: 'Saved' },
+                    { value: 'mis', label: 'Miss' }
+                  ].map((result) => (
                     <button
-                      key={result}
+                      key={result.value}
                       className={`rounded-full px-3 py-1 text-xs ${
-                        filters.results.includes(result)
+                        filters.results.includes(result.value)
                           ? 'bg-slate-900 text-white'
                           : 'bg-slate-100 text-slate-600'
                       }`}
                       onClick={() =>
                         setFilters((prev) => ({
                           ...prev,
-                          results: prev.results.includes(result)
-                            ? prev.results.filter((value) => value !== result)
-                            : [...prev.results, result]
+                          results: prev.results.includes(result.value)
+                            ? prev.results.filter((value) => value !== result.value)
+                            : [...prev.results, result.value]
                         }))
                       }
                     >
-                      {result}
+                      {result.label}
                     </button>
                   ))}
                 </div>

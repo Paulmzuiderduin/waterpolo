@@ -614,7 +614,14 @@ const App = () => {
           <AnalyticsView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
         )}
         {activeTab === 'players' && (
-          <PlayersView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
+          <PlayersView
+            seasonId={selectedSeasonId}
+            teamId={selectedTeamId}
+            userId={session.user.id}
+            seasons={seasons}
+            onSelectSeason={setSelectedSeasonId}
+            onSelectTeam={setSelectedTeamId}
+          />
         )}
         {activeTab === 'roster' && (
           <RosterView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
@@ -1579,13 +1586,14 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
   );
 };
 
-const PlayersView = ({ seasonId, teamId, userId }) => {
+const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, onSelectTeam }) => {
   const [data, setData] = useState({ roster: [], matches: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [compareA, setCompareA] = useState('');
   const [compareB, setCompareB] = useState('');
+  const [selectedMatches, setSelectedMatches] = useState([]);
   const reportRef = useRef(null);
 
   useEffect(() => {
@@ -1607,6 +1615,7 @@ const PlayersView = ({ seasonId, teamId, userId }) => {
           photoUrl: player.photo_url
         }));
         setData({ roster: mappedRoster, matches: payload.matches });
+        setSelectedMatches(payload.matches.map((match) => match.info.id));
         setSelectedPlayerId(mappedRoster[0]?.id || '');
         setCompareA(mappedRoster[0]?.id || '');
         setCompareB(mappedRoster[1]?.id || '');
@@ -1625,8 +1634,50 @@ const PlayersView = ({ seasonId, teamId, userId }) => {
 
   const matches = data.matches || [];
   const roster = data.roster || [];
+  const selectedSeason = seasons.find((season) => season.id === seasonId);
+  const seasonTeams = selectedSeason?.teams || [];
+  const selectedTeam = seasonTeams.find((team) => team.id === teamId);
 
-  const shots = useMemo(() => matches.flatMap((match) => match.shots || []), [matches]);
+  const scopedMatches = useMemo(() => {
+    if (!selectedMatches.length) return [];
+    const matchSet = new Set(selectedMatches);
+    return matches.filter((match) => matchSet.has(match.info.id));
+  }, [matches, selectedMatches]);
+
+  const shots = useMemo(
+    () => scopedMatches.flatMap((match) => match.shots || []),
+    [scopedMatches]
+  );
+
+  const scopeSummary = useMemo(() => {
+    const seasonLabel = selectedSeason?.name || 'Season';
+    const teamLabel = selectedTeam?.name || 'Team';
+    if (!matches.length) return `${seasonLabel} • ${teamLabel} • No matches`;
+    if (selectedMatches.length === 0) return `${seasonLabel} • ${teamLabel} • No matches selected`;
+    if (selectedMatches.length === matches.length) return `${seasonLabel} • ${teamLabel} • All matches`;
+    const matchSet = new Set(selectedMatches);
+    const names = matches
+      .filter((match) => matchSet.has(match.info.id))
+      .map((match) => match.info?.name || 'Match')
+      .slice(0, 3);
+    const remainder = selectedMatches.length - names.length;
+    const list = remainder > 0 ? `${names.join(', ')} +${remainder}` : names.join(', ');
+    return `${seasonLabel} • ${teamLabel} • ${list}`;
+  }, [matches, selectedMatches, selectedSeason, selectedTeam]);
+
+  const handleSeasonChange = (value) => {
+    if (!onSelectSeason) return;
+    onSelectSeason(value);
+    const nextSeason = seasons.find((season) => season.id === value);
+    const nextTeamId = nextSeason?.teams?.[0]?.id || '';
+    if (onSelectTeam) onSelectTeam(nextTeamId);
+  };
+
+  const toggleMatch = (matchId) => {
+    setSelectedMatches((prev) =>
+      prev.includes(matchId) ? prev.filter((id) => id !== matchId) : [...prev, matchId]
+    );
+  };
 
   const buildStats = (player) => {
     if (!player) return null;
@@ -1712,6 +1763,84 @@ const PlayersView = ({ seasonId, teamId, userId }) => {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_1fr]">
         <div className="space-y-4">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold text-slate-500">Scope</p>
+                <h3 className="text-sm font-semibold text-slate-700">Season and matches</h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold"
+                  onClick={() => setSelectedMatches(matches.map((match) => match.info.id))}
+                >
+                  Select all
+                </button>
+                <button
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold"
+                  onClick={() => setSelectedMatches([])}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <label className="text-xs font-semibold text-slate-500">Season</label>
+                <select
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={seasonId}
+                  onChange={(event) => handleSeasonChange(event.target.value)}
+                >
+                  {seasons.map((season) => (
+                    <option key={season.id} value={season.id}>
+                      {season.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500">Team</label>
+                <select
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={teamId}
+                  onChange={(event) => onSelectTeam?.(event.target.value)}
+                >
+                  {seasonTeams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              <div className="text-xs font-semibold text-slate-500">Matches</div>
+              <div className="flex flex-wrap gap-2">
+                {matches.length === 0 && (
+                  <span className="text-xs text-slate-500">No matches yet.</span>
+                )}
+                {matches.map((match) => {
+                  const selected = selectedMatches.includes(match.info.id);
+                  const label = match.info?.name || 'Match';
+                  const dateLabel = match.info?.date ? ` • ${match.info.date}` : '';
+                  return (
+                    <button
+                      key={match.info.id}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        selected ? 'bg-slate-900 text-white' : 'border border-slate-200 text-slate-600'
+                      }`}
+                      onClick={() => toggleMatch(match.info.id)}
+                    >
+                      {label}
+                      {dateLabel}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
             <label className="text-xs font-semibold text-slate-500">Select player</label>
             <select
               className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2"
@@ -1747,6 +1876,7 @@ const PlayersView = ({ seasonId, teamId, userId }) => {
                     <div className="text-sm text-slate-500">
                       {selectedPlayer.dominantHand || 'Hand n/a'}
                     </div>
+                    <div className="text-xs text-slate-400">{scopeSummary}</div>
                   </div>
                 </div>
 
@@ -1786,9 +1916,9 @@ const PlayersView = ({ seasonId, teamId, userId }) => {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="rounded-xl border border-slate-100 p-3">
                     <div className="text-xs text-slate-500">Age</div>
-                  <div className="text-lg font-semibold">
-                    {computeAge(selectedPlayer.birthday) ?? '—'}
-                  </div>
+                    <div className="text-lg font-semibold">
+                      {computeAge(selectedPlayer.birthday) ?? '—'}
+                    </div>
                   </div>
                   <div className="rounded-xl border border-slate-100 p-3">
                     <div className="text-xs text-slate-500">Height</div>

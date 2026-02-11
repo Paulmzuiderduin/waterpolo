@@ -2145,7 +2145,7 @@ const PrivacyView = () => (
       <div>
         <h3 className="text-sm font-semibold text-slate-700">1. Controller</h3>
         <p>Controller: Waterpolo Shotmap & Analytics</p>
-        <p>Contact: paul.m.zuiderduin@gmail.com</p>
+        <p>Contact: privacy@paulzuiderduin.com</p>
       </div>
 
       <div>
@@ -2190,7 +2190,10 @@ const PrivacyView = () => (
 
       <div>
         <h3 className="text-sm font-semibold text-slate-700">7. Your Rights (GDPR)</h3>
-        <p>You have the right to access, rectify, erase, restrict, object, and receive your data. Contact us to exercise these rights.</p>
+        <p>
+          You have the right to access, rectify, erase, restrict, object, and receive your data. Contact us at
+          privacy@paulzuiderduin.com to exercise these rights.
+        </p>
       </div>
 
       <div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Plus, X, BarChart2, LogOut, Users, IdCard, HelpCircle } from 'lucide-react';
+import { Download, Plus, X, BarChart2, LogOut, Users, IdCard, HelpCircle, Home } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { supabase } from './lib/supabase';
@@ -164,7 +164,7 @@ const valueToColor = (value, max, scheme) => {
 };
 
 const App = () => {
-  const [activeTab, setActiveTab] = useState('shotmap');
+  const [activeTab, setActiveTab] = useState('hub');
   const [session, setSession] = useState(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authMessage, setAuthMessage] = useState('');
@@ -579,6 +579,15 @@ const App = () => {
             </select>
             <button
               className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
+                activeTab === 'hub' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+              }`}
+              onClick={() => setActiveTab('hub')}
+            >
+              <Home size={16} />
+              Hub
+            </button>
+            <button
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
                 activeTab === 'shotmap' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
               }`}
               onClick={() => setActiveTab('shotmap')}
@@ -639,6 +648,14 @@ const App = () => {
           </div>
         </header>
 
+        {activeTab === 'hub' && (
+          <HubView
+            onOpenShotmap={() => setActiveTab('shotmap')}
+            onOpenAnalytics={() => setActiveTab('analytics')}
+            onOpenPlayers={() => setActiveTab('players')}
+            onOpenRoster={() => setActiveTab('roster')}
+          />
+        )}
         {activeTab === 'shotmap' && (
           <ShotmapView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
         )}
@@ -2121,6 +2138,60 @@ const HelpView = () => (
           </div>
         </div>
       </div>
+    </div>
+  </div>
+);
+
+const HubView = ({ onOpenShotmap, onOpenAnalytics, onOpenPlayers, onOpenRoster }) => (
+  <div className="space-y-6">
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-semibold text-cyan-700">Waterpolo Hub</p>
+        <h2 className="text-2xl font-semibold">Choose a module</h2>
+        <p className="mt-2 text-sm text-slate-500">All waterpolo tools in one workspace.</p>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <button
+        className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+        onClick={onOpenShotmap}
+      >
+        <div className="text-xs font-semibold text-slate-500">Shot tracking</div>
+        <h3 className="mt-2 text-lg font-semibold">Shotmap</h3>
+        <p className="mt-2 text-sm text-slate-600">Log shots on the field and track outcomes per player.</p>
+      </button>
+      <button
+        className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+        onClick={onOpenAnalytics}
+      >
+        <div className="text-xs font-semibold text-slate-500">Insights</div>
+        <h3 className="mt-2 text-lg font-semibold">Analytics</h3>
+        <p className="mt-2 text-sm text-slate-600">Heatmaps, filters, and advanced stats per match or season.</p>
+      </button>
+      <button
+        className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+        onClick={onOpenPlayers}
+      >
+        <div className="text-xs font-semibold text-slate-500">Report cards</div>
+        <h3 className="mt-2 text-lg font-semibold">Players</h3>
+        <p className="mt-2 text-sm text-slate-600">Compare players and export report cards.</p>
+      </button>
+      <button
+        className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+        onClick={onOpenRoster}
+      >
+        <div className="text-xs font-semibold text-slate-500">Team data</div>
+        <h3 className="mt-2 text-lg font-semibold">Roster</h3>
+        <p className="mt-2 text-sm text-slate-600">Manage player info and photos.</p>
+      </button>
+    </div>
+
+    <div className="rounded-2xl bg-white p-5 text-sm text-slate-600 shadow-sm">
+      <div className="text-xs font-semibold text-slate-500">Coming next</div>
+      <p className="mt-2">
+        Scoring & stats, passing/possession mapping, and video analysis will appear here as new modules.
+      </p>
     </div>
   </div>
 );

@@ -9,7 +9,8 @@ import {
   IdCard,
   HelpCircle,
   Home,
-  ClipboardList
+  ClipboardList,
+  Share2
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -17,6 +18,8 @@ import { supabase } from './lib/supabase';
 
 const FIELD_WIDTH = 15;
 const FIELD_HEIGHT = 12.5;
+const FULL_FIELD_WIDTH = 15;
+const FULL_FIELD_HEIGHT = 25;
 
 const ZONES = [
   { id: 1, label: '1', left: 0, top: 0, width: 26.67, height: 16 },
@@ -52,6 +55,14 @@ const SCORING_EVENTS = [
   { key: 'turnover_lost', label: 'Turnover lost', player: true, color: 'bg-rose-500' },
   { key: 'penalty', label: 'Penalty', player: true, color: 'bg-indigo-600' },
   { key: 'timeout', label: 'Timeout', player: false, color: 'bg-slate-700' }
+];
+
+const POSSESSION_OUTCOMES = [
+  { key: 'goal', label: 'Goal' },
+  { key: 'miss', label: 'Miss' },
+  { key: 'exclusion', label: 'Exclusion' },
+  { key: 'turnover_won', label: 'Turnover won' },
+  { key: 'turnover_lost', label: 'Turnover lost' }
 ];
 
 const HEAT_TYPES = [
@@ -132,6 +143,25 @@ const loadTeamScoring = async (teamId) => {
     roster: rosterRes.data || [],
     matches: matchRes.data || [],
     events: eventRes.data || []
+  };
+};
+
+const loadTeamPossessions = async (teamId) => {
+  if (!teamId) return { roster: [], matches: [], possessions: [], passes: [] };
+  const [rosterRes, matchRes, possessionRes, passRes] = await Promise.all([
+    supabase.from('roster').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
+    supabase.from('matches').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
+    supabase.from('possessions').select('*').eq('team_id', teamId),
+    supabase.from('passes').select('*').eq('team_id', teamId)
+  ]);
+  if (rosterRes.error || matchRes.error || possessionRes.error || passRes.error) {
+    throw new Error('Failed to load possession data');
+  }
+  return {
+    roster: rosterRes.data || [],
+    matches: matchRes.data || [],
+    possessions: possessionRes.data || [],
+    passes: passRes.data || []
   };
 };
 
@@ -671,6 +701,15 @@ const App = () => {
             </button>
             <button
               className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
+                activeTab === 'possession' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+              }`}
+              onClick={() => setActiveTab('possession')}
+            >
+              <Share2 size={16} />
+              Possession
+            </button>
+            <button
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
                 activeTab === 'players' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
               }`}
               onClick={() => setActiveTab('players')}
@@ -719,6 +758,7 @@ const App = () => {
             onOpenShotmap={() => setActiveTab('shotmap')}
             onOpenAnalytics={() => setActiveTab('analytics')}
             onOpenScoring={() => setActiveTab('scoring')}
+            onOpenPossession={() => setActiveTab('possession')}
             onOpenPlayers={() => setActiveTab('players')}
             onOpenRoster={() => setActiveTab('roster')}
           />
@@ -731,6 +771,9 @@ const App = () => {
         )}
         {activeTab === 'scoring' && (
           <ScoringView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
+        )}
+        {activeTab === 'possession' && (
+          <PossessionView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
         )}
         {activeTab === 'players' && (
           <PlayersView
@@ -2362,7 +2405,14 @@ const HelpView = () => (
   </div>
 );
 
-const HubView = ({ onOpenShotmap, onOpenAnalytics, onOpenScoring, onOpenPlayers, onOpenRoster }) => (
+const HubView = ({
+  onOpenShotmap,
+  onOpenAnalytics,
+  onOpenScoring,
+  onOpenPossession,
+  onOpenPlayers,
+  onOpenRoster
+}) => (
   <div className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div>
@@ -2396,6 +2446,14 @@ const HubView = ({ onOpenShotmap, onOpenAnalytics, onOpenScoring, onOpenPlayers,
         <div className="text-xs font-semibold text-slate-500">Match events</div>
         <h3 className="mt-2 text-lg font-semibold">Scoring & Stats</h3>
         <p className="mt-2 text-sm text-slate-600">Log goals, exclusions, fouls, and track team stats.</p>
+      </button>
+      <button
+        className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+        onClick={onOpenPossession}
+      >
+        <div className="text-xs font-semibold text-slate-500">Possessions</div>
+        <h3 className="mt-2 text-lg font-semibold">Passing Map</h3>
+        <p className="mt-2 text-sm text-slate-600">Track full attacks with player-to-player passes.</p>
       </button>
       <button
         className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
@@ -3978,6 +4036,490 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
               ))}
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PossessionView = ({ seasonId, teamId, userId }) => {
+  const [roster, setRoster] = useState([]);
+  const [matches, setMatches] = useState([]);
+  const [possessions, setPossessions] = useState([]);
+  const [passes, setPasses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [currentMatchId, setCurrentMatchId] = useState('');
+  const [activePossessionId, setActivePossessionId] = useState('');
+  const [passDraft, setPassDraft] = useState({
+    fromPlayer: '',
+    toPlayer: '',
+    fromPos: null,
+    toPos: null
+  });
+  const [viewMode, setViewMode] = useState('field');
+  const fieldRef = useRef(null);
+
+  useEffect(() => {
+    if (!teamId) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const payload = await loadTeamPossessions(teamId);
+        if (!active) return;
+        const mappedRoster = payload.roster.map((player) => ({
+          id: player.id,
+          name: player.name,
+          capNumber: player.cap_number
+        }));
+        setRoster(mappedRoster);
+        setMatches(payload.matches || []);
+        setPossessions(
+          (payload.possessions || []).map((pos) => ({
+            id: pos.id,
+            matchId: pos.match_id,
+            outcome: pos.outcome || null,
+            createdAt: pos.created_at
+          }))
+        );
+        setPasses(
+          (payload.passes || []).map((pass) => ({
+            id: pass.id,
+            possessionId: pass.possession_id,
+            matchId: pass.match_id,
+            fromPlayer: pass.from_player_cap,
+            toPlayer: pass.to_player_cap,
+            fromX: Number(pass.from_x),
+            fromY: Number(pass.from_y),
+            toX: Number(pass.to_x),
+            toY: Number(pass.to_y),
+            sequence: pass.sequence
+          }))
+        );
+        setCurrentMatchId(payload.matches?.[0]?.id || '');
+        setError('');
+      } catch (e) {
+        if (active) setError('Could not load possession data.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [teamId]);
+
+  const currentMatch = matches.find((match) => match.id === currentMatchId);
+
+  const activePossession = possessions.find((pos) => pos.id === activePossessionId);
+
+  const matchPossessions = possessions.filter((pos) => pos.matchId === currentMatchId);
+  const activePasses = passes
+    .filter((pass) => pass.possessionId === activePossessionId)
+    .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+
+  const handleFieldClick = (event) => {
+    if (!activePossessionId) return;
+    if (!fieldRef.current) return;
+    const rect = fieldRef.current.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    if (!passDraft.fromPos) {
+      setPassDraft((prev) => ({ ...prev, fromPos: { x, y } }));
+    } else if (!passDraft.toPos) {
+      setPassDraft((prev) => ({ ...prev, toPos: { x, y } }));
+    } else {
+      setPassDraft({ fromPlayer: '', toPlayer: '', fromPos: { x, y }, toPos: null });
+    }
+  };
+
+  const startPossession = async () => {
+    if (!currentMatch) {
+      setError('Select a match first.');
+      return;
+    }
+    const { data, error: insertError } = await supabase
+      .from('possessions')
+      .insert({
+        user_id: userId,
+        season_id: seasonId,
+        team_id: teamId,
+        match_id: currentMatch.id,
+        outcome: null
+      })
+      .select('*')
+      .single();
+    if (insertError) {
+      setError('Failed to start possession.');
+      return;
+    }
+    const fresh = { id: data.id, matchId: data.match_id, outcome: data.outcome, createdAt: data.created_at };
+    setPossessions((prev) => [...prev, fresh]);
+    setActivePossessionId(fresh.id);
+    setPassDraft({ fromPlayer: '', toPlayer: '', fromPos: null, toPos: null });
+  };
+
+  const endPossession = async (outcome) => {
+    if (!activePossessionId) return;
+    const { error: updateError } = await supabase
+      .from('possessions')
+      .update({ outcome })
+      .eq('id', activePossessionId);
+    if (updateError) {
+      setError('Failed to end possession.');
+      return;
+    }
+    setPossessions((prev) =>
+      prev.map((pos) => (pos.id === activePossessionId ? { ...pos, outcome } : pos))
+    );
+    setActivePossessionId('');
+  };
+
+  const addPass = async () => {
+    if (!activePossessionId) {
+      setError('Start a possession first.');
+      return;
+    }
+    if (!passDraft.fromPlayer || !passDraft.toPlayer) {
+      setError('Select from and to players.');
+      return;
+    }
+    if (!passDraft.fromPos || !passDraft.toPos) {
+      setError('Click start and end positions on the field.');
+      return;
+    }
+    const sequence = activePasses.length + 1;
+    const { data, error: insertError } = await supabase
+      .from('passes')
+      .insert({
+        user_id: userId,
+        season_id: seasonId,
+        team_id: teamId,
+        match_id: currentMatchId,
+        possession_id: activePossessionId,
+        from_player_cap: passDraft.fromPlayer,
+        to_player_cap: passDraft.toPlayer,
+        from_x: passDraft.fromPos.x,
+        from_y: passDraft.fromPos.y,
+        to_x: passDraft.toPos.x,
+        to_y: passDraft.toPos.y,
+        sequence
+      })
+      .select('*')
+      .single();
+    if (insertError) {
+      setError('Failed to save pass.');
+      return;
+    }
+    setPasses((prev) => [
+      ...prev,
+      {
+        id: data.id,
+        possessionId: data.possession_id,
+        matchId: data.match_id,
+        fromPlayer: data.from_player_cap,
+        toPlayer: data.to_player_cap,
+        fromX: Number(data.from_x),
+        fromY: Number(data.from_y),
+        toX: Number(data.to_x),
+        toY: Number(data.to_y),
+        sequence: data.sequence
+      }
+    ]);
+    setPassDraft((prev) => ({
+      ...prev,
+      fromPos: null,
+      toPos: null,
+      fromPlayer: prev.toPlayer || prev.fromPlayer,
+      toPlayer: ''
+    }));
+    setError('');
+  };
+
+  const connectionStats = useMemo(() => {
+    const counts = {};
+    activePasses.forEach((pass) => {
+      const key = `${pass.fromPlayer}->${pass.toPlayer}`;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([key, count]) => {
+        const [from, to] = key.split('->');
+        return { from, to, count };
+      })
+      .sort((a, b) => b.count - a.count);
+  }, [activePasses]);
+
+  if (loading) {
+    return <div className="p-10 text-slate-700">Loading...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-cyan-700">Passing & Possession</p>
+          <h2 className="text-2xl font-semibold">Possession Mapping</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+            onClick={() => setViewMode('field')}
+          >
+            Field
+          </button>
+          <button
+            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+            onClick={() => setViewMode('network')}
+          >
+            Network
+          </button>
+          <button
+            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+            onClick={() => setViewMode('replay')}
+          >
+            Replay
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-500">Match</label>
+                <select
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={currentMatchId}
+                  onChange={(event) => setCurrentMatchId(event.target.value)}
+                >
+                  {matches.map((match) => (
+                    <option key={match.id} value={match.id}>
+                      {match.name}
+                      {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                className="mt-6 inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+                onClick={startPossession}
+              >
+                <Plus size={14} />
+                Start possession
+              </button>
+              {activePossessionId && (
+                <div className="mt-6 flex flex-wrap gap-2">
+                  {POSSESSION_OUTCOMES.map((outcome) => (
+                    <button
+                      key={outcome.key}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold"
+                      onClick={() => endPossession(outcome.key)}
+                    >
+                      End: {outcome.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              Click the field to set the pass start and end locations first, then pick players.
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
+              <div>
+                <label className="text-xs font-semibold text-slate-500">From player</label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {roster.map((player) => (
+                    <button
+                      key={player.id}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        passDraft.fromPlayer === player.capNumber
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                      onClick={() => setPassDraft((prev) => ({ ...prev, fromPlayer: player.capNumber }))}
+                    >
+                      #{player.capNumber}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500">To player</label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {roster.map((player) => (
+                    <button
+                      key={player.id}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        passDraft.toPlayer === player.capNumber
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                      onClick={() => setPassDraft((prev) => ({ ...prev, toPlayer: player.capNumber }))}
+                    >
+                      #{player.capNumber}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                onClick={addPass}
+              >
+                Add pass
+              </button>
+              <button
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+                onClick={() => setPassDraft({ fromPlayer: '', toPlayer: '', fromPos: null, toPos: null })}
+              >
+                Reset pass
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Possession field</h3>
+            <div className="mt-4 flex justify-center">
+              <div
+                ref={fieldRef}
+                onClick={handleFieldClick}
+                className="relative h-[700px] w-full max-w-[720px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
+              >
+                <div className="absolute left-0 top-1/2 h-[2px] w-full bg-yellow-300" />
+                <div className="absolute left-[40%] top-0 h-[4%] w-[20%] border-2 border-white bg-white/10" />
+                <div className="absolute left-[40%] bottom-0 h-[4%] w-[20%] border-2 border-white bg-white/10" />
+
+                {activePasses.map((pass) => (
+                  <svg
+                    key={pass.id}
+                    className="absolute left-0 top-0 h-full w-full"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                  >
+                    <line
+                      x1={pass.fromX}
+                      y1={pass.fromY}
+                      x2={pass.toX}
+                      y2={pass.toY}
+                      stroke="rgba(255,255,255,0.75)"
+                      strokeWidth="0.6"
+                    />
+                  </svg>
+                ))}
+
+                {activePasses.map((pass) => (
+                  <div
+                    key={`${pass.id}-from`}
+                    className="absolute flex h-4 w-4 items-center justify-center rounded-full bg-white/80 text-[9px] font-semibold text-slate-700"
+                    style={{
+                      left: `calc(${pass.fromX}% - 8px)`,
+                      top: `calc(${pass.fromY}% - 8px)`
+                    }}
+                  >
+                    {pass.fromPlayer}
+                  </div>
+                ))}
+
+                {activePasses.map((pass) => (
+                  <div
+                    key={`${pass.id}-to`}
+                    className="absolute flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/80 text-[9px] font-semibold text-white"
+                    style={{
+                      left: `calc(${pass.toX}% - 8px)`,
+                      top: `calc(${pass.toY}% - 8px)`
+                    }}
+                  >
+                    {pass.toPlayer}
+                  </div>
+                ))}
+
+                {passDraft.fromPos && (
+                  <div
+                    className="absolute h-3 w-3 rounded-full bg-white/90"
+                    style={{
+                      left: `calc(${passDraft.fromPos.x}% - 6px)`,
+                      top: `calc(${passDraft.fromPos.y}% - 6px)`
+                    }}
+                  />
+                )}
+                {passDraft.toPos && (
+                  <div
+                    className="absolute h-3 w-3 rounded-full bg-emerald-300/90"
+                    style={{
+                      left: `calc(${passDraft.toPos.x}% - 6px)`,
+                      top: `calc(${passDraft.toPos.y}% - 6px)`
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Possessions</h3>
+            <div className="mt-3 space-y-2 text-sm text-slate-600">
+              {matchPossessions.length === 0 && <div>No possessions yet.</div>}
+              {matchPossessions.map((pos) => (
+                <button
+                  key={pos.id}
+                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${
+                    pos.id === activePossessionId
+                      ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
+                      : 'border-slate-100 text-slate-600'
+                  }`}
+                  onClick={() => setActivePossessionId(pos.id)}
+                >
+                  Possession {pos.id.slice(0, 6)} · {pos.outcome ? pos.outcome.replace('_', ' ') : 'open'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {viewMode === 'network' && (
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-700">Passing network</h3>
+              <div className="mt-3 space-y-2 text-sm text-slate-600">
+                {connectionStats.length === 0 && <div>No passes yet.</div>}
+                {connectionStats.map((row) => (
+                  <div key={`${row.from}-${row.to}`} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+                    <span>
+                      #{row.from} → #{row.to}
+                    </span>
+                    <span className="font-semibold">{row.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {viewMode === 'replay' && (
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-700">Replay</h3>
+              <div className="mt-3 space-y-2 text-sm text-slate-600">
+                {activePasses.length === 0 && <div>No passes yet.</div>}
+                {activePasses.map((pass) => (
+                  <div key={pass.id} className="rounded-lg border border-slate-100 px-3 py-2">
+                    <div className="font-semibold text-slate-700">
+                      #{pass.fromPlayer} → #{pass.toPlayer}
+                    </div>
+                    <div className="text-xs text-slate-500">Pass {pass.sequence}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

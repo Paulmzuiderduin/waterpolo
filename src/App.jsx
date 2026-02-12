@@ -2954,7 +2954,23 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
             <h3 className="text-sm font-semibold text-slate-700">Filters</h3>
             <div className="mt-3 space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-500">Matches</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-semibold text-slate-500">Matches</label>
+                  <div className="flex items-center gap-2 text-[11px] font-semibold">
+                    <button
+                      className="text-slate-500 hover:text-slate-800"
+                      onClick={() => setFilters((prev) => ({ ...prev, matches: matches.map((m) => m.info.id) }))}
+                    >
+                      Select all
+                    </button>
+                    <button
+                      className="text-slate-500 hover:text-slate-800"
+                      onClick={() => setFilters((prev) => ({ ...prev, matches: [] }))}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {matches.map((match) => (
                     <button
@@ -2979,7 +2995,23 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">Players</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-semibold text-slate-500">Players</label>
+                  <div className="flex items-center gap-2 text-[11px] font-semibold">
+                    <button
+                      className="text-slate-500 hover:text-slate-800"
+                      onClick={() => setFilters((prev) => ({ ...prev, players: roster.map((p) => p.capNumber) }))}
+                    >
+                      Select all
+                    </button>
+                    <button
+                      className="text-slate-500 hover:text-slate-800"
+                      onClick={() => setFilters((prev) => ({ ...prev, players: [] }))}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {roster.map((player) => (
                     <button
@@ -3004,7 +3036,25 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">Outcome</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-semibold text-slate-500">Outcome</label>
+                  <div className="flex items-center gap-2 text-[11px] font-semibold">
+                    <button
+                      className="text-slate-500 hover:text-slate-800"
+                      onClick={() =>
+                        setFilters((prev) => ({ ...prev, results: ['raak', 'redding', 'mis'] }))
+                      }
+                    >
+                      Select all
+                    </button>
+                    <button
+                      className="text-slate-500 hover:text-slate-800"
+                      onClick={() => setFilters((prev) => ({ ...prev, results: [] }))}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {[
                     { value: 'raak', label: 'Goal' },
@@ -3033,7 +3083,23 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">Period</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-semibold text-slate-500">Period</label>
+                  <div className="flex items-center gap-2 text-[11px] font-semibold">
+                    <button
+                      className="text-slate-500 hover:text-slate-800"
+                      onClick={() => setFilters((prev) => ({ ...prev, periods: [...PERIODS] }))}
+                    >
+                      Select all
+                    </button>
+                    <button
+                      className="text-slate-500 hover:text-slate-800"
+                      onClick={() => setFilters((prev) => ({ ...prev, periods: [] }))}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {PERIODS.map((period) => (
                     <button
@@ -3058,7 +3124,23 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">Attack type</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-semibold text-slate-500">Attack type</label>
+                  <div className="flex items-center gap-2 text-[11px] font-semibold">
+                    <button
+                      className="text-slate-500 hover:text-slate-800"
+                      onClick={() => setFilters((prev) => ({ ...prev, attackTypes: [...ATTACK_TYPES] }))}
+                    >
+                      Select all
+                    </button>
+                    <button
+                      className="text-slate-500 hover:text-slate-800"
+                      onClick={() => setFilters((prev) => ({ ...prev, attackTypes: [] }))}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {ATTACK_TYPES.map((type) => (
                     <button

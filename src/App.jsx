@@ -2690,12 +2690,6 @@ const RosterView = ({ seasonId, teamId, userId }) => {
             />
             <input
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              placeholder="Age"
-              value={form.age}
-              onChange={(event) => setForm({ ...form, age: event.target.value })}
-            />
-            <input
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
               type="date"
               placeholder="Birthday"
               value={form.birthday}
@@ -3794,38 +3788,40 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
                       }}
                     />
                     <span className="text-xs font-semibold text-slate-500">sec</span>
-                    <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-                      {['7:00', '6:00', '5:00', '4:00'].map((preset) => (
+                    <div className="w-full">
+                      <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px] font-semibold text-slate-600">
+                        {['7:00', '6:00', '5:00', '4:00', '3:00', '2:00', '1:00'].map((preset) => (
+                          <button
+                            key={preset}
+                            className="rounded-full border border-slate-200 px-2 py-1"
+                            onClick={() => setForm((prev) => ({ ...prev, time: preset }))}
+                          >
+                            {preset}
+                          </button>
+                        ))}
                         <button
-                          key={preset}
                           className="rounded-full border border-slate-200 px-2 py-1"
-                          onClick={() => setForm((prev) => ({ ...prev, time: preset }))}
+                          onClick={() => {
+                            const total = Math.max(0, timeToSeconds(form.time) - 10);
+                            const minutes = Math.floor(total / 60);
+                            const seconds = total % 60;
+                            setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
+                          }}
                         >
-                          {preset}
+                          -10s
                         </button>
-                      ))}
-                      <button
-                        className="rounded-full border border-slate-200 px-2 py-1"
-                        onClick={() => {
-                          const total = Math.max(0, timeToSeconds(form.time) - 10);
-                          const minutes = Math.floor(total / 60);
-                          const seconds = total % 60;
-                          setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
-                        }}
-                      >
-                        -10s
-                      </button>
-                      <button
-                        className="rounded-full border border-slate-200 px-2 py-1"
-                        onClick={() => {
-                          const total = Math.min(7 * 60, timeToSeconds(form.time) + 10);
-                          const minutes = Math.floor(total / 60);
-                          const seconds = total % 60;
-                          setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
-                        }}
-                      >
-                        +10s
-                      </button>
+                        <button
+                          className="rounded-full border border-slate-200 px-2 py-1"
+                          onClick={() => {
+                            const total = Math.min(7 * 60, timeToSeconds(form.time) + 10);
+                            const minutes = Math.floor(total / 60);
+                            const seconds = total % 60;
+                            setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
+                          }}
+                        >
+                          +10s
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

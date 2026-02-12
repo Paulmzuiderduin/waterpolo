@@ -4322,45 +4322,7 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
               </button>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              Click the field to set a position, then choose the player.
-            </div>
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
-              <div>
-                <label className="text-xs font-semibold text-slate-500">From player</label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {roster.map((player) => (
-                    <button
-                      key={player.id}
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        passDraft.fromPlayer === player.capNumber
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                      onClick={() => setPassDraft((prev) => ({ ...prev, fromPlayer: player.capNumber }))}
-                    >
-                      #{player.capNumber}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500">To player</label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {roster.map((player) => (
-                    <button
-                      key={player.id}
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        passDraft.toPlayer === player.capNumber
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                      onClick={() => setPassDraft((prev) => ({ ...prev, toPlayer: player.capNumber }))}
-                    >
-                      #{player.capNumber}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              Click to set start location → choose passer. Click again → choose receiver.
             </div>
             {activePossessionId && (
               <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -4568,7 +4530,7 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
                   onClick={() => {
                     if (playerPicker === 'from') {
                       setPassDraft((prev) => ({ ...prev, fromPlayer: player.capNumber }));
-                      setPlayerPicker('to');
+                      setPlayerPicker(null);
                     } else {
                       setPassDraft((prev) => ({ ...prev, toPlayer: player.capNumber }));
                       setPlayerPicker(null);

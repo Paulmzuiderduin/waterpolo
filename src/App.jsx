@@ -1,5 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Plus, X, BarChart2, LogOut, Users, IdCard, HelpCircle, Home } from 'lucide-react';
+import {
+  Download,
+  Plus,
+  X,
+  BarChart2,
+  LogOut,
+  Users,
+  IdCard,
+  HelpCircle,
+  Home,
+  ClipboardList
+} from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { supabase } from './lib/supabase';
@@ -32,6 +43,15 @@ const RESULT_COLORS = {
 
 const ATTACK_TYPES = ['6vs6', '6vs5', '6vs4', 'strafworp'];
 const PERIODS = ['1', '2', '3', '4', 'OT'];
+const PERIOD_ORDER = { '1': 1, '2': 2, '3': 3, '4': 4, OT: 5 };
+const SCORING_EVENTS = [
+  { key: 'goal', label: 'Goal', player: true },
+  { key: 'exclusion', label: 'Exclusion', player: true },
+  { key: 'foul', label: 'Foul', player: true },
+  { key: 'turnover', label: 'Turnover', player: true },
+  { key: 'penalty', label: 'Penalty', player: true },
+  { key: 'timeout', label: 'Timeout', player: false }
+];
 
 const HEAT_TYPES = [
   { key: 'count', label: 'Count', metric: 'count', color: 'viridis' },
@@ -86,6 +106,23 @@ const loadTeamData = async (teamId) => {
     });
   });
   return { roster: rosterRes.data || [], matches: Array.from(matchMap.values()) };
+};
+
+const loadTeamScoring = async (teamId) => {
+  if (!teamId) return { roster: [], matches: [], events: [] };
+  const [rosterRes, matchRes, eventRes] = await Promise.all([
+    supabase.from('roster').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
+    supabase.from('matches').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
+    supabase.from('scoring_events').select('*').eq('team_id', teamId)
+  ]);
+  if (rosterRes.error || matchRes.error || eventRes.error) {
+    throw new Error('Failed to load scoring data');
+  }
+  return {
+    roster: rosterRes.data || [],
+    matches: matchRes.data || [],
+    events: eventRes.data || []
+  };
 };
 
 const detectZone = (x, y) => {
@@ -615,6 +652,15 @@ const App = () => {
             </button>
             <button
               className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
+                activeTab === 'scoring' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+              }`}
+              onClick={() => setActiveTab('scoring')}
+            >
+              <ClipboardList size={16} />
+              Scoring
+            </button>
+            <button
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
                 activeTab === 'players' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
               }`}
               onClick={() => setActiveTab('players')}
@@ -662,6 +708,7 @@ const App = () => {
           <HubView
             onOpenShotmap={() => setActiveTab('shotmap')}
             onOpenAnalytics={() => setActiveTab('analytics')}
+            onOpenScoring={() => setActiveTab('scoring')}
             onOpenPlayers={() => setActiveTab('players')}
             onOpenRoster={() => setActiveTab('roster')}
           />
@@ -671,6 +718,9 @@ const App = () => {
         )}
         {activeTab === 'analytics' && (
           <AnalyticsView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
+        )}
+        {activeTab === 'scoring' && (
+          <ScoringView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
         )}
         {activeTab === 'players' && (
           <PlayersView
@@ -2151,7 +2201,7 @@ const HelpView = () => (
   </div>
 );
 
-const HubView = ({ onOpenShotmap, onOpenAnalytics, onOpenPlayers, onOpenRoster }) => (
+const HubView = ({ onOpenShotmap, onOpenAnalytics, onOpenScoring, onOpenPlayers, onOpenRoster }) => (
   <div className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div>
@@ -2177,6 +2227,14 @@ const HubView = ({ onOpenShotmap, onOpenAnalytics, onOpenPlayers, onOpenRoster }
         <div className="text-xs font-semibold text-slate-500">Insights</div>
         <h3 className="mt-2 text-lg font-semibold">Analytics</h3>
         <p className="mt-2 text-sm text-slate-600">Heatmaps, filters, and advanced stats per match or season.</p>
+      </button>
+      <button
+        className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+        onClick={onOpenScoring}
+      >
+        <div className="text-xs font-semibold text-slate-500">Match events</div>
+        <h3 className="mt-2 text-lg font-semibold">Scoring & Stats</h3>
+        <p className="mt-2 text-sm text-slate-600">Log goals, exclusions, fouls, and track team stats.</p>
       </button>
       <button
         className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
@@ -3202,6 +3260,504 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
               </div>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ScoringView = ({ seasonId, teamId, userId }) => {
+  const [roster, setRoster] = useState([]);
+  const [matches, setMatches] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [currentMatchId, setCurrentMatchId] = useState('');
+  const [statsMatchId, setStatsMatchId] = useState('');
+  const [editingEventId, setEditingEventId] = useState(null);
+  const [form, setForm] = useState({
+    type: 'goal',
+    teamSide: 'for',
+    playerCap: '',
+    period: '1',
+    time: formatShotTime()
+  });
+  const [lastEventMeta, setLastEventMeta] = useState(() => ({
+    period: '1',
+    time: formatShotTime()
+  }));
+
+  useEffect(() => {
+    if (!teamId) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const payload = await loadTeamScoring(teamId);
+        if (!active) return;
+        const mappedRoster = payload.roster.map((player) => ({
+          id: player.id,
+          name: player.name,
+          capNumber: player.cap_number
+        }));
+        setRoster(mappedRoster);
+        setMatches(payload.matches || []);
+        setEvents(
+          (payload.events || []).map((evt) => ({
+            id: evt.id,
+            matchId: evt.match_id,
+            type: evt.event_type,
+            teamSide: evt.team_side,
+            playerCap: evt.player_cap || '',
+            period: evt.period,
+            time: evt.time
+          }))
+        );
+        setCurrentMatchId(payload.matches?.[0]?.id || '');
+        setStatsMatchId('');
+        setError('');
+      } catch (e) {
+        if (active) setError('Could not load scoring data.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [teamId]);
+
+  const currentMatch = matches.find((match) => match.id === currentMatchId);
+
+  const filteredEvents = useMemo(() => {
+    if (!statsMatchId) return events;
+    return events.filter((evt) => evt.matchId === statsMatchId);
+  }, [events, statsMatchId]);
+
+  const sortedEvents = useMemo(() => {
+    return [...filteredEvents].sort((a, b) => {
+      const periodDiff = (PERIOD_ORDER[b.period] || 0) - (PERIOD_ORDER[a.period] || 0);
+      if (periodDiff !== 0) return periodDiff;
+      return timeToSeconds(b.time) - timeToSeconds(a.time);
+    });
+  }, [filteredEvents]);
+
+  const stats = useMemo(() => {
+    const totals = {
+      goal_for: 0,
+      goal_against: 0,
+      exclusion_for: 0,
+      exclusion_against: 0,
+      foul_for: 0,
+      foul_against: 0,
+      turnover_for: 0,
+      turnover_against: 0,
+      penalty_for: 0,
+      penalty_against: 0,
+      timeout_for: 0,
+      timeout_against: 0
+    };
+    const playerStats = {};
+    filteredEvents.forEach((evt) => {
+      const key = `${evt.type}_${evt.teamSide}`;
+      if (key in totals) totals[key] += 1;
+      if (evt.playerCap) {
+        if (!playerStats[evt.playerCap]) {
+          playerStats[evt.playerCap] = {
+            goals: 0,
+            exclusions: 0,
+            fouls: 0,
+            turnovers: 0,
+            penalties: 0
+          };
+        }
+        if (evt.type === 'goal') playerStats[evt.playerCap].goals += 1;
+        if (evt.type === 'exclusion') playerStats[evt.playerCap].exclusions += 1;
+        if (evt.type === 'foul') playerStats[evt.playerCap].fouls += 1;
+        if (evt.type === 'turnover') playerStats[evt.playerCap].turnovers += 1;
+        if (evt.type === 'penalty') playerStats[evt.playerCap].penalties += 1;
+      }
+    });
+    const manUp = totals.exclusion_for ? ((totals.goal_for / totals.exclusion_for) * 100).toFixed(1) : '—';
+    const manDown = totals.exclusion_against
+      ? ((totals.goal_against / totals.exclusion_against) * 100).toFixed(1)
+      : '—';
+    return { totals, playerStats, manUp, manDown };
+  }, [filteredEvents]);
+
+  const resetForm = () => {
+    setForm((prev) => ({
+      ...prev,
+      type: 'goal',
+      teamSide: 'for',
+      playerCap: roster[0]?.capNumber || '',
+      period: lastEventMeta.period,
+      time: lastEventMeta.time
+    }));
+    setEditingEventId(null);
+  };
+
+  useEffect(() => {
+    resetForm();
+  }, [roster]);
+
+  const saveEvent = async (eventType = form.type) => {
+    if (!currentMatch) {
+      setError('Create or select a match first.');
+      return;
+    }
+    const requiresPlayer = SCORING_EVENTS.find((item) => item.key === eventType)?.player;
+    if (requiresPlayer && !form.playerCap) {
+      setError('Select a player.');
+      return;
+    }
+    const payload = {
+      user_id: userId,
+      season_id: seasonId,
+      team_id: teamId,
+      match_id: currentMatch.id,
+      event_type: eventType,
+      team_side: form.teamSide,
+      player_cap: requiresPlayer ? form.playerCap : null,
+      period: form.period,
+      time: normalizeTime(form.time)
+    };
+    let data;
+    if (editingEventId) {
+      const { data: updated, error: updateError } = await supabase
+        .from('scoring_events')
+        .update(payload)
+        .eq('id', editingEventId)
+        .select('*')
+        .single();
+      if (updateError) {
+        setError('Failed to update event.');
+        return;
+      }
+      data = updated;
+    } else {
+      const { data: inserted, error: insertError } = await supabase
+        .from('scoring_events')
+        .insert(payload)
+        .select('*')
+        .single();
+      if (insertError) {
+        setError('Failed to save event.');
+        return;
+      }
+      data = inserted;
+    }
+    const nextEvent = {
+      id: data.id,
+      matchId: data.match_id,
+      type: data.event_type,
+      teamSide: data.team_side,
+      playerCap: data.player_cap || '',
+      period: data.period,
+      time: data.time
+    };
+    setEvents((prev) => {
+      if (editingEventId) {
+        return prev.map((evt) => (evt.id === editingEventId ? nextEvent : evt));
+      }
+      return [...prev, nextEvent];
+    });
+    setLastEventMeta({ period: form.period, time: normalizeTime(form.time) });
+    setError('');
+    resetForm();
+    notifyDataUpdated();
+  };
+
+  const deleteEvent = async (eventId) => {
+    if (!window.confirm('Delete event?')) return;
+    const { error: deleteError } = await supabase.from('scoring_events').delete().eq('id', eventId);
+    if (deleteError) {
+      setError('Failed to delete event.');
+      return;
+    }
+    setEvents((prev) => prev.filter((evt) => evt.id !== eventId));
+    notifyDataUpdated();
+  };
+
+  if (loading) {
+    return <div className="p-10 text-slate-700">Loading...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-cyan-700">Scoring & Stats</p>
+          <h2 className="text-2xl font-semibold">Match Events</h2>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-500">Match</label>
+                <select
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={currentMatchId}
+                  onChange={(event) => setCurrentMatchId(event.target.value)}
+                >
+                  {matches.map((match) => (
+                    <option key={match.id} value={match.id}>
+                      {match.name} · {match.date}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="ml-auto flex items-center gap-2 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                <button
+                  className={`rounded-full px-3 py-1 ${form.teamSide === 'for' ? 'bg-white text-slate-900' : ''}`}
+                  onClick={() => setForm((prev) => ({ ...prev, teamSide: 'for' }))}
+                >
+                  For
+                </button>
+                <button
+                  className={`rounded-full px-3 py-1 ${
+                    form.teamSide === 'against' ? 'bg-white text-slate-900' : ''
+                  }`}
+                  onClick={() => setForm((prev) => ({ ...prev, teamSide: 'against' }))}
+                >
+                  Against
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
+              <div>
+                <label className="text-xs font-semibold text-slate-500">Player (optional)</label>
+                <select
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={form.playerCap}
+                  onChange={(event) => setForm((prev) => ({ ...prev, playerCap: event.target.value }))}
+                >
+                  <option value="">No player</option>
+                  {roster.map((player) => (
+                    <option key={player.id} value={player.capNumber}>
+                      #{player.capNumber} {player.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Period</label>
+                  <select
+                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    value={form.period}
+                    onChange={(event) => setForm((prev) => ({ ...prev, period: event.target.value }))}
+                  >
+                    {PERIODS.map((period) => (
+                      <option key={period} value={period}>
+                        P{period}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Time</label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="7"
+                      className="w-20 rounded-lg border border-slate-200 px-3 py-2"
+                      value={splitTimeParts(form.time).minutes}
+                      onChange={(event) => {
+                        const minutes = Math.min(7, Math.max(0, Number(event.target.value)));
+                        const seconds = splitTimeParts(form.time).seconds;
+                        setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
+                      }}
+                    />
+                    <span className="text-xs font-semibold text-slate-500">min</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      className="w-20 rounded-lg border border-slate-200 px-3 py-2"
+                      value={splitTimeParts(form.time).seconds}
+                      onChange={(event) => {
+                        const minutes = splitTimeParts(form.time).minutes;
+                        const seconds = Math.min(59, Math.max(0, Number(event.target.value)));
+                        setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
+                      }}
+                    />
+                    <span className="text-xs font-semibold text-slate-500">sec</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {SCORING_EVENTS.map((evt) => (
+                <button
+                  key={evt.key}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                    form.type === evt.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}
+                  onClick={() => {
+                    setForm((prev) => ({ ...prev, type: evt.key }));
+                    saveEvent(evt.key);
+                  }}
+                >
+                  + {evt.label}
+                </button>
+              ))}
+            </div>
+            {editingEventId && (
+              <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+                Editing event ·
+                <button className="font-semibold text-slate-700" onClick={resetForm}>
+                  Cancel edit
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Event log</h3>
+            <div className="mt-3 space-y-2 text-sm text-slate-600">
+              {sortedEvents.length === 0 && <div>No events logged yet.</div>}
+              {sortedEvents.map((evt) => {
+                const matchName = matches.find((match) => match.id === evt.matchId)?.name || 'Match';
+                const playerLabel = evt.playerCap ? `#${evt.playerCap}` : 'Team';
+                return (
+                  <div key={evt.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 px-3 py-2">
+                    <div>
+                      <div className="font-semibold text-slate-700">
+                        {evt.type} · {evt.teamSide} · {playerLabel}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {matchName} · P{evt.period} · {evt.time}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-semibold">
+                      <button
+                        className="text-slate-500"
+                        onClick={() => {
+                          setEditingEventId(evt.id);
+                          setForm({
+                            type: evt.type,
+                            teamSide: evt.teamSide,
+                            playerCap: evt.playerCap,
+                            period: evt.period,
+                            time: evt.time
+                          });
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button className="text-red-500" onClick={() => deleteEvent(evt.id)}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Stats scope</h3>
+            <label className="mt-3 block text-xs font-semibold text-slate-500">Match selection</label>
+            <select
+              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={statsMatchId}
+              onChange={(event) => setStatsMatchId(event.target.value)}
+            >
+              <option value="">All matches</option>
+              {matches.map((match) => (
+                <option key={match.id} value={match.id}>
+                  {match.name} · {match.date}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Team stats</h3>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-600">
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Goals (for) <span className="font-semibold text-slate-900">{stats.totals.goal_for}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Goals (against) <span className="font-semibold text-slate-900">{stats.totals.goal_against}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Exclusions (for) <span className="font-semibold text-slate-900">{stats.totals.exclusion_for}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Exclusions (against) <span className="font-semibold text-slate-900">{stats.totals.exclusion_against}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Fouls (for) <span className="font-semibold text-slate-900">{stats.totals.foul_for}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Fouls (against) <span className="font-semibold text-slate-900">{stats.totals.foul_against}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Turnovers (for) <span className="font-semibold text-slate-900">{stats.totals.turnover_for}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Turnovers (against) <span className="font-semibold text-slate-900">{stats.totals.turnover_against}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Penalties (for) <span className="font-semibold text-slate-900">{stats.totals.penalty_for}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Penalties (against) <span className="font-semibold text-slate-900">{stats.totals.penalty_against}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Timeouts (for) <span className="font-semibold text-slate-900">{stats.totals.timeout_for}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Timeouts (against) <span className="font-semibold text-slate-900">{stats.totals.timeout_against}</span>
+              </div>
+            </div>
+            <div className="mt-3 text-xs text-slate-500">
+              Man-up conversion ≈ goals for / exclusions for · Man-down conversion ≈ goals against / exclusions against.
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-3 text-sm text-slate-600">
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Man-up % <span className="font-semibold text-emerald-700">{stats.manUp}%</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Man-down % <span className="font-semibold text-amber-700">{stats.manDown}%</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Player stats</h3>
+            <div className="mt-3 space-y-2 text-sm text-slate-600">
+              {Object.keys(stats.playerStats).length === 0 && <div>No player events logged.</div>}
+              {Object.entries(stats.playerStats).map(([cap, data]) => (
+                <div key={cap} className="rounded-lg border border-slate-100 px-3 py-2">
+                  <div className="font-semibold text-slate-700">#{cap}</div>
+                  <div className="mt-1 grid grid-cols-2 gap-2 text-xs text-slate-500">
+                    <span>Goals: {data.goals}</span>
+                    <span>Exclusions: {data.exclusions}</span>
+                    <span>Fouls: {data.fouls}</span>
+                    <span>Turnovers: {data.turnovers}</span>
+                    <span>Penalties: {data.penalties}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

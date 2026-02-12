@@ -4057,6 +4057,7 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
     fromPos: null,
     toPos: null
   });
+  const [playerPicker, setPlayerPicker] = useState(null);
   const [viewMode, setViewMode] = useState('field');
   const fieldRef = useRef(null);
 
@@ -4127,10 +4128,13 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
     const y = ((event.clientY - rect.top) / rect.height) * 100;
     if (!passDraft.fromPos) {
       setPassDraft((prev) => ({ ...prev, fromPos: { x, y } }));
+      setPlayerPicker('from');
     } else if (!passDraft.toPos) {
       setPassDraft((prev) => ({ ...prev, toPos: { x, y } }));
+      setPlayerPicker('to');
     } else {
       setPassDraft({ fromPlayer: '', toPlayer: '', fromPos: { x, y }, toPos: null });
+      setPlayerPicker('from');
     }
   };
 
@@ -4316,22 +4320,9 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
                 <Plus size={14} />
                 Start possession
               </button>
-              {activePossessionId && (
-                <div className="mt-6 flex flex-wrap gap-2">
-                  {POSSESSION_OUTCOMES.map((outcome) => (
-                    <button
-                      key={outcome.key}
-                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold"
-                      onClick={() => endPossession(outcome.key)}
-                    >
-                      End: {outcome.label}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              Click the field to set the pass start and end locations first, then pick players.
+              Click the field to set a position, then choose the player.
             </div>
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
               <div>
@@ -4371,6 +4362,20 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
                 </div>
               </div>
             </div>
+            {activePossessionId && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500">End possession:</span>
+                {POSSESSION_OUTCOMES.map((outcome) => (
+                  <button
+                    key={outcome.key}
+                    className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold"
+                    onClick={() => endPossession(outcome.key)}
+                  >
+                    {outcome.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="mt-3 flex items-center gap-2">
               <button
                 className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
@@ -4395,7 +4400,15 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
                 onClick={handleFieldClick}
                 className="relative h-[700px] w-full max-w-[720px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
               >
-                <div className="absolute left-0 top-1/2 h-[2px] w-full bg-yellow-300" />
+                <div className="absolute left-0 top-1/2 h-[2px] w-full bg-white/90" />
+                <div className="absolute left-0 top-[24%] h-[2px] w-full bg-yellow-300/90" />
+                <div className="absolute left-0 top-[20%] h-[2px] w-full bg-red-400/90" />
+                <div className="absolute left-0 top-[76%] h-[2px] w-full bg-yellow-300/90" />
+                <div className="absolute left-0 top-[80%] h-[2px] w-full bg-red-400/90" />
+
+                <div className="absolute left-[26.67%] top-0 h-[8%] w-[46.66%] border-2 border-red-400/90" />
+                <div className="absolute left-[26.67%] bottom-0 h-[8%] w-[46.66%] border-2 border-red-400/90" />
+
                 <div className="absolute left-[40%] top-0 h-[4%] w-[20%] border-2 border-white bg-white/10" />
                 <div className="absolute left-[40%] bottom-0 h-[4%] w-[20%] border-2 border-white bg-white/10" />
 
@@ -4522,6 +4535,40 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
           )}
         </div>
       </div>
+
+      {playerPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-700">
+                Choose {playerPicker === 'from' ? 'from' : 'to'} player
+              </h3>
+              <button className="text-xs font-semibold text-slate-500" onClick={() => setPlayerPicker(null)}>
+                Close
+              </button>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {roster.map((player) => (
+                <button
+                  key={player.id}
+                  className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white"
+                  onClick={() => {
+                    if (playerPicker === 'from') {
+                      setPassDraft((prev) => ({ ...prev, fromPlayer: player.capNumber }));
+                      setPlayerPicker('to');
+                    } else {
+                      setPassDraft((prev) => ({ ...prev, toPlayer: player.capNumber }));
+                      setPlayerPicker(null);
+                    }
+                  }}
+                >
+                  #{player.capNumber} {player.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

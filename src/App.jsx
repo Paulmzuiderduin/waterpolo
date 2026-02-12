@@ -3496,12 +3496,15 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
   }, [events, statsMatchId]);
 
   const sortedEvents = useMemo(() => {
-    return [...filteredEvents].sort((a, b) => {
+    const matchFiltered = currentMatchId
+      ? filteredEvents.filter((evt) => evt.matchId === currentMatchId)
+      : filteredEvents;
+    return [...matchFiltered].sort((a, b) => {
       const periodDiff = (PERIOD_ORDER[b.period] || 0) - (PERIOD_ORDER[a.period] || 0);
       if (periodDiff !== 0) return periodDiff;
       return timeToSeconds(b.time) - timeToSeconds(a.time);
     });
-  }, [filteredEvents]);
+  }, [filteredEvents, currentMatchId]);
 
   const stats = useMemo(() => {
     const totals = {

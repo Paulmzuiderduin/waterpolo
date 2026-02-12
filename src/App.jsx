@@ -48,7 +48,8 @@ const SCORING_EVENTS = [
   { key: 'goal', label: 'Goal', player: true, color: 'bg-emerald-600' },
   { key: 'exclusion', label: 'Exclusion', player: true, color: 'bg-amber-500' },
   { key: 'foul', label: 'Foul', player: true, color: 'bg-orange-500' },
-  { key: 'turnover', label: 'Turnover', player: true, color: 'bg-rose-500' },
+  { key: 'turnover_won', label: 'Turnover won', player: true, color: 'bg-sky-600' },
+  { key: 'turnover_lost', label: 'Turnover lost', player: true, color: 'bg-rose-500' },
   { key: 'penalty', label: 'Penalty', player: true, color: 'bg-indigo-600' },
   { key: 'timeout', label: 'Timeout', player: false, color: 'bg-slate-700' }
 ];
@@ -1742,12 +1743,14 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
 
 const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, onSelectTeam }) => {
   const [data, setData] = useState({ roster: [], matches: [] });
+  const [scoringEvents, setScoringEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [compareA, setCompareA] = useState('');
   const [compareB, setCompareB] = useState('');
   const [selectedMatches, setSelectedMatches] = useState([]);
+  const [reportSource, setReportSource] = useState('shotmap');
   const reportRef = useRef(null);
 
   useEffect(() => {
@@ -1756,6 +1759,10 @@ const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, o
     const load = async () => {
       try {
         const payload = await loadTeamData(teamId);
+        const { data: scoringData, error: scoringError } = await supabase
+          .from('scoring_events')
+          .select('*')
+          .eq('team_id', teamId);
         if (!active) return;
         const mappedRoster = payload.roster.map((player) => ({
           id: player.id,
@@ -1769,6 +1776,18 @@ const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, o
           photoUrl: player.photo_url
         }));
         setData({ roster: mappedRoster, matches: payload.matches });
+        if (!scoringError) {
+          setScoringEvents(
+            (scoringData || []).map((evt) => ({
+              id: evt.id,
+              matchId: evt.match_id,
+              type: evt.event_type,
+              playerCap: evt.player_cap || '',
+              period: evt.period,
+              time: evt.time
+            }))
+          );
+        }
         setSelectedMatches(payload.matches.map((match) => match.info.id));
         setSelectedPlayerId(mappedRoster[0]?.id || '');
         setCompareA(mappedRoster[0]?.id || '');
@@ -1803,6 +1822,12 @@ const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, o
     [scopedMatches]
   );
 
+  const scopedScoringEvents = useMemo(() => {
+    if (!selectedMatches.length) return [];
+    const matchSet = new Set(selectedMatches);
+    return scoringEvents.filter((evt) => matchSet.has(evt.matchId));
+  }, [scoringEvents, selectedMatches]);
+
   const scopeSummary = useMemo(() => {
     const seasonLabel = selectedSeason?.name || 'Season';
     const teamLabel = selectedTeam?.name || 'Team';
@@ -1833,7 +1858,7 @@ const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, o
     );
   };
 
-  const buildStats = (player) => {
+  const buildShotmapStats = (player) => {
     if (!player) return null;
     const playerShots = shots.filter((shot) => shot.playerCap === player.capNumber);
     const goals = playerShots.filter((shot) => shot.result === 'raak');
@@ -1860,12 +1885,36 @@ const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, o
     };
   };
 
+  const buildScoringStats = (player) => {
+    if (!player) return null;
+    const playerEvents = scopedScoringEvents.filter((evt) => evt.playerCap === player.capNumber);
+    const countBy = (type) => playerEvents.filter((evt) => evt.type === type).length;
+    return {
+      goals: countBy('goal'),
+      exclusions: countBy('exclusion'),
+      fouls: countBy('foul'),
+      turnoversWon: countBy('turnover_won'),
+      turnoversLost: countBy('turnover_lost'),
+      penalties: countBy('penalty'),
+      total: playerEvents.length
+    };
+  };
+
   const selectedPlayer = roster.find((player) => player.id === selectedPlayerId);
-  const selectedStats = buildStats(selectedPlayer);
+  const selectedStats =
+    reportSource === 'shotmap'
+      ? buildShotmapStats(selectedPlayer)
+      : buildScoringStats(selectedPlayer);
   const comparePlayerA = roster.find((player) => player.id === compareA);
   const comparePlayerB = roster.find((player) => player.id === compareB);
-  const compareStatsA = buildStats(comparePlayerA);
-  const compareStatsB = buildStats(comparePlayerB);
+  const compareStatsA =
+    reportSource === 'shotmap'
+      ? buildShotmapStats(comparePlayerA)
+      : buildScoringStats(comparePlayerA);
+  const compareStatsB =
+    reportSource === 'shotmap'
+      ? buildShotmapStats(comparePlayerB)
+      : buildScoringStats(comparePlayerB);
 
   const exportPDF = async () => {
     if (!reportRef.current) return;
@@ -1995,18 +2044,40 @@ const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, o
           </div>
 
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <label className="text-xs font-semibold text-slate-500">Select player</label>
-            <select
-              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2"
-              value={selectedPlayerId}
-              onChange={(event) => setSelectedPlayerId(event.target.value)}
-            >
-              {roster.map((player) => (
-                <option key={player.id} value={player.id}>
-                  #{player.capNumber} {player.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <label className="text-xs font-semibold text-slate-500">Select player</label>
+                <select
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2"
+                  value={selectedPlayerId}
+                  onChange={(event) => setSelectedPlayerId(event.target.value)}
+                >
+                  {roster.map((player) => (
+                    <option key={player.id} value={player.id}>
+                      #{player.capNumber} {player.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                <button
+                  className={`rounded-full px-3 py-1 ${
+                    reportSource === 'shotmap' ? 'bg-white text-slate-900' : ''
+                  }`}
+                  onClick={() => setReportSource('shotmap')}
+                >
+                  Shotmap
+                </button>
+                <button
+                  className={`rounded-full px-3 py-1 ${
+                    reportSource === 'scoring' ? 'bg-white text-slate-900' : ''
+                  }`}
+                  onClick={() => setReportSource('scoring')}
+                >
+                  Scoring
+                </button>
+              </div>
+            </div>
           </div>
 
           <div ref={reportRef} className="rounded-2xl bg-white p-6 shadow-sm">
@@ -2034,7 +2105,7 @@ const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, o
                   </div>
                 </div>
 
-                {selectedStats && (
+                {selectedStats && reportSource === 'shotmap' && (
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div className="rounded-xl border border-slate-100 p-3">
                       <div className="text-xs text-slate-500">Shots</div>
@@ -2063,6 +2134,39 @@ const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, o
                     <div className="rounded-xl border border-slate-100 p-3">
                       <div className="text-xs text-slate-500">Preferred zone (goals)</div>
                       <div className="text-lg font-semibold">{selectedStats.preferredZone}</div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedStats && reportSource === 'scoring' && (
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Events</div>
+                      <div className="text-lg font-semibold">{selectedStats.total}</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Goals</div>
+                      <div className="text-lg font-semibold">{selectedStats.goals}</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Exclusions</div>
+                      <div className="text-lg font-semibold">{selectedStats.exclusions}</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Fouls</div>
+                      <div className="text-lg font-semibold">{selectedStats.fouls}</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Turnover won</div>
+                      <div className="text-lg font-semibold">{selectedStats.turnoversWon}</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Turnover lost</div>
+                      <div className="text-lg font-semibold">{selectedStats.turnoversLost}</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <div className="text-xs text-slate-500">Penalties</div>
+                      <div className="text-lg font-semibold">{selectedStats.penalties}</div>
                     </div>
                   </div>
                 )}
@@ -2123,7 +2227,7 @@ const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, o
                 ))}
               </select>
             </div>
-            {compareStatsA && compareStatsB && (
+            {compareStatsA && compareStatsB && reportSource === 'shotmap' && (
               <div className="mt-4 space-y-2 text-sm">
                 <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
                   <span className="text-slate-500">Shots</span>
@@ -2139,6 +2243,36 @@ const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, o
                   <span className="text-slate-500">Avg distance</span>
                   <span className="font-semibold">{compareStatsA.avgDistance}m</span>
                   <span className="font-semibold">{compareStatsB.avgDistance}m</span>
+                </div>
+              </div>
+            )}
+
+            {compareStatsA && compareStatsB && reportSource === 'scoring' && (
+              <div className="mt-4 space-y-2 text-sm">
+                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                  <span className="text-slate-500">Events</span>
+                  <span className="font-semibold">{compareStatsA.total}</span>
+                  <span className="font-semibold">{compareStatsB.total}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                  <span className="text-slate-500">Goals</span>
+                  <span className="font-semibold">{compareStatsA.goals}</span>
+                  <span className="font-semibold">{compareStatsB.goals}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                  <span className="text-slate-500">Exclusions</span>
+                  <span className="font-semibold">{compareStatsA.exclusions}</span>
+                  <span className="font-semibold">{compareStatsB.exclusions}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                  <span className="text-slate-500">Turnover won</span>
+                  <span className="font-semibold">{compareStatsA.turnoversWon}</span>
+                  <span className="font-semibold">{compareStatsB.turnoversWon}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                  <span className="text-slate-500">Turnover lost</span>
+                  <span className="font-semibold">{compareStatsA.turnoversLost}</span>
+                  <span className="font-semibold">{compareStatsB.turnoversLost}</span>
                 </div>
               </div>
             )}
@@ -3374,7 +3508,8 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
       goal: 0,
       exclusion: 0,
       foul: 0,
-      turnover: 0,
+      turnover_won: 0,
+      turnover_lost: 0,
       penalty: 0,
       timeout: 0
     };
@@ -3387,14 +3522,16 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
             goals: 0,
             exclusions: 0,
             fouls: 0,
-            turnovers: 0,
+            turnoversWon: 0,
+            turnoversLost: 0,
             penalties: 0
           };
         }
         if (evt.type === 'goal') playerStats[evt.playerCap].goals += 1;
         if (evt.type === 'exclusion') playerStats[evt.playerCap].exclusions += 1;
         if (evt.type === 'foul') playerStats[evt.playerCap].fouls += 1;
-        if (evt.type === 'turnover') playerStats[evt.playerCap].turnovers += 1;
+        if (evt.type === 'turnover_won') playerStats[evt.playerCap].turnoversWon += 1;
+        if (evt.type === 'turnover_lost') playerStats[evt.playerCap].turnoversLost += 1;
         if (evt.type === 'penalty') playerStats[evt.playerCap].penalties += 1;
       }
     });
@@ -3547,6 +3684,40 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
                   ))}
                 </select>
               </div>
+              <button
+                className="mt-6 inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+                onClick={async () => {
+                  const draft = DEFAULT_MATCH();
+                  const { data, error: insertError } = await supabase
+                    .from('matches')
+                    .insert({
+                      name: draft.info.name,
+                      date: draft.info.date,
+                      opponent_name: draft.info.opponent,
+                      season_id: seasonId,
+                      team_id: teamId,
+                      user_id: userId
+                    })
+                    .select('*')
+                    .single();
+                  if (insertError) {
+                    setError('Failed to create match.');
+                    return;
+                  }
+                  const fresh = {
+                    id: data.id,
+                    name: data.name,
+                    date: data.date,
+                    opponent_name: data.opponent_name || ''
+                  };
+                  setMatches((prev) => [...prev, fresh]);
+                  setCurrentMatchId(fresh.id);
+                  notifyDataUpdated();
+                }}
+              >
+                <Plus size={14} />
+                New match
+              </button>
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
@@ -3620,6 +3791,39 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
                       }}
                     />
                     <span className="text-xs font-semibold text-slate-500">sec</span>
+                    <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+                      {['7:00', '6:00', '5:00', '4:00'].map((preset) => (
+                        <button
+                          key={preset}
+                          className="rounded-full border border-slate-200 px-2 py-1"
+                          onClick={() => setForm((prev) => ({ ...prev, time: preset }))}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                      <button
+                        className="rounded-full border border-slate-200 px-2 py-1"
+                        onClick={() => {
+                          const total = Math.max(0, timeToSeconds(form.time) - 10);
+                          const minutes = Math.floor(total / 60);
+                          const seconds = total % 60;
+                          setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
+                        }}
+                      >
+                        -10s
+                      </button>
+                      <button
+                        className="rounded-full border border-slate-200 px-2 py-1"
+                        onClick={() => {
+                          const total = Math.min(7 * 60, timeToSeconds(form.time) + 10);
+                          const minutes = Math.floor(total / 60);
+                          const seconds = total % 60;
+                          setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
+                        }}
+                      >
+                        +10s
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3734,7 +3938,10 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
                 Fouls <span className="font-semibold text-slate-900">{stats.totals.foul}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Turnovers <span className="font-semibold text-slate-900">{stats.totals.turnover}</span>
+                Turnovers won <span className="font-semibold text-slate-900">{stats.totals.turnover_won}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                Turnovers lost <span className="font-semibold text-slate-900">{stats.totals.turnover_lost}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
                 Penalties <span className="font-semibold text-slate-900">{stats.totals.penalty}</span>
@@ -3764,7 +3971,8 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
                     <span>Goals: {data.goals}</span>
                     <span>Exclusions: {data.exclusions}</span>
                     <span>Fouls: {data.fouls}</span>
-                    <span>Turnovers: {data.turnovers}</span>
+                    <span>Won: {data.turnoversWon}</span>
+                    <span>Lost: {data.turnoversLost}</span>
                     <span>Penalties: {data.penalties}</span>
                   </div>
                 </div>

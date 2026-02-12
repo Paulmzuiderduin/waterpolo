@@ -4432,6 +4432,19 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
 
                 {activePasses.map((pass) => (
                   <div
+                    key={`${pass.id}-seq`}
+                    className="absolute flex h-4 w-4 items-center justify-center rounded-full bg-white/90 text-[9px] font-semibold text-slate-700"
+                    style={{
+                      left: `calc(${(pass.fromX + pass.toX) / 2}% - 8px)`,
+                      top: `calc(${(pass.fromY + pass.toY) / 2}% - 8px)`
+                    }}
+                  >
+                    {pass.sequence}
+                  </div>
+                ))}
+
+                {activePasses.map((pass) => (
+                  <div
                     key={`${pass.id}-from`}
                     className="absolute flex h-4 w-4 items-center justify-center rounded-full bg-white/80 text-[9px] font-semibold text-slate-700"
                     style={{

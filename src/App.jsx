@@ -45,12 +45,12 @@ const ATTACK_TYPES = ['6vs6', '6vs5', '6vs4', 'strafworp'];
 const PERIODS = ['1', '2', '3', '4', 'OT'];
 const PERIOD_ORDER = { '1': 1, '2': 2, '3': 3, '4': 4, OT: 5 };
 const SCORING_EVENTS = [
-  { key: 'goal', label: 'Goal', player: true },
-  { key: 'exclusion', label: 'Exclusion', player: true },
-  { key: 'foul', label: 'Foul', player: true },
-  { key: 'turnover', label: 'Turnover', player: true },
-  { key: 'penalty', label: 'Penalty', player: true },
-  { key: 'timeout', label: 'Timeout', player: false }
+  { key: 'goal', label: 'Goal', player: true, color: 'bg-emerald-600' },
+  { key: 'exclusion', label: 'Exclusion', player: true, color: 'bg-amber-500' },
+  { key: 'foul', label: 'Foul', player: true, color: 'bg-orange-500' },
+  { key: 'turnover', label: 'Turnover', player: true, color: 'bg-rose-500' },
+  { key: 'penalty', label: 'Penalty', player: true, color: 'bg-indigo-600' },
+  { key: 'timeout', label: 'Timeout', player: false, color: 'bg-slate-700' }
 ];
 
 const HEAT_TYPES = [
@@ -65,7 +65,8 @@ const DEFAULT_MATCH = () => ({
   info: {
     id: `match_${Date.now()}`,
     name: 'New match',
-    date: new Date().toISOString().slice(0, 10)
+    date: new Date().toISOString().slice(0, 10),
+    opponent: ''
   },
   shots: []
 });
@@ -87,7 +88,15 @@ const loadTeamData = async (teamId) => {
   }
   const matchMap = new Map();
   (matchRes.data || []).forEach((match) => {
-    matchMap.set(match.id, { info: { id: match.id, name: match.name, date: match.date }, shots: [] });
+    matchMap.set(match.id, {
+      info: {
+        id: match.id,
+        name: match.name,
+        date: match.date,
+        opponent: match.opponent_name || ''
+      },
+      shots: []
+    });
   });
   (shotRes.data || []).forEach((shot) => {
     const target = matchMap.get(shot.match_id);
@@ -1039,6 +1048,7 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
       .insert({
         name: draft.info.name,
         date: draft.info.date,
+        opponent_name: draft.info.opponent,
         season_id: seasonId,
         team_id: teamId,
         user_id: userId
@@ -1046,7 +1056,10 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
       .select('*')
       .single();
     if (insertError) return;
-    const fresh = { info: { id: data.id, name: data.name, date: data.date }, shots: [] };
+    const fresh = {
+      info: { id: data.id, name: data.name, date: data.date, opponent: data.opponent_name || '' },
+      shots: []
+    };
     const nextMatches = [...matches, fresh];
     setMatches(nextMatches);
     setCurrentMatchId(fresh.info.id);
@@ -1072,7 +1085,13 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
     if (updateError) return;
     const nextMatches = matches.map((match) =>
       match.info.id === currentMatch.info.id
-        ? { ...match, info: { ...match.info, [field]: value } }
+        ? {
+            ...match,
+            info: {
+              ...match.info,
+              ...(field === 'opponent_name' ? { opponent: value } : { [field]: value })
+            }
+          }
         : match
     );
     setMatches(nextMatches);
@@ -1232,8 +1251,8 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
 
           {!seasonMode && currentMatch && (
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex-1">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_160px]">
+                <div>
                   <label className="text-xs font-semibold text-slate-500">Match name</label>
                   <input
                     className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
@@ -1242,10 +1261,18 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
                   />
                 </div>
                 <div>
+                  <label className="text-xs font-semibold text-slate-500">Opponent</label>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    value={currentMatch.info.opponent || ''}
+                    onChange={(event) => updateMatchInfo('opponent_name', event.target.value)}
+                  />
+                </div>
+                <div>
                   <label className="text-xs font-semibold text-slate-500">Date</label>
                   <input
                     type="date"
-                    className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                     value={currentMatch.info.date}
                     onChange={(event) => updateMatchInfo('date', event.target.value)}
                   />
@@ -3277,7 +3304,6 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
   const [editingEventId, setEditingEventId] = useState(null);
   const [form, setForm] = useState({
     type: 'goal',
-    teamSide: 'for',
     playerCap: '',
     period: '1',
     time: formatShotTime()
@@ -3309,7 +3335,8 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
             teamSide: evt.team_side,
             playerCap: evt.player_cap || '',
             period: evt.period,
-            time: evt.time
+            time: evt.time,
+            createdAt: evt.created_at
           }))
         );
         setCurrentMatchId(payload.matches?.[0]?.id || '');
@@ -3344,23 +3371,16 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
 
   const stats = useMemo(() => {
     const totals = {
-      goal_for: 0,
-      goal_against: 0,
-      exclusion_for: 0,
-      exclusion_against: 0,
-      foul_for: 0,
-      foul_against: 0,
-      turnover_for: 0,
-      turnover_against: 0,
-      penalty_for: 0,
-      penalty_against: 0,
-      timeout_for: 0,
-      timeout_against: 0
+      goal: 0,
+      exclusion: 0,
+      foul: 0,
+      turnover: 0,
+      penalty: 0,
+      timeout: 0
     };
     const playerStats = {};
     filteredEvents.forEach((evt) => {
-      const key = `${evt.type}_${evt.teamSide}`;
-      if (key in totals) totals[key] += 1;
+      if (evt.type in totals) totals[evt.type] += 1;
       if (evt.playerCap) {
         if (!playerStats[evt.playerCap]) {
           playerStats[evt.playerCap] = {
@@ -3378,21 +3398,16 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
         if (evt.type === 'penalty') playerStats[evt.playerCap].penalties += 1;
       }
     });
-    const manUp = totals.exclusion_for ? ((totals.goal_for / totals.exclusion_for) * 100).toFixed(1) : '—';
-    const manDown = totals.exclusion_against
-      ? ((totals.goal_against / totals.exclusion_against) * 100).toFixed(1)
-      : '—';
-    return { totals, playerStats, manUp, manDown };
+    const manUp = totals.exclusion ? ((totals.goal / totals.exclusion) * 100).toFixed(1) : '—';
+    return { totals, playerStats, manUp };
   }, [filteredEvents]);
 
   const resetForm = () => {
     setForm((prev) => ({
       ...prev,
-      type: 'goal',
-      teamSide: 'for',
-      playerCap: roster[0]?.capNumber || '',
       period: lastEventMeta.period,
-      time: lastEventMeta.time
+      time: lastEventMeta.time,
+      playerCap: prev.playerCap || roster[0]?.capNumber || ''
     }));
     setEditingEventId(null);
   };
@@ -3417,7 +3432,7 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
       team_id: teamId,
       match_id: currentMatch.id,
       event_type: eventType,
-      team_side: form.teamSide,
+      team_side: 'for',
       player_cap: requiresPlayer ? form.playerCap : null,
       period: form.period,
       time: normalizeTime(form.time)
@@ -3451,10 +3466,11 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
       id: data.id,
       matchId: data.match_id,
       type: data.event_type,
-      teamSide: data.team_side,
+      teamSide: data.team_side || 'for',
       playerCap: data.player_cap || '',
       period: data.period,
-      time: data.time
+      time: data.time,
+      createdAt: data.created_at
     };
     setEvents((prev) => {
       if (editingEventId) {
@@ -3477,6 +3493,20 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
     }
     setEvents((prev) => prev.filter((evt) => evt.id !== eventId));
     notifyDataUpdated();
+  };
+
+  const undoLastEvent = async () => {
+    if (!currentMatchId) return;
+    const matchEvents = events.filter((evt) => evt.matchId === currentMatchId);
+    if (matchEvents.length === 0) return;
+    const last = [...matchEvents].sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    })[0];
+    if (!last) return;
+    if (!window.confirm('Undo last event?')) return;
+    await deleteEvent(last.id);
   };
 
   if (loading) {
@@ -3511,44 +3541,40 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
                 >
                   {matches.map((match) => (
                     <option key={match.id} value={match.id}>
-                      {match.name} · {match.date}
+                      {match.name}
+                      {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="ml-auto flex items-center gap-2 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-                <button
-                  className={`rounded-full px-3 py-1 ${form.teamSide === 'for' ? 'bg-white text-slate-900' : ''}`}
-                  onClick={() => setForm((prev) => ({ ...prev, teamSide: 'for' }))}
-                >
-                  For
-                </button>
-                <button
-                  className={`rounded-full px-3 py-1 ${
-                    form.teamSide === 'against' ? 'bg-white text-slate-900' : ''
-                  }`}
-                  onClick={() => setForm((prev) => ({ ...prev, teamSide: 'against' }))}
-                >
-                  Against
-                </button>
               </div>
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
               <div>
-                <label className="text-xs font-semibold text-slate-500">Player (optional)</label>
-                <select
-                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  value={form.playerCap}
-                  onChange={(event) => setForm((prev) => ({ ...prev, playerCap: event.target.value }))}
-                >
-                  <option value="">No player</option>
+                <label className="text-xs font-semibold text-slate-500">Players</label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      form.playerCap === '' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+                    }`}
+                    onClick={() => setForm((prev) => ({ ...prev, playerCap: '' }))}
+                  >
+                    Team
+                  </button>
                   {roster.map((player) => (
-                    <option key={player.id} value={player.capNumber}>
-                      #{player.capNumber} {player.name}
-                    </option>
+                    <button
+                      key={player.id}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        form.playerCap === player.capNumber
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                      onClick={() => setForm((prev) => ({ ...prev, playerCap: player.capNumber }))}
+                    >
+                      #{player.capNumber}
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -3603,13 +3629,8 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
               {SCORING_EVENTS.map((evt) => (
                 <button
                   key={evt.key}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                    form.type === evt.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-                  }`}
-                  onClick={() => {
-                    setForm((prev) => ({ ...prev, type: evt.key }));
-                    saveEvent(evt.key);
-                  }}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold text-white ${evt.color}`}
+                  onClick={() => saveEvent(evt.key)}
                 >
                   + {evt.label}
                 </button>
@@ -3626,20 +3647,33 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
           </div>
 
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Event log</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-slate-700">Event log</h3>
+              <button
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
+                onClick={undoLastEvent}
+                disabled={!currentMatchId}
+              >
+                Undo last
+              </button>
+            </div>
             <div className="mt-3 space-y-2 text-sm text-slate-600">
               {sortedEvents.length === 0 && <div>No events logged yet.</div>}
               {sortedEvents.map((evt) => {
-                const matchName = matches.find((match) => match.id === evt.matchId)?.name || 'Match';
+                const matchData = matches.find((match) => match.id === evt.matchId);
+                const matchName = matchData?.name || 'Match';
+                const matchOpponent = matchData?.opponent_name ? ` vs ${matchData.opponent_name}` : '';
                 const playerLabel = evt.playerCap ? `#${evt.playerCap}` : 'Team';
+                const typeLabel = SCORING_EVENTS.find((item) => item.key === evt.type)?.label || evt.type;
                 return (
                   <div key={evt.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 px-3 py-2">
                     <div>
                       <div className="font-semibold text-slate-700">
-                        {evt.type} · {evt.teamSide} · {playerLabel}
+                        {typeLabel} · {playerLabel}
                       </div>
                       <div className="text-xs text-slate-500">
-                        {matchName} · P{evt.period} · {evt.time}
+                        {matchName}
+                        {matchOpponent} · P{evt.period} · {evt.time}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs font-semibold">
@@ -3649,7 +3683,6 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
                           setEditingEventId(evt.id);
                           setForm({
                             type: evt.type,
-                            teamSide: evt.teamSide,
                             playerCap: evt.playerCap,
                             period: evt.period,
                             time: evt.time
@@ -3681,7 +3714,8 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
               <option value="">All matches</option>
               {matches.map((match) => (
                 <option key={match.id} value={match.id}>
-                  {match.name} · {match.date}
+                  {match.name}
+                  {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
                 </option>
               ))}
             </select>
@@ -3691,51 +3725,30 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
             <h3 className="text-sm font-semibold text-slate-700">Team stats</h3>
             <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-600">
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Goals (for) <span className="font-semibold text-slate-900">{stats.totals.goal_for}</span>
+                Goals <span className="font-semibold text-slate-900">{stats.totals.goal}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Goals (against) <span className="font-semibold text-slate-900">{stats.totals.goal_against}</span>
+                Exclusions <span className="font-semibold text-slate-900">{stats.totals.exclusion}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Exclusions (for) <span className="font-semibold text-slate-900">{stats.totals.exclusion_for}</span>
+                Fouls <span className="font-semibold text-slate-900">{stats.totals.foul}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Exclusions (against) <span className="font-semibold text-slate-900">{stats.totals.exclusion_against}</span>
+                Turnovers <span className="font-semibold text-slate-900">{stats.totals.turnover}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Fouls (for) <span className="font-semibold text-slate-900">{stats.totals.foul_for}</span>
+                Penalties <span className="font-semibold text-slate-900">{stats.totals.penalty}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Fouls (against) <span className="font-semibold text-slate-900">{stats.totals.foul_against}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Turnovers (for) <span className="font-semibold text-slate-900">{stats.totals.turnover_for}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Turnovers (against) <span className="font-semibold text-slate-900">{stats.totals.turnover_against}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Penalties (for) <span className="font-semibold text-slate-900">{stats.totals.penalty_for}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Penalties (against) <span className="font-semibold text-slate-900">{stats.totals.penalty_against}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Timeouts (for) <span className="font-semibold text-slate-900">{stats.totals.timeout_for}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Timeouts (against) <span className="font-semibold text-slate-900">{stats.totals.timeout_against}</span>
+                Timeouts <span className="font-semibold text-slate-900">{stats.totals.timeout}</span>
               </div>
             </div>
             <div className="mt-3 text-xs text-slate-500">
-              Man-up conversion ≈ goals for / exclusions for · Man-down conversion ≈ goals against / exclusions against.
+              Man-up conversion ≈ goals / exclusions.
             </div>
             <div className="mt-2 grid grid-cols-2 gap-3 text-sm text-slate-600">
               <div className="rounded-lg border border-slate-100 px-3 py-2">
                 Man-up % <span className="font-semibold text-emerald-700">{stats.manUp}%</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Man-down % <span className="font-semibold text-amber-700">{stats.manDown}%</span>
               </div>
             </div>
           </div>

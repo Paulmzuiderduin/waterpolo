@@ -47,9 +47,12 @@ create table if not exists matches (
   season_id uuid not null references seasons(id) on delete cascade,
   team_id uuid not null references teams(id) on delete cascade,
   name text not null,
+  opponent_name text,
   date date not null,
   created_at timestamptz not null default now()
 );
+
+alter table matches add column if not exists opponent_name text;
 
 create table if not exists shots (
   id uuid primary key default gen_random_uuid(),

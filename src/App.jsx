@@ -34,10 +34,10 @@ const ATTACK_TYPES = ['6vs6', '6vs5', '6vs4', 'strafworp'];
 const PERIODS = ['1', '2', '3', '4', 'OT'];
 
 const HEAT_TYPES = [
-  { key: 'count', label: 'Count', metric: 'count', color: 'redToGreen' },
-  { key: 'success', label: '% Goal', metric: 'success', color: 'redToGreen' },
-  { key: 'save', label: '% Saved', metric: 'save', color: 'greenToRed' },
-  { key: 'miss', label: '% Miss', metric: 'miss', color: 'greenToRed' },
+  { key: 'count', label: 'Count', metric: 'count', color: 'viridis' },
+  { key: 'success', label: '% Goal', metric: 'success', color: 'viridis' },
+  { key: 'save', label: '% Saved', metric: 'save', color: 'viridisReverse' },
+  { key: 'miss', label: '% Miss', metric: 'miss', color: 'viridisReverse' },
   { key: 'distance', label: '📏 Distance', metric: 'distance', color: 'none' }
 ];
 
@@ -147,20 +147,30 @@ const penaltyPosition = (index) => {
   };
 };
 
+const VIRIDIS = ['#440154', '#46327e', '#365c8d', '#277f8e', '#1fa187', '#4ac16d', '#a0da39', '#fde725'];
+
 const valueToColor = (value, max, scheme) => {
   if (value == null || max === 0) return 'rgba(255,255,255,0)';
   const ratio = Math.min(value / max, 1);
-  const clamp = (val) => Math.max(0, Math.min(255, Math.round(val)));
-  let r = 0;
-  let g = 0;
-  if (scheme === 'redToGreen') {
-    r = clamp(255 - ratio * 155);
-    g = clamp(80 + ratio * 175);
-  } else {
-    r = clamp(80 + ratio * 175);
-    g = clamp(255 - ratio * 155);
+  if (scheme === 'viridis' || scheme === 'viridisReverse') {
+    const palette = scheme === 'viridisReverse' ? [...VIRIDIS].reverse() : VIRIDIS;
+    const idx = ratio * (palette.length - 1);
+    const low = Math.floor(idx);
+    const high = Math.min(palette.length - 1, low + 1);
+    const t = idx - low;
+    const hexToRgb = (hex) => {
+      const res = hex.replace('#', '');
+      const num = parseInt(res, 16);
+      return [num >> 16, (num >> 8) & 255, num & 255];
+    };
+    const [r1, g1, b1] = hexToRgb(palette[low]);
+    const [r2, g2, b2] = hexToRgb(palette[high]);
+    const r = Math.round(r1 + (r2 - r1) * t);
+    const g = Math.round(g1 + (g2 - g1) * t);
+    const b = Math.round(b1 + (b2 - b1) * t);
+    return `rgba(${r}, ${g}, ${b}, 0.5)`;
   }
-  return `rgba(${r}, ${g}, 90, 0.45)`;
+  return 'rgba(255,255,255,0)';
 };
 
 const App = () => {
@@ -2105,8 +2115,7 @@ const HelpView = () => (
             </div>
           </div>
           <div className="mt-4 text-xs text-slate-500">
-            Heatmap colors are scaled per view. Red → green indicates low → high for Count and % Goal.
-            Green → red indicates low → high for % Saved, % Miss, and Distance.
+            Heatmap colors use a viridis scale (low → high). Saved and Miss use the reversed scale.
           </div>
         </div>
       </div>
@@ -2847,7 +2856,7 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                         {zone.label}
                       </div>
                       {zone.id === 14 && (
-                        <div className="absolute bottom-2 left-2 text-[10px] text-white/70">Penalties</div>
+                        <div className="absolute bottom-2 left-2 text-[10px] text-white/70">Penalty shots</div>
                       )}
                       {heatType === 'distance' && zone.id !== 14 && zoneValues[zone.id] != null && (
                         <div className="absolute bottom-2 right-2 rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold text-slate-700">
@@ -2920,15 +2929,15 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                 <div className="font-semibold text-slate-700">Legend</div>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full bg-red-500/60" />
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: VIRIDIS[0], opacity: 0.7 }} />
                     Low
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full bg-amber-400/60" />
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: VIRIDIS[3], opacity: 0.7 }} />
                     Mid
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full bg-green-500/60" />
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: VIRIDIS[7], opacity: 0.7 }} />
                     High
                   </div>
                 </div>
@@ -3077,7 +3086,7 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
           </div>
 
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Zone 14 stats</h3>
+            <h3 className="text-sm font-semibold text-slate-700">Penalty shot stats</h3>
             <div className="mt-3 text-sm text-slate-600">
               {zone14Stats?.total ? (
                 <div className="space-y-1">
@@ -3087,7 +3096,7 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                   <div>Miss: {zone14Stats.miss}</div>
                 </div>
               ) : (
-                <div>No penalties in selection.</div>
+                <div>No penalty shots in selection.</div>
               )}
             </div>
           </div>

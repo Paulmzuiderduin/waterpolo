@@ -3402,18 +3402,18 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
     return { totals, playerStats, manUp };
   }, [filteredEvents]);
 
-  const resetForm = () => {
+  const resetForm = (keepTime = true) => {
     setForm((prev) => ({
       ...prev,
-      period: lastEventMeta.period,
-      time: lastEventMeta.time,
+      period: keepTime ? prev.period : lastEventMeta.period,
+      time: keepTime ? prev.time : lastEventMeta.time,
       playerCap: prev.playerCap || roster[0]?.capNumber || ''
     }));
     setEditingEventId(null);
   };
 
   useEffect(() => {
-    resetForm();
+    resetForm(true);
   }, [roster]);
 
   const saveEvent = async (eventType = form.type) => {
@@ -3480,7 +3480,7 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
     });
     setLastEventMeta({ period: form.period, time: normalizeTime(form.time) });
     setError('');
-    resetForm();
+    setEditingEventId(null);
     notifyDataUpdated();
   };
 
@@ -3593,12 +3593,12 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-500">Time</label>
-                  <div className="mt-2 flex items-center gap-2">
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <input
                       type="number"
                       min="0"
                       max="7"
-                      className="w-20 rounded-lg border border-slate-200 px-3 py-2"
+                      className="w-16 rounded-lg border border-slate-200 px-3 py-2"
                       value={splitTimeParts(form.time).minutes}
                       onChange={(event) => {
                         const minutes = Math.min(7, Math.max(0, Number(event.target.value)));
@@ -3611,7 +3611,7 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
                       type="number"
                       min="0"
                       max="59"
-                      className="w-20 rounded-lg border border-slate-200 px-3 py-2"
+                      className="w-16 rounded-lg border border-slate-200 px-3 py-2"
                       value={splitTimeParts(form.time).seconds}
                       onChange={(event) => {
                         const minutes = splitTimeParts(form.time).minutes;

@@ -10,7 +10,8 @@ import {
   HelpCircle,
   Home,
   ClipboardList,
-  Share2
+  Share2,
+  CalendarDays
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -163,6 +164,84 @@ const loadTeamPossessions = async (teamId) => {
     possessions: possessionRes.data || [],
     passes: passRes.data || []
   };
+};
+
+const loadTeamMatchesOverview = async (teamId) => {
+  if (!teamId) return [];
+  const [matchRes, shotRes, eventRes, possessionRes, passRes] = await Promise.all([
+    supabase
+      .from('matches')
+      .select('*')
+      .eq('team_id', teamId)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false }),
+    supabase.from('shots').select('match_id,result').eq('team_id', teamId),
+    supabase.from('scoring_events').select('match_id,event_type').eq('team_id', teamId),
+    supabase.from('possessions').select('id,match_id').eq('team_id', teamId),
+    supabase.from('passes').select('id,match_id').eq('team_id', teamId)
+  ]);
+
+  if (matchRes.error || shotRes.error || eventRes.error || possessionRes.error || passRes.error) {
+    throw new Error('Failed to load matches overview');
+  }
+
+  const byMatch = new Map();
+  (matchRes.data || []).forEach((match) => {
+    byMatch.set(match.id, {
+      id: match.id,
+      name: match.name,
+      date: match.date,
+      opponentName: match.opponent_name || '',
+      shots: 0,
+      shotGoals: 0,
+      shotSaved: 0,
+      shotMissed: 0,
+      penalties: 0,
+      events: 0,
+      goals: 0,
+      exclusions: 0,
+      fouls: 0,
+      turnoversWon: 0,
+      turnoversLost: 0,
+      possessions: 0,
+      passes: 0
+    });
+  });
+
+  (shotRes.data || []).forEach((shot) => {
+    const item = byMatch.get(shot.match_id);
+    if (!item) return;
+    item.shots += 1;
+    if (shot.result === 'raak') item.shotGoals += 1;
+    if (shot.result === 'redding') item.shotSaved += 1;
+    if (shot.result === 'mis') item.shotMissed += 1;
+  });
+
+  (eventRes.data || []).forEach((evt) => {
+    const item = byMatch.get(evt.match_id);
+    if (!item) return;
+    item.events += 1;
+    if (evt.event_type === 'goal') item.goals += 1;
+    if (evt.event_type === 'exclusion') item.exclusions += 1;
+    if (evt.event_type === 'foul') item.fouls += 1;
+    if (evt.event_type === 'penalty') item.penalties += 1;
+    if (evt.event_type === 'turnover_won') item.turnoversWon += 1;
+    if (evt.event_type === 'turnover_lost') item.turnoversLost += 1;
+  });
+
+  (possessionRes.data || []).forEach((possession) => {
+    const item = byMatch.get(possession.match_id);
+    if (!item) return;
+    item.possessions += 1;
+  });
+
+  (passRes.data || []).forEach((pass) => {
+    const item = byMatch.get(pass.match_id);
+    if (!item) return;
+    item.passes += 1;
+  });
+
+  return Array.from(byMatch.values());
 };
 
 const detectZone = (x, y) => {
@@ -625,6 +704,7 @@ const App = () => {
 
   const navItems = [
     { key: 'hub', label: 'Dashboard', icon: <Home size={16} /> },
+    { key: 'matches', label: 'Matches', icon: <CalendarDays size={16} /> },
     { key: 'shotmap', label: 'Shotmap', icon: <Share2 size={16} /> },
     { key: 'analytics', label: 'Analytics', icon: <BarChart2 size={16} /> },
     { key: 'scoring', label: 'Scoring', icon: <ClipboardList size={16} /> },
@@ -722,6 +802,9 @@ const App = () => {
 
       <main className="mx-auto max-w-7xl space-y-6 p-6">
         {activeTab === 'hub' && <HubView />}
+        {activeTab === 'matches' && (
+          <MatchesView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
+        )}
         {activeTab === 'shotmap' && (
           <ShotmapView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
         )}
@@ -750,6 +833,18 @@ const App = () => {
         {activeTab === 'help' && <HelpView />}
         {activeTab === 'privacy' && <PrivacyView />}
       </main>
+
+      <footer className="mx-auto mb-14 max-w-7xl px-6 text-xs text-slate-500 lg:mb-6">
+        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
+          <span>© {new Date().getFullYear()} Waterpolo Hub</span>
+          <button
+            className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
+            onClick={() => setActiveTab('privacy')}
+          >
+            Privacy Policy
+          </button>
+        </div>
+      </footer>
 
       <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-slate-200 bg-white p-2 lg:hidden">
         {navItems.slice(0, 5).map((item) => (
@@ -2409,6 +2504,166 @@ const HubView = () => (
     </div>
   </div>
 );
+
+const MatchesView = ({ seasonId, teamId }) => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [matches, setMatches] = useState([]);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    if (!seasonId || !teamId) return;
+    let active = true;
+    const load = async () => {
+      try {
+        setLoading(true);
+        const rows = await loadTeamMatchesOverview(teamId);
+        if (!active) return;
+        setMatches(rows);
+        setError('');
+      } catch (e) {
+        if (!active) return;
+        setError('Could not load matches overview.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    load();
+    const handleUpdate = () => load();
+    window.addEventListener('waterpolo-data-updated', handleUpdate);
+    return () => {
+      active = false;
+      window.removeEventListener('waterpolo-data-updated', handleUpdate);
+    };
+  }, [seasonId, teamId]);
+
+  const filteredMatches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return matches;
+    return matches.filter((match) =>
+      [match.name, match.opponentName, match.date].filter(Boolean).join(' ').toLowerCase().includes(q)
+    );
+  }, [matches, query]);
+
+  const totals = useMemo(
+    () =>
+      filteredMatches.reduce(
+        (acc, match) => ({
+          matches: acc.matches + 1,
+          shots: acc.shots + match.shots,
+          goals: acc.goals + match.goals,
+          possessions: acc.possessions + match.possessions,
+          passes: acc.passes + match.passes
+        }),
+        { matches: 0, shots: 0, goals: 0, possessions: 0, passes: 0 }
+      ),
+    [filteredMatches]
+  );
+
+  if (loading) {
+    return <div className="p-10 text-slate-700">Loading...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-cyan-700">Matches</p>
+          <h2 className="text-2xl font-semibold">Season Team Matches</h2>
+          <p className="mt-1 text-sm text-slate-500">Overview of all matches for the current season and team.</p>
+        </div>
+        <input
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:w-72"
+          placeholder="Search by match, opponent or date"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="rounded-xl bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold text-slate-500">Matches</div>
+          <div className="mt-1 text-2xl font-semibold text-slate-900">{totals.matches}</div>
+        </div>
+        <div className="rounded-xl bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold text-slate-500">Shots</div>
+          <div className="mt-1 text-2xl font-semibold text-slate-900">{totals.shots}</div>
+        </div>
+        <div className="rounded-xl bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold text-slate-500">Goals (Scoring)</div>
+          <div className="mt-1 text-2xl font-semibold text-slate-900">{totals.goals}</div>
+        </div>
+        <div className="rounded-xl bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold text-slate-500">Possessions</div>
+          <div className="mt-1 text-2xl font-semibold text-slate-900">{totals.possessions}</div>
+        </div>
+        <div className="rounded-xl bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold text-slate-500">Passes</div>
+          <div className="mt-1 text-2xl font-semibold text-slate-900">{totals.passes}</div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Match</th>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Shots</th>
+                <th className="px-4 py-3">Scoring Events</th>
+                <th className="px-4 py-3">Possession</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredMatches.length === 0 && (
+                <tr>
+                  <td className="px-4 py-6 text-slate-500" colSpan={5}>
+                    No matches found.
+                  </td>
+                </tr>
+              )}
+              {filteredMatches.map((match) => (
+                <tr key={match.id} className="border-t border-slate-100 text-slate-700">
+                  <td className="px-4 py-3">
+                    <div className="font-semibold text-slate-900">{match.name || 'Match'}</div>
+                    <div className="text-xs text-slate-500">
+                      {match.opponentName ? `vs ${match.opponentName}` : 'No opponent set'}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{match.date || '—'}</td>
+                  <td className="px-4 py-3 text-xs text-slate-600">
+                    <div>Total: {match.shots}</div>
+                    <div>Goal: {match.shotGoals}</div>
+                    <div>Saved: {match.shotSaved}</div>
+                    <div>Miss: {match.shotMissed}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-600">
+                    <div>Total: {match.events}</div>
+                    <div>Goals: {match.goals}</div>
+                    <div>Exclusions: {match.exclusions}</div>
+                    <div>Fouls: {match.fouls}</div>
+                    <div>
+                      Turnovers: {match.turnoversWon}/{match.turnoversLost} (won/lost)
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-600">
+                    <div>Possessions: {match.possessions}</div>
+                    <div>Passes: {match.passes}</div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const PrivacyView = () => (
   <div className="space-y-6">

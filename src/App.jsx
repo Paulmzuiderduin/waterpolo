@@ -456,6 +456,27 @@ const App = () => {
 
   const selectedSeason = seasons.find((season) => season.id === selectedSeasonId);
   const selectedTeam = selectedSeason?.teams?.find((team) => team.id === selectedTeamId);
+  const navItems = moduleConfig.filter((item) => item.alwaysVisible || moduleVisibility[item.key] !== false);
+
+  useEffect(() => {
+    const visibleKeys = new Set([...navItems.map((item) => item.key), 'privacy']);
+    if (!visibleKeys.has(activeTab)) setActiveTab('hub');
+  }, [activeTab, navItems]);
+
+  useEffect(() => {
+    if (!session?.user || !preferences.rememberLastTab || didApplyStartTab.current) return;
+    if (!selectedSeason || !selectedTeam) return;
+    const last = localStorage.getItem(`waterpolo_last_tab_${session.user.id}`);
+    if (last && navItems.some((item) => item.key === last)) {
+      setActiveTab(last);
+    }
+    didApplyStartTab.current = true;
+  }, [session, preferences.rememberLastTab, selectedSeason, selectedTeam, navItems]);
+
+  useEffect(() => {
+    if (!session?.user || !preferences.rememberLastTab) return;
+    localStorage.setItem(`waterpolo_last_tab_${session.user.id}`, activeTab);
+  }, [activeTab, preferences.rememberLastTab, session]);
 
   const handleMagicLink = async () => {
     if (!authEmail) return;
@@ -761,28 +782,6 @@ const App = () => {
       </div>
     );
   }
-
-  const navItems = moduleConfig.filter((item) => item.alwaysVisible || moduleVisibility[item.key] !== false);
-
-  useEffect(() => {
-    const visibleKeys = new Set(navItems.map((item) => item.key));
-    if (!visibleKeys.has(activeTab)) setActiveTab('hub');
-  }, [activeTab, navItems]);
-
-  useEffect(() => {
-    if (!session?.user || !preferences.rememberLastTab || didApplyStartTab.current) return;
-    if (!selectedSeason || !selectedTeam) return;
-    const last = localStorage.getItem(`waterpolo_last_tab_${session.user.id}`);
-    if (last && navItems.some((item) => item.key === last)) {
-      setActiveTab(last);
-    }
-    didApplyStartTab.current = true;
-  }, [session, preferences.rememberLastTab, selectedSeason, selectedTeam, navItems]);
-
-  useEffect(() => {
-    if (!session?.user || !preferences.rememberLastTab) return;
-    localStorage.setItem(`waterpolo_last_tab_${session.user.id}`, activeTab);
-  }, [activeTab, preferences.rememberLastTab, session]);
 
   return (
     <div className="min-h-screen pb-20 lg:pl-64">

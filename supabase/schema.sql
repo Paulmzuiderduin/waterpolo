@@ -134,26 +134,34 @@ alter table scoring_events enable row level security;
 alter table possessions enable row level security;
 alter table passes enable row level security;
 
+drop policy if exists "Seasons are user-owned" on seasons;
 create policy "Seasons are user-owned" on seasons
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "Teams are user-owned" on teams;
 create policy "Teams are user-owned" on teams
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "Roster is user-owned" on roster;
 create policy "Roster is user-owned" on roster
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "Matches are user-owned" on matches;
 create policy "Matches are user-owned" on matches
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "Shots are user-owned" on shots;
 create policy "Shots are user-owned" on shots
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "Scoring events are user-owned" on scoring_events;
 create policy "Scoring events are user-owned" on scoring_events
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "Possessions are user-owned" on possessions;
 create policy "Possessions are user-owned" on possessions
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "Passes are user-owned" on passes;
 create policy "Passes are user-owned" on passes
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

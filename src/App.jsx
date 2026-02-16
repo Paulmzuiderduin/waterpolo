@@ -12,7 +12,8 @@ import {
   ClipboardList,
   Share2,
   CalendarDays,
-  Settings2
+  Settings2,
+  Ellipsis
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -347,6 +348,7 @@ const App = () => {
     rememberLastTab: true,
     showHubTips: true
   });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const didApplyStartTab = useRef(false);
 
   useEffect(() => {
@@ -457,6 +459,9 @@ const App = () => {
   const selectedSeason = seasons.find((season) => season.id === selectedSeasonId);
   const selectedTeam = selectedSeason?.teams?.find((team) => team.id === selectedTeamId);
   const navItems = moduleConfig.filter((item) => item.alwaysVisible || moduleVisibility[item.key] !== false);
+  const mobilePrimaryKeys = ['hub', 'matches', 'shotmap', 'analytics'];
+  const mobilePrimaryItems = navItems.filter((item) => mobilePrimaryKeys.includes(item.key));
+  const mobileOverflowItems = navItems.filter((item) => !mobilePrimaryKeys.includes(item.key));
 
   useEffect(() => {
     const visibleKeys = new Set([...navItems.map((item) => item.key), 'privacy']);
@@ -942,19 +947,70 @@ const App = () => {
       </footer>
 
       <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-slate-200 bg-white p-2 lg:hidden">
-        {navItems.slice(0, 5).map((item) => (
+        {mobilePrimaryItems.map((item) => (
           <button
             key={item.key}
             className={`flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold ${
               activeTab === item.key ? 'text-cyan-700' : 'text-slate-500'
             }`}
-            onClick={() => setActiveTab(item.key)}
+            onClick={() => {
+              setActiveTab(item.key);
+              setMobileMenuOpen(false);
+            }}
           >
             {item.icon}
             {item.label}
           </button>
         ))}
+        <button
+          className={`flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold ${
+            mobileOverflowItems.some((item) => item.key === activeTab) || activeTab === 'privacy'
+              ? 'text-cyan-700'
+              : 'text-slate-500'
+          }`}
+          onClick={() => setMobileMenuOpen((prev) => !prev)}
+        >
+          <Ellipsis size={16} />
+          More
+        </button>
       </div>
+
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-[60] lg:hidden">
+          <button className="absolute inset-0 bg-slate-900/30" onClick={() => setMobileMenuOpen(false)} />
+          <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-white p-4 shadow-2xl">
+            <div className="mb-3 h-1.5 w-12 rounded-full bg-slate-200 mx-auto" />
+            <div className="grid grid-cols-2 gap-2">
+              {mobileOverflowItems.map((item) => (
+                <button
+                  key={item.key}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
+                    activeTab === item.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
+                  }`}
+                  onClick={() => {
+                    setActiveTab(item.key);
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              ))}
+              <button
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
+                  activeTab === 'privacy' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
+                }`}
+                onClick={() => {
+                  setActiveTab('privacy');
+                  setMobileMenuOpen(false);
+                }}
+              >
+                Privacy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

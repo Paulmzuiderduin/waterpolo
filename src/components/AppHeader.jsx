@@ -15,7 +15,7 @@ const AppHeader = ({
     <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
       <div>
         <p className="wp-primary-text text-xs font-semibold uppercase tracking-wide">Water Polo Platform</p>
-        <h1 className="text-2xl font-bold text-slate-900 lg:text-3xl">Good evening, Paul</h1>
+        <h1 className="text-2xl font-bold text-slate-900 lg:text-3xl">Good evening</h1>
         <p className="text-xs text-slate-500">
           {selectedSeasonName} · {selectedTeamName} · {userEmail}
         </p>

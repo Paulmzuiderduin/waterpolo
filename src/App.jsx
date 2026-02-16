@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Download,
   Plus,
@@ -12,8 +12,6 @@ import {
   CalendarDays,
   Settings2
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
 import { supabase } from './lib/supabase';
 import AppHeader from './components/AppHeader';
 import MobileNav from './components/MobileNav';
@@ -251,7 +249,30 @@ const App = () => {
     showHubTips: true
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  const [promptDialog, setPromptDialog] = useState(null);
+  const [toasts, setToasts] = useState([]);
   const didApplyStartTab = useRef(false);
+
+  const toast = useCallback((message, type = 'info') => {
+    const id = `${Date.now()}_${Math.random()}`;
+    setToasts((prev) => [...prev, { id, message, type }]);
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((item) => item.id !== id));
+    }, 2800);
+  }, []);
+
+  const confirmAction = useCallback((message) => {
+    return new Promise((resolve) => {
+      setConfirmDialog({ message, resolve });
+    });
+  }, []);
+
+  const promptAction = useCallback((message, initialValue = '') => {
+    return new Promise((resolve) => {
+      setPromptDialog({ message, value: initialValue, resolve });
+    });
+  }, []);
 
   const moduleConfig = useMemo(
     () => [
@@ -355,12 +376,16 @@ const App = () => {
       .insert({ name: seasonForm.trim(), user_id: session.user.id })
       .select('*')
       .single();
-    if (error) return;
+    if (error) {
+      toast('Failed to create season.', 'error');
+      return;
+    }
     const nextSeasons = [...seasons, { id: data.id, name: data.name, teams: [] }];
     setSeasons(nextSeasons);
     setSeasonForm('');
     setSelectedSeasonId(data.id);
     setSelectedTeamId('');
+    toast('Season created.', 'success');
   };
 
   const createTeam = async () => {
@@ -370,7 +395,10 @@ const App = () => {
       .insert({ name: teamForm.trim(), season_id: selectedSeason.id, user_id: session.user.id })
       .select('*')
       .single();
-    if (error) return;
+    if (error) {
+      toast('Failed to create team.', 'error');
+      return;
+    }
     const nextSeasons = seasons.map((season) =>
       season.id === selectedSeason.id
         ? { ...season, teams: [...(season.teams || []), data] }
@@ -379,36 +407,48 @@ const App = () => {
     setSeasons(nextSeasons);
     setTeamForm('');
     setSelectedTeamId(data.id);
+    toast('Team created.', 'success');
   };
 
   const renameSeason = async (seasonId, name) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     const { error } = await supabase.from('seasons').update({ name: trimmed }).eq('id', seasonId);
-    if (error) return;
+    if (error) {
+      toast('Failed to rename season.', 'error');
+      return;
+    }
     const nextSeasons = seasons.map((season) =>
       season.id === seasonId ? { ...season, name: trimmed } : season
     );
     setSeasons(nextSeasons);
+    toast('Season renamed.', 'success');
   };
 
   const deleteSeason = async (seasonId) => {
-    if (!window.confirm('Delete season? All teams and data will be removed.')) return;
+    if (!(await confirmAction('Delete season? All teams and data will be removed.'))) return;
     const { error } = await supabase.from('seasons').delete().eq('id', seasonId);
-    if (error) return;
+    if (error) {
+      toast('Failed to delete season.', 'error');
+      return;
+    }
     const nextSeasons = seasons.filter((season) => season.id !== seasonId);
     setSeasons(nextSeasons);
     if (selectedSeasonId === seasonId) {
       setSelectedSeasonId('');
       setSelectedTeamId('');
     }
+    toast('Season deleted.', 'success');
   };
 
   const renameTeam = async (seasonId, teamId, name) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     const { error } = await supabase.from('teams').update({ name: trimmed }).eq('id', teamId);
-    if (error) return;
+    if (error) {
+      toast('Failed to rename team.', 'error');
+      return;
+    }
     const nextSeasons = seasons.map((season) => {
       if (season.id !== seasonId) return season;
       const teams = (season.teams || []).map((team) =>
@@ -417,12 +457,16 @@ const App = () => {
       return { ...season, teams };
     });
     setSeasons(nextSeasons);
+    toast('Team renamed.', 'success');
   };
 
   const deleteTeam = async (seasonId, teamId) => {
-    if (!window.confirm('Delete team? All data for this team will be removed.')) return;
+    if (!(await confirmAction('Delete team? All data for this team will be removed.'))) return;
     const { error } = await supabase.from('teams').delete().eq('id', teamId);
-    if (error) return;
+    if (error) {
+      toast('Failed to delete team.', 'error');
+      return;
+    }
     const nextSeasons = seasons.map((season) => {
       if (season.id !== seasonId) return season;
       return { ...season, teams: (season.teams || []).filter((team) => team.id !== teamId) };
@@ -431,7 +475,103 @@ const App = () => {
     if (selectedTeamId === teamId) {
       setSelectedTeamId('');
     }
+    toast('Team deleted.', 'success');
   };
+
+  const renderUiOverlays = () => (
+    <>
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/35 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <h3 className="text-sm font-semibold text-slate-800">Please confirm</h3>
+            <p className="mt-2 text-sm text-slate-600">{confirmDialog.message}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
+                onClick={() => {
+                  const dialog = confirmDialog;
+                  setConfirmDialog(null);
+                  dialog.resolve(false);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="wp-primary-bg rounded-lg px-3 py-2 text-sm font-semibold text-white"
+                onClick={() => {
+                  const dialog = confirmDialog;
+                  setConfirmDialog(null);
+                  dialog.resolve(true);
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {promptDialog && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/35 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <h3 className="text-sm font-semibold text-slate-800">{promptDialog.message}</h3>
+            <input
+              autoFocus
+              className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={promptDialog.value}
+              onChange={(event) =>
+                setPromptDialog((prev) => (prev ? { ...prev, value: event.target.value } : prev))
+              }
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  const dialog = promptDialog;
+                  setPromptDialog(null);
+                  dialog.resolve(dialog.value);
+                }
+              }}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
+                onClick={() => {
+                  const dialog = promptDialog;
+                  setPromptDialog(null);
+                  dialog.resolve(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="wp-primary-bg rounded-lg px-3 py-2 text-sm font-semibold text-white"
+                onClick={() => {
+                  const dialog = promptDialog;
+                  setPromptDialog(null);
+                  dialog.resolve(dialog.value);
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="fixed right-4 top-4 z-[130] flex w-[min(360px,95vw)] flex-col gap-2">
+        {toasts.map((item) => (
+          <div
+            key={item.id}
+            className={`rounded-lg px-3 py-2 text-sm font-medium shadow-lg ${
+              item.type === 'error'
+                ? 'border border-red-200 bg-red-50 text-red-700'
+                : 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            {item.message}
+          </div>
+        ))}
+      </div>
+    </>
+  );
 
   if (authLoading) {
     return <div className="p-10 text-slate-700">Loading...</div>;
@@ -470,6 +610,7 @@ const App = () => {
             <div className="mt-2 text-xs text-slate-400">If you don’t see it, check spam.</div>
           </div>
         </div>
+        {renderUiOverlays()}
       </div>
     );
   }
@@ -520,8 +661,8 @@ const App = () => {
                     </span>
                     <button
                       className="text-xs font-semibold text-slate-500"
-                      onClick={() => {
-                        const next = window.prompt('New season name', season.name);
+                      onClick={async () => {
+                        const next = await promptAction('New season name', season.name);
                         if (next != null) renameSeason(season.id, next);
                       }}
                     >
@@ -574,8 +715,8 @@ const App = () => {
                         </button>
                         <button
                           className="text-xs font-semibold text-slate-500"
-                          onClick={() => {
-                            const next = window.prompt('New team name', team.name);
+                          onClick={async () => {
+                            const next = await promptAction('New team name', team.name);
                             if (next != null) renameTeam(selectedSeason.id, team.id, next);
                           }}
                         >
@@ -617,7 +758,7 @@ const App = () => {
                   <li>Create a season on the left.</li>
                   <li>Select the season and create a team.</li>
                   <li>Open Roster to add players.</li>
-                  <li>Create a match in Shotmap to start tracking shots.</li>
+                  <li>Create a match in Matches, then open Shotmap to start tracking shots.</li>
                 </ol>
               </div>
             </div>
@@ -634,6 +775,7 @@ const App = () => {
             </button>
           </div>
         </footer>
+        {renderUiOverlays()}
       </div>
     );
   }
@@ -671,19 +813,43 @@ const App = () => {
       <main className="mx-auto max-w-7xl space-y-6 p-6">
         {activeTab === 'hub' && <HubView showTips={preferences.showHubTips} />}
         {activeTab === 'matches' && (
-          <MatchesView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
+          <MatchesView
+            seasonId={selectedSeasonId}
+            teamId={selectedTeamId}
+            userId={session.user.id}
+            confirmAction={confirmAction}
+            toast={toast}
+          />
         )}
         {activeTab === 'shotmap' && (
-          <ShotmapView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
+          <ShotmapView
+            seasonId={selectedSeasonId}
+            teamId={selectedTeamId}
+            userId={session.user.id}
+            confirmAction={confirmAction}
+            toast={toast}
+          />
         )}
         {activeTab === 'analytics' && (
           <AnalyticsView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
         )}
         {activeTab === 'scoring' && (
-          <ScoringView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
+          <ScoringView
+            seasonId={selectedSeasonId}
+            teamId={selectedTeamId}
+            userId={session.user.id}
+            confirmAction={confirmAction}
+            toast={toast}
+          />
         )}
         {activeTab === 'possession' && (
-          <PossessionView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
+          <PossessionView
+            seasonId={selectedSeasonId}
+            teamId={selectedTeamId}
+            userId={session.user.id}
+            confirmAction={confirmAction}
+            toast={toast}
+          />
         )}
         {activeTab === 'players' && (
           <PlayersView
@@ -696,7 +862,13 @@ const App = () => {
           />
         )}
         {activeTab === 'roster' && (
-          <RosterView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
+          <RosterView
+            seasonId={selectedSeasonId}
+            teamId={selectedTeamId}
+            userId={session.user.id}
+            confirmAction={confirmAction}
+            toast={toast}
+          />
         )}
         {activeTab === 'help' && <HelpView />}
         {activeTab === 'settings' && (
@@ -756,11 +928,12 @@ const App = () => {
           setMobileMenuOpen(false);
         }}
       />
+      {renderUiOverlays()}
     </div>
   );
 };
 
-const ShotmapView = ({ seasonId, teamId, userId }) => {
+const ShotmapView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [roster, setRoster] = useState([]);
@@ -969,9 +1142,12 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
   };
 
   const deleteShot = async (shotId) => {
-    if (!window.confirm('Delete this shot?')) return;
+    if (!(await confirmAction('Delete this shot?'))) return;
     const { error: deleteError } = await supabase.from('shots').delete().eq('id', shotId);
-    if (deleteError) return;
+    if (deleteError) {
+      toast('Failed to delete shot.', 'error');
+      return;
+    }
     const nextMatches = matches.map((match) =>
       match.info.id === currentMatch.info.id
         ? { ...match, shots: match.shots.filter((shot) => shot.id !== shotId) }
@@ -979,6 +1155,7 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
     );
     setMatches(nextMatches);
     notifyDataUpdated();
+    toast('Shot deleted.', 'success');
   };
 
   const filteredShots = useMemo(() => {
@@ -1013,6 +1190,7 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
   const downloadPNG = async () => {
     if (!fieldRef.current) return;
     try {
+      const { default: html2canvas } = await import('html2canvas');
       const canvas = await html2canvas(fieldRef.current, {
         backgroundColor: '#0b4a7a',
         scale: 2
@@ -1782,6 +1960,7 @@ const PlayersView = ({ seasonId, teamId, userId, seasons = [], onSelectSeason, o
 
   const exportPDF = async () => {
     if (!reportRef.current) return;
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
     const canvas = await html2canvas(reportRef.current, {
       backgroundColor: '#ffffff',
       scale: 2,
@@ -2163,7 +2342,7 @@ const HelpView = () => (
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-600">
             <li>Create a season and team on the Seasons & Teams screen.</li>
             <li>Add players in the Roster tab (photo optional).</li>
-            <li>Create a match in Shotmap and start adding shots.</li>
+            <li>Create a match in Matches and start adding shots in Shotmap.</li>
             <li>Use Analytics for heatmaps and filters.</li>
             <li>Open Players for report cards and comparisons.</li>
           </ol>
@@ -2246,7 +2425,7 @@ const HubView = ({ showTips }) => (
         <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-slate-600">
           <li>Create or select a season and team.</li>
           <li>Open `Roster` and add players first.</li>
-          <li>Open `Shotmap`, `Scoring`, or `Possession` to create a match and track events.</li>
+          <li>Create a match in `Matches`, then track events in `Shotmap`, `Scoring`, or `Possession`.</li>
           <li>Use `Analytics` and `Players` to review performance and export reports.</li>
         </ol>
       </div>
@@ -2340,7 +2519,7 @@ const SettingsView = ({
   </div>
 );
 
-const MatchesView = ({ seasonId, teamId, userId }) => {
+const MatchesView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [matches, setMatches] = useState([]);
@@ -2508,7 +2687,7 @@ const MatchesView = ({ seasonId, teamId, userId }) => {
   };
 
   const deleteMatch = async (matchId) => {
-    if (!window.confirm('Delete this match and all linked data?')) return;
+    if (!(await confirmAction('Delete this match and all linked data?'))) return;
     try {
       setSaving(true);
       const { error: deleteError } = await supabase.from('matches').delete().eq('id', matchId);
@@ -2516,9 +2695,11 @@ const MatchesView = ({ seasonId, teamId, userId }) => {
       setMatches((prev) => prev.filter((match) => match.id !== matchId));
       if (editingId === matchId) setEditingId('');
       setError('');
+      toast('Match deleted.', 'success');
       notifyDataUpdated();
     } catch {
       setError('Failed to delete match.');
+      toast('Failed to delete match.', 'error');
     } finally {
       setSaving(false);
     }
@@ -2825,7 +3006,7 @@ const PrivacyView = () => (
   </div>
 );
 
-const RosterView = ({ seasonId, teamId, userId }) => {
+const RosterView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
   const [roster, setRoster] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -2926,11 +3107,15 @@ const RosterView = ({ seasonId, teamId, userId }) => {
   };
 
   const deletePlayer = async (playerId) => {
-    if (!window.confirm('Delete this player?')) return;
+    if (!(await confirmAction('Delete this player?'))) return;
     const { error: deleteError } = await supabase.from('roster').delete().eq('id', playerId);
-    if (deleteError) return;
+    if (deleteError) {
+      toast('Failed to delete player.', 'error');
+      return;
+    }
     setRoster(roster.filter((player) => player.id !== playerId));
     notifyDataUpdated();
+    toast('Player deleted.', 'success');
   };
 
   const uploadPhoto = async (playerId, file) => {
@@ -3239,6 +3424,7 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
   const downloadPNG = async () => {
     if (!fieldRef.current) return;
     try {
+      const { default: html2canvas } = await import('html2canvas');
       const canvas = await html2canvas(fieldRef.current, {
         backgroundColor: '#0b4a7a',
         scale: 2
@@ -3728,7 +3914,7 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
   );
 };
 
-const ScoringView = ({ seasonId, teamId, userId }) => {
+const ScoringView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
   const [roster, setRoster] = useState([]);
   const [matches, setMatches] = useState([]);
   const [events, setEvents] = useState([]);
@@ -3926,14 +4112,16 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
   };
 
   const deleteEvent = async (eventId) => {
-    if (!window.confirm('Delete event?')) return;
+    if (!(await confirmAction('Delete event?'))) return;
     const { error: deleteError } = await supabase.from('scoring_events').delete().eq('id', eventId);
     if (deleteError) {
       setError('Failed to delete event.');
+      toast('Failed to delete event.', 'error');
       return;
     }
     setEvents((prev) => prev.filter((evt) => evt.id !== eventId));
     notifyDataUpdated();
+    toast('Event deleted.', 'success');
   };
 
   const undoLastEvent = async () => {
@@ -3946,7 +4134,7 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
       return timeB - timeA;
     })[0];
     if (!last) return;
-    if (!window.confirm('Undo last event?')) return;
+    if (!(await confirmAction('Undo last event?'))) return;
     await deleteEvent(last.id);
   };
 
@@ -4263,7 +4451,7 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
   );
 };
 
-const PossessionView = ({ seasonId, teamId, userId }) => {
+const PossessionView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
   const [roster, setRoster] = useState([]);
   const [matches, setMatches] = useState([]);
   const [possessions, setPossessions] = useState([]);
@@ -4415,10 +4603,11 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
   };
 
   const deletePossession = async (possessionId) => {
-    if (!window.confirm('Delete this possession and its passes?')) return;
+    if (!(await confirmAction('Delete this possession and its passes?'))) return;
     const { error: deleteError } = await supabase.from('possessions').delete().eq('id', possessionId);
     if (deleteError) {
       setError('Failed to delete possession.');
+      toast('Failed to delete possession.', 'error');
       return;
     }
     setPossessions((prev) => prev.filter((pos) => pos.id !== possessionId));
@@ -4427,6 +4616,8 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
       setActivePossessionId('');
       setPassDraft({ fromPlayer: '', toPlayer: '', fromPos: null, toPos: null });
     }
+    notifyDataUpdated();
+    toast('Possession deleted.', 'success');
   };
 
   const addPass = async (override = null) => {

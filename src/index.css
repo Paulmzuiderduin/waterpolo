@@ -62,13 +62,11 @@ select {
   -moz-appearance: none;
   background-image:
     linear-gradient(45deg, transparent 50%, rgba(34, 56, 67, 0.6) 50%),
-    linear-gradient(135deg, rgba(34, 56, 67, 0.6) 50%, transparent 50%),
-    linear-gradient(to right, rgba(16, 22, 34, 0.14), rgba(16, 22, 34, 0.14));
+    linear-gradient(135deg, rgba(34, 56, 67, 0.6) 50%, transparent 50%);
   background-position:
     calc(100% - 18px) calc(1em + 2px),
-    calc(100% - 13px) calc(1em + 2px),
-    calc(100% - 2.4rem) 0.65rem;
-  background-size: 6px 6px, 6px 6px, 1px 1.6rem;
+    calc(100% - 13px) calc(1em + 2px);
+  background-size: 6px 6px, 6px 6px;
   background-repeat: no-repeat;
   padding-right: 2.6rem;
   border-radius: 14px;

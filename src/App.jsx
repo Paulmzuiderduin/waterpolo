@@ -623,19 +623,71 @@ const App = () => {
     );
   }
 
+  const navItems = [
+    { key: 'hub', label: 'Dashboard', icon: <Home size={16} /> },
+    { key: 'shotmap', label: 'Shotmap', icon: <Share2 size={16} /> },
+    { key: 'analytics', label: 'Analytics', icon: <BarChart2 size={16} /> },
+    { key: 'scoring', label: 'Scoring', icon: <ClipboardList size={16} /> },
+    { key: 'possession', label: 'Possession', icon: <Share2 size={16} /> },
+    { key: 'players', label: 'Players', icon: <IdCard size={16} /> },
+    { key: 'roster', label: 'Roster', icon: <Users size={16} /> },
+    { key: 'help', label: 'Help', icon: <HelpCircle size={16} /> }
+  ];
+
   return (
-    <div className="min-h-screen px-6 py-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-white p-4 shadow-sm">
+    <div className="min-h-screen pb-20 lg:pl-64">
+      <aside className="fixed left-0 top-0 hidden h-full w-64 flex-col border-r border-slate-200 bg-white p-6 shadow-sm lg:flex">
+        <div className="mb-10">
+          <p className="text-xl font-black uppercase italic tracking-tight text-slate-900">
+            Waterpolo <span className="text-cyan-700">Hub</span>
+          </p>
+          <p className="text-xs text-slate-500">{selectedSeason.name}</p>
+        </div>
+        <nav className="flex flex-col gap-2">
+          {navItems.map((item) => (
+            <button
+              key={item.key}
+              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                activeTab === item.key
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              onClick={() => setActiveTab(item.key)}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div className="mt-auto space-y-2">
+          <button
+            className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold"
+            onClick={() => {
+              setSelectedSeasonId('');
+              setSelectedTeamId('');
+            }}
+          >
+            Switch team
+          </button>
+          <button
+            className="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            onClick={() => supabase.auth.signOut()}
+          >
+            Sign out
+          </button>
+        </div>
+      </aside>
+
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/85 px-6 py-4 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-cyan-700">Water Polo Platform</p>
-            <h1 className="text-3xl font-semibold">Shotmap & Analytics</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Water Polo Platform</p>
+            <h1 className="text-2xl font-bold text-slate-900 lg:text-3xl">Good evening, Paul</h1>
             <p className="text-xs text-slate-500">
-              {selectedSeason.name} · {selectedTeam.name}
+              {selectedSeason.name} · {selectedTeam.name} · {session.user.email}
             </p>
-            <p className="text-xs text-slate-400">{session.user.email}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             <select
               className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm"
               value={selectedSeasonId}
@@ -664,95 +716,11 @@ const App = () => {
                 </option>
               ))}
             </select>
-            <button
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
-                activeTab === 'hub' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-              }`}
-              onClick={() => setActiveTab('hub')}
-            >
-              <Home size={16} />
-              Hub
-            </button>
-            <button
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
-                activeTab === 'shotmap' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-              }`}
-              onClick={() => setActiveTab('shotmap')}
-            >
-              Shotmap
-            </button>
-            <button
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
-                activeTab === 'analytics' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-              }`}
-              onClick={() => setActiveTab('analytics')}
-            >
-              <BarChart2 size={16} />
-              Analytics
-            </button>
-            <button
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
-                activeTab === 'scoring' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-              }`}
-              onClick={() => setActiveTab('scoring')}
-            >
-              <ClipboardList size={16} />
-              Scoring
-            </button>
-            <button
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
-                activeTab === 'possession' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-              }`}
-              onClick={() => setActiveTab('possession')}
-            >
-              <Share2 size={16} />
-              Possession
-            </button>
-            <button
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
-                activeTab === 'players' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-              }`}
-              onClick={() => setActiveTab('players')}
-            >
-              <IdCard size={16} />
-              Players
-            </button>
-            <button
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
-                activeTab === 'roster' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-              }`}
-              onClick={() => setActiveTab('roster')}
-            >
-              <Users size={16} />
-              Roster
-            </button>
-            <button
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
-                activeTab === 'help' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-              }`}
-              onClick={() => setActiveTab('help')}
-            >
-              <HelpCircle size={16} />
-              Help
-            </button>
-            <button
-              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
-              onClick={() => {
-                setSelectedSeasonId('');
-                setSelectedTeamId('');
-              }}
-            >
-              Switch team
-            </button>
-            <button
-              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
-              onClick={() => supabase.auth.signOut()}
-            >
-              <LogOut size={14} />
-            </button>
           </div>
-        </header>
+        </div>
+      </header>
 
+      <main className="mx-auto max-w-7xl space-y-6 p-6">
         {activeTab === 'hub' && (
           <HubView
             onOpenShotmap={() => setActiveTab('shotmap')}
@@ -790,18 +758,22 @@ const App = () => {
         )}
         {activeTab === 'help' && <HelpView />}
         {activeTab === 'privacy' && <PrivacyView />}
-      </div>
-      <footer className="mx-auto mt-8 max-w-6xl px-6 pb-8 text-xs text-slate-500">
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white/70 px-4 py-3 shadow-sm">
-          <span>© {new Date().getFullYear()} Waterpolo Shotmap & Analytics</span>
+      </main>
+
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-slate-200 bg-white p-2 lg:hidden">
+        {navItems.slice(0, 5).map((item) => (
           <button
-            className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
-            onClick={() => setActiveTab('privacy')}
+            key={item.key}
+            className={`flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold ${
+              activeTab === item.key ? 'text-cyan-700' : 'text-slate-500'
+            }`}
+            onClick={() => setActiveTab(item.key)}
           >
-            Privacy
+            {item.icon}
+            {item.label}
           </button>
-        </div>
-      </footer>
+        ))}
+      </div>
     </div>
   );
 };

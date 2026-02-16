@@ -721,16 +721,7 @@ const App = () => {
       </header>
 
       <main className="mx-auto max-w-7xl space-y-6 p-6">
-        {activeTab === 'hub' && (
-          <HubView
-            onOpenShotmap={() => setActiveTab('shotmap')}
-            onOpenAnalytics={() => setActiveTab('analytics')}
-            onOpenScoring={() => setActiveTab('scoring')}
-            onOpenPossession={() => setActiveTab('possession')}
-            onOpenPlayers={() => setActiveTab('players')}
-            onOpenRoster={() => setActiveTab('roster')}
-          />
-        )}
+        {activeTab === 'hub' && <HubView />}
         {activeTab === 'shotmap' && (
           <ShotmapView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
         )}
@@ -2377,79 +2368,44 @@ const HelpView = () => (
   </div>
 );
 
-const HubView = ({
-  onOpenShotmap,
-  onOpenAnalytics,
-  onOpenScoring,
-  onOpenPossession,
-  onOpenPlayers,
-  onOpenRoster
-}) => (
+const HubView = () => (
   <div className="space-y-6">
-    <div className="flex flex-wrap items-center justify-between gap-4">
-      <div>
-        <p className="text-sm font-semibold text-cyan-700">Waterpolo Hub</p>
-        <h2 className="text-2xl font-semibold">Choose a module</h2>
-        <p className="mt-2 text-sm text-slate-500">All waterpolo tools in one workspace.</p>
-      </div>
-    </div>
-
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <button
-        className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-        onClick={onOpenShotmap}
-      >
-        <div className="text-xs font-semibold text-slate-500">Shot tracking</div>
-        <h3 className="mt-2 text-lg font-semibold">Shotmap</h3>
-        <p className="mt-2 text-sm text-slate-600">Log shots on the field and track outcomes per player.</p>
-      </button>
-      <button
-        className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-        onClick={onOpenAnalytics}
-      >
-        <div className="text-xs font-semibold text-slate-500">Insights</div>
-        <h3 className="mt-2 text-lg font-semibold">Analytics</h3>
-        <p className="mt-2 text-sm text-slate-600">Heatmaps, filters, and advanced stats per match or season.</p>
-      </button>
-      <button
-        className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-        onClick={onOpenScoring}
-      >
-        <div className="text-xs font-semibold text-slate-500">Match events</div>
-        <h3 className="mt-2 text-lg font-semibold">Scoring & Stats</h3>
-        <p className="mt-2 text-sm text-slate-600">Log goals, exclusions, fouls, and track team stats.</p>
-      </button>
-      <button
-        className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-        onClick={onOpenPossession}
-      >
-        <div className="text-xs font-semibold text-slate-500">Possessions</div>
-        <h3 className="mt-2 text-lg font-semibold">Passing Map</h3>
-        <p className="mt-2 text-sm text-slate-600">Track full attacks with player-to-player passes.</p>
-      </button>
-      <button
-        className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-        onClick={onOpenPlayers}
-      >
-        <div className="text-xs font-semibold text-slate-500">Report cards</div>
-        <h3 className="mt-2 text-lg font-semibold">Players</h3>
-        <p className="mt-2 text-sm text-slate-600">Compare players and export report cards.</p>
-      </button>
-      <button
-        className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-        onClick={onOpenRoster}
-      >
-        <div className="text-xs font-semibold text-slate-500">Team data</div>
-        <h3 className="mt-2 text-lg font-semibold">Roster</h3>
-        <p className="mt-2 text-sm text-slate-600">Manage player info and photos.</p>
-      </button>
-    </div>
-
-    <div className="rounded-2xl bg-white p-5 text-sm text-slate-600 shadow-sm">
-      <div className="text-xs font-semibold text-slate-500">Coming next</div>
-      <p className="mt-2">
-        Scoring & stats, passing/possession mapping, and video analysis will appear here as new modules.
+    <div className="rounded-2xl bg-white p-6 shadow-sm">
+      <p className="text-sm font-semibold text-cyan-700">Waterpolo Hub</p>
+      <h2 className="mt-1 text-2xl font-semibold text-slate-900">Welcome</h2>
+      <p className="mt-3 max-w-3xl text-sm text-slate-600">
+        Waterpolo Hub is your central workspace for tracking matches and building insights across shotmap, analytics,
+        scoring, possession, and player reporting.
       </p>
+      <p className="mt-2 text-sm text-slate-600">
+        Use the sidebar to open a module. The Hub page stays focused on onboarding and workflow guidance.
+      </p>
+    </div>
+
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
+      <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <h3 className="text-sm font-semibold text-slate-700">Getting Started</h3>
+        <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-slate-600">
+          <li>Create or select a season and team.</li>
+          <li>Open `Roster` and add players first.</li>
+          <li>Open `Shotmap`, `Scoring`, or `Possession` to create a match and track events.</li>
+          <li>Use `Analytics` and `Players` to review performance and export reports.</li>
+        </ol>
+      </div>
+
+      <div className="space-y-4">
+        <div className="rounded-2xl bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-700">Workflow Tips</h3>
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-600">
+            <li>Track one match at a time for clean event logs.</li>
+            <li>Keep player birthdays and dominant hand updated in `Roster`.</li>
+            <li>Use filters in analytics and report cards before exporting.</li>
+          </ul>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
+          Need definitions for zones, event types, and color legends? Open `Help` in the sidebar.
+        </div>
+      </div>
     </div>
   </div>
 );

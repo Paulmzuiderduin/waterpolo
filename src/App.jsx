@@ -4120,6 +4120,19 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
     .filter((pass) => pass.possessionId === activePossessionId)
     .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
 
+  const possessionLabelMap = useMemo(() => {
+    const rows = [...matchPossessions].sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return ta - tb;
+    });
+    const map = {};
+    rows.forEach((pos, idx) => {
+      map[pos.id] = `Possession ${idx + 1}`;
+    });
+    return map;
+  }, [matchPossessions]);
+
   const handleFieldClick = (event) => {
     if (!activePossessionId) return;
     if (!fieldRef.current) return;
@@ -4178,6 +4191,21 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
       prev.map((pos) => (pos.id === activePossessionId ? { ...pos, outcome } : pos))
     );
     setActivePossessionId('');
+  };
+
+  const deletePossession = async (possessionId) => {
+    if (!window.confirm('Delete this possession and its passes?')) return;
+    const { error: deleteError } = await supabase.from('possessions').delete().eq('id', possessionId);
+    if (deleteError) {
+      setError('Failed to delete possession.');
+      return;
+    }
+    setPossessions((prev) => prev.filter((pos) => pos.id !== possessionId));
+    setPasses((prev) => prev.filter((pass) => pass.possessionId !== possessionId));
+    if (activePossessionId === possessionId) {
+      setActivePossessionId('');
+      setPassDraft({ fromPlayer: '', toPlayer: '', fromPos: null, toPos: null });
+    }
   };
 
   const addPass = async (override = null) => {
@@ -4240,6 +4268,15 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
       toPlayer: ''
     }));
     setError('');
+  };
+
+  const deletePass = async (passId) => {
+    const { error: deleteError } = await supabase.from('passes').delete().eq('id', passId);
+    if (deleteError) {
+      setError('Failed to delete pass.');
+      return;
+    }
+    setPasses((prev) => prev.filter((pass) => pass.id !== passId));
   };
 
   const connectionStats = useMemo(() => {
@@ -4341,12 +4378,6 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
             )}
             <div className="mt-3 flex items-center gap-2">
               <button
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                onClick={addPass}
-              >
-                Add pass
-              </button>
-              <button
                 className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
                 onClick={() => setPassDraft({ fromPlayer: '', toPlayer: '', fromPos: null, toPos: null })}
               >
@@ -4385,13 +4416,13 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
                     <defs>
                       <marker
                         id={`arrow-${pass.id}`}
-                        markerWidth="6"
-                        markerHeight="6"
-                        refX="5"
-                        refY="3"
+                        markerWidth="4"
+                        markerHeight="4"
+                        refX="3.5"
+                        refY="2"
                         orient="auto"
                       >
-                        <path d="M0,0 L6,3 L0,6 Z" fill="rgba(255,255,255,0.8)" />
+                        <path d="M0,0 L4,2 L0,4 Z" fill="rgba(255,255,255,0.8)" />
                       </marker>
                     </defs>
                     <line
@@ -4474,17 +4505,25 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
             <div className="mt-3 space-y-2 text-sm text-slate-600">
               {matchPossessions.length === 0 && <div>No possessions yet.</div>}
               {matchPossessions.map((pos) => (
-                <button
+                <div
                   key={pos.id}
-                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${
+                  className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm ${
                     pos.id === activePossessionId
                       ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
                       : 'border-slate-100 text-slate-600'
                   }`}
-                  onClick={() => setActivePossessionId(pos.id)}
                 >
-                  Possession {pos.id.slice(0, 6)} · {pos.outcome ? pos.outcome.replace('_', ' ') : 'open'}
-                </button>
+                  <button className="flex-1 text-left" onClick={() => setActivePossessionId(pos.id)}>
+                    {possessionLabelMap[pos.id] || 'Possession'} ·{' '}
+                    {pos.outcome ? pos.outcome.replace('_', ' ') : 'open'}
+                  </button>
+                  <button
+                    className="text-xs font-semibold text-red-500"
+                    onClick={() => deletePossession(pos.id)}
+                  >
+                    Delete
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -4512,11 +4551,19 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
               <div className="mt-3 space-y-2 text-sm text-slate-600">
                 {activePasses.length === 0 && <div>No passes yet.</div>}
                 {activePasses.map((pass) => (
-                  <div key={pass.id} className="rounded-lg border border-slate-100 px-3 py-2">
-                    <div className="font-semibold text-slate-700">
-                      #{pass.fromPlayer} → #{pass.toPlayer}
+                  <div key={pass.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                    <div>
+                      <div className="font-semibold text-slate-700">
+                        #{pass.fromPlayer} → #{pass.toPlayer}
+                      </div>
+                      <div className="text-xs text-slate-500">Pass {pass.sequence}</div>
                     </div>
-                    <div className="text-xs text-slate-500">Pass {pass.sequence}</div>
+                    <button
+                      className="text-xs font-semibold text-red-500"
+                      onClick={() => deletePass(pass.id)}
+                    >
+                      Delete
+                    </button>
                   </div>
                 ))}
               </div>

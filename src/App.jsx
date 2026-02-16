@@ -4180,16 +4180,17 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
     setActivePossessionId('');
   };
 
-  const addPass = async () => {
+  const addPass = async (override = null) => {
+    const draft = override || passDraft;
     if (!activePossessionId) {
       setError('Start a possession first.');
       return;
     }
-    if (!passDraft.fromPlayer || !passDraft.toPlayer) {
+    if (!draft.fromPlayer || !draft.toPlayer) {
       setError('Select from and to players.');
       return;
     }
-    if (!passDraft.fromPos || !passDraft.toPos) {
+    if (!draft.fromPos || !draft.toPos) {
       setError('Click start and end positions on the field.');
       return;
     }
@@ -4202,12 +4203,12 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
         team_id: teamId,
         match_id: currentMatchId,
         possession_id: activePossessionId,
-        from_player_cap: passDraft.fromPlayer,
-        to_player_cap: passDraft.toPlayer,
-        from_x: passDraft.fromPos.x,
-        from_y: passDraft.fromPos.y,
-        to_x: passDraft.toPos.x,
-        to_y: passDraft.toPos.y,
+        from_player_cap: draft.fromPlayer,
+        to_player_cap: draft.toPlayer,
+        from_x: draft.fromPos.x,
+        from_y: draft.fromPos.y,
+        to_x: draft.toPos.x,
+        to_y: draft.toPos.y,
         sequence
       })
       .select('*')
@@ -4235,7 +4236,7 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
       ...prev,
       fromPos: null,
       toPos: null,
-      fromPlayer: prev.toPlayer || prev.fromPlayer,
+      fromPlayer: draft.toPlayer || prev.fromPlayer,
       toPlayer: ''
     }));
     setError('');
@@ -4381,6 +4382,18 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
                     viewBox="0 0 100 100"
                     preserveAspectRatio="none"
                   >
+                    <defs>
+                      <marker
+                        id={`arrow-${pass.id}`}
+                        markerWidth="6"
+                        markerHeight="6"
+                        refX="5"
+                        refY="3"
+                        orient="auto"
+                      >
+                        <path d="M0,0 L6,3 L0,6 Z" fill="rgba(255,255,255,0.8)" />
+                      </marker>
+                    </defs>
                     <line
                       x1={pass.fromX}
                       y1={pass.fromY}
@@ -4388,6 +4401,7 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
                       y2={pass.toY}
                       stroke="rgba(255,255,255,0.75)"
                       strokeWidth="0.6"
+                      markerEnd={`url(#arrow-${pass.id})`}
                     />
                   </svg>
                 ))}
@@ -4524,19 +4538,21 @@ const PossessionView = ({ seasonId, teamId, userId }) => {
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {roster.map((player) => (
-                <button
-                  key={player.id}
-                  className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white"
-                  onClick={() => {
-                    if (playerPicker === 'from') {
-                      setPassDraft((prev) => ({ ...prev, fromPlayer: player.capNumber }));
-                      setPlayerPicker(null);
-                    } else {
-                      setPassDraft((prev) => ({ ...prev, toPlayer: player.capNumber }));
-                      setPlayerPicker(null);
-                    }
-                  }}
-                >
+                  <button
+                    key={player.id}
+                    className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white"
+                    onClick={() => {
+                      if (playerPicker === 'from') {
+                        setPassDraft((prev) => ({ ...prev, fromPlayer: player.capNumber }));
+                        setPlayerPicker(null);
+                      } else {
+                        const nextDraft = { ...passDraft, toPlayer: player.capNumber };
+                        setPassDraft(nextDraft);
+                        setPlayerPicker(null);
+                        addPass(nextDraft);
+                      }
+                    }}
+                  >
                   #{player.capNumber} {player.name}
                 </button>
               ))}

@@ -11,7 +11,8 @@ import {
   Home,
   ClipboardList,
   Share2,
-  CalendarDays
+  CalendarDays,
+  Settings2
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -341,6 +342,12 @@ const App = () => {
   const [seasonForm, setSeasonForm] = useState('');
   const [teamForm, setTeamForm] = useState('');
   const [loadingSeasons, setLoadingSeasons] = useState(true);
+  const [moduleVisibility, setModuleVisibility] = useState({});
+  const [preferences, setPreferences] = useState({
+    rememberLastTab: true,
+    showHubTips: true
+  });
+  const didApplyStartTab = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -393,6 +400,59 @@ const App = () => {
       active = false;
     };
   }, [session]);
+
+  const moduleConfig = useMemo(
+    () => [
+      { key: 'hub', label: 'Dashboard', icon: <Home size={16} />, alwaysVisible: true },
+      { key: 'matches', label: 'Matches', icon: <CalendarDays size={16} /> },
+      { key: 'shotmap', label: 'Shotmap', icon: <Share2 size={16} /> },
+      { key: 'analytics', label: 'Analytics', icon: <BarChart2 size={16} /> },
+      { key: 'scoring', label: 'Scoring', icon: <ClipboardList size={16} /> },
+      { key: 'possession', label: 'Possession', icon: <Share2 size={16} /> },
+      { key: 'players', label: 'Players', icon: <IdCard size={16} /> },
+      { key: 'roster', label: 'Roster', icon: <Users size={16} /> },
+      { key: 'help', label: 'Help', icon: <HelpCircle size={16} />, alwaysVisible: true },
+      { key: 'settings', label: 'Settings', icon: <Settings2 size={16} />, alwaysVisible: true }
+    ],
+    []
+  );
+
+  useEffect(() => {
+    if (!session?.user) return;
+    const defaults = moduleConfig.reduce((acc, item) => {
+      if (item.alwaysVisible) return acc;
+      acc[item.key] = true;
+      return acc;
+    }, {});
+    try {
+      const raw = localStorage.getItem(`waterpolo_module_visibility_${session.user.id}`);
+      const parsed = raw ? JSON.parse(raw) : {};
+      setModuleVisibility({ ...defaults, ...parsed });
+    } catch {
+      setModuleVisibility(defaults);
+    }
+  }, [session, moduleConfig]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    localStorage.setItem(`waterpolo_module_visibility_${session.user.id}`, JSON.stringify(moduleVisibility));
+  }, [moduleVisibility, session]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    try {
+      const raw = localStorage.getItem(`waterpolo_preferences_${session.user.id}`);
+      const parsed = raw ? JSON.parse(raw) : {};
+      setPreferences((prev) => ({ ...prev, ...parsed }));
+    } catch {
+      setPreferences({ rememberLastTab: true, showHubTips: true });
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    localStorage.setItem(`waterpolo_preferences_${session.user.id}`, JSON.stringify(preferences));
+  }, [preferences, session]);
 
   const selectedSeason = seasons.find((season) => season.id === selectedSeasonId);
   const selectedTeam = selectedSeason?.teams?.find((team) => team.id === selectedTeamId);
@@ -702,17 +762,27 @@ const App = () => {
     );
   }
 
-  const navItems = [
-    { key: 'hub', label: 'Dashboard', icon: <Home size={16} /> },
-    { key: 'matches', label: 'Matches', icon: <CalendarDays size={16} /> },
-    { key: 'shotmap', label: 'Shotmap', icon: <Share2 size={16} /> },
-    { key: 'analytics', label: 'Analytics', icon: <BarChart2 size={16} /> },
-    { key: 'scoring', label: 'Scoring', icon: <ClipboardList size={16} /> },
-    { key: 'possession', label: 'Possession', icon: <Share2 size={16} /> },
-    { key: 'players', label: 'Players', icon: <IdCard size={16} /> },
-    { key: 'roster', label: 'Roster', icon: <Users size={16} /> },
-    { key: 'help', label: 'Help', icon: <HelpCircle size={16} /> }
-  ];
+  const navItems = moduleConfig.filter((item) => item.alwaysVisible || moduleVisibility[item.key] !== false);
+
+  useEffect(() => {
+    const visibleKeys = new Set(navItems.map((item) => item.key));
+    if (!visibleKeys.has(activeTab)) setActiveTab('hub');
+  }, [activeTab, navItems]);
+
+  useEffect(() => {
+    if (!session?.user || !preferences.rememberLastTab || didApplyStartTab.current) return;
+    if (!selectedSeason || !selectedTeam) return;
+    const last = localStorage.getItem(`waterpolo_last_tab_${session.user.id}`);
+    if (last && navItems.some((item) => item.key === last)) {
+      setActiveTab(last);
+    }
+    didApplyStartTab.current = true;
+  }, [session, preferences.rememberLastTab, selectedSeason, selectedTeam, navItems]);
+
+  useEffect(() => {
+    if (!session?.user || !preferences.rememberLastTab) return;
+    localStorage.setItem(`waterpolo_last_tab_${session.user.id}`, activeTab);
+  }, [activeTab, preferences.rememberLastTab, session]);
 
   return (
     <div className="min-h-screen pb-20 lg:pl-64">
@@ -801,7 +871,7 @@ const App = () => {
       </header>
 
       <main className="mx-auto max-w-7xl space-y-6 p-6">
-        {activeTab === 'hub' && <HubView />}
+        {activeTab === 'hub' && <HubView showTips={preferences.showHubTips} />}
         {activeTab === 'matches' && (
           <MatchesView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
         )}
@@ -831,6 +901,32 @@ const App = () => {
           <RosterView seasonId={selectedSeasonId} teamId={selectedTeamId} userId={session.user.id} />
         )}
         {activeTab === 'help' && <HelpView />}
+        {activeTab === 'settings' && (
+          <SettingsView
+            moduleConfig={moduleConfig}
+            moduleVisibility={moduleVisibility}
+            onToggle={(key) =>
+              setModuleVisibility((prev) => ({
+                ...prev,
+                [key]: !prev[key]
+              }))
+            }
+            onReset={() => {
+              const defaults = moduleConfig.reduce((acc, item) => {
+                if (!item.alwaysVisible) acc[item.key] = true;
+                return acc;
+              }, {});
+              setModuleVisibility(defaults);
+            }}
+            preferences={preferences}
+            onSetPreference={(key, value) =>
+              setPreferences((prev) => ({
+                ...prev,
+                [key]: value
+              }))
+            }
+          />
+        )}
         {activeTab === 'privacy' && <PrivacyView />}
       </main>
 
@@ -2463,7 +2559,7 @@ const HelpView = () => (
   </div>
 );
 
-const HubView = () => (
+const HubView = ({ showTips }) => (
   <div className="space-y-6">
     <div className="rounded-2xl bg-white p-6 shadow-sm">
       <p className="text-sm font-semibold text-cyan-700">Waterpolo Hub</p>
@@ -2477,7 +2573,7 @@ const HubView = () => (
       </p>
     </div>
 
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
+    <div className={`grid grid-cols-1 gap-4 ${showTips ? 'lg:grid-cols-[1.4fr_1fr]' : ''}`}>
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-700">Getting Started</h3>
         <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-slate-600">
@@ -2488,18 +2584,90 @@ const HubView = () => (
         </ol>
       </div>
 
-      <div className="space-y-4">
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-700">Workflow Tips</h3>
-          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-600">
-            <li>Track one match at a time for clean event logs.</li>
-            <li>Keep player birthdays and dominant hand updated in `Roster`.</li>
-            <li>Use filters in analytics and report cards before exporting.</li>
-          </ul>
+      {showTips && (
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Workflow Tips</h3>
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-600">
+              <li>Track one match at a time for clean event logs.</li>
+              <li>Keep player birthdays and dominant hand updated in `Roster`.</li>
+              <li>Use filters in analytics and report cards before exporting.</li>
+            </ul>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
+            Need definitions for zones, event types, and color legends? Open `Help` in the sidebar.
+          </div>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
-          Need definitions for zones, event types, and color legends? Open `Help` in the sidebar.
-        </div>
+      )}
+    </div>
+  </div>
+);
+
+const SettingsView = ({
+  moduleConfig,
+  moduleVisibility,
+  onToggle,
+  onReset,
+  preferences,
+  onSetPreference
+}) => (
+  <div className="space-y-6">
+    <div>
+      <p className="text-sm font-semibold text-cyan-700">Settings</p>
+      <h2 className="text-2xl font-semibold text-slate-900">Workspace Preferences</h2>
+      <p className="mt-2 text-sm text-slate-500">Choose which modules you want to see in the sidebar.</p>
+    </div>
+
+    <div className="rounded-2xl bg-white p-6 shadow-sm">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-700">Module visibility</h3>
+        <button
+          className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700"
+          onClick={onReset}
+        >
+          Reset to default
+        </button>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+        {moduleConfig
+          .filter((item) => !item.alwaysVisible)
+          .map((item) => {
+            const enabled = moduleVisibility[item.key] !== false;
+            return (
+              <label
+                key={item.key}
+                className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3"
+              >
+                <span className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  {item.icon}
+                  {item.label}
+                </span>
+                <input type="checkbox" checked={enabled} onChange={() => onToggle(item.key)} />
+              </label>
+            );
+          })}
+      </div>
+    </div>
+
+    <div className="rounded-2xl bg-white p-6 shadow-sm">
+      <h3 className="text-sm font-semibold text-slate-700">General</h3>
+      <div className="mt-4 space-y-3">
+        <label className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
+          <span className="text-sm font-medium text-slate-700">Remember last opened module</span>
+          <input
+            type="checkbox"
+            checked={Boolean(preferences.rememberLastTab)}
+            onChange={(event) => onSetPreference('rememberLastTab', event.target.checked)}
+          />
+        </label>
+        <label className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
+          <span className="text-sm font-medium text-slate-700">Show Hub workflow tips</span>
+          <input
+            type="checkbox"
+            checked={Boolean(preferences.showHubTips)}
+            onChange={(event) => onSetPreference('showHubTips', event.target.checked)}
+          />
+        </label>
       </div>
     </div>
   </div>

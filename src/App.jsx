@@ -12,12 +12,14 @@ import {
   ClipboardList,
   Share2,
   CalendarDays,
-  Settings2,
-  Ellipsis
+  Settings2
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { supabase } from './lib/supabase';
+import AppHeader from './components/AppHeader';
+import MobileNav from './components/MobileNav';
+import SidebarNav from './components/SidebarNav';
 
 const FIELD_WIDTH = 15;
 const FIELD_HEIGHT = 12.5;
@@ -790,89 +792,33 @@ const App = () => {
 
   return (
     <div className="min-h-screen pb-20 lg:pl-64">
-      <aside className="fixed left-0 top-0 hidden h-full w-64 flex-col border-r border-slate-200 bg-white p-6 shadow-sm lg:flex">
-        <div className="mb-10">
-          <p className="text-xl font-black uppercase italic tracking-tight text-slate-900">
-            Waterpolo <span className="text-cyan-700">Hub</span>
-          </p>
-          <p className="text-xs text-slate-500">{selectedSeason.name}</p>
-        </div>
-        <nav className="flex flex-col gap-2">
-          {navItems.map((item) => (
-            <button
-              key={item.key}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
-                activeTab === item.key
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-              onClick={() => setActiveTab(item.key)}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
-        </nav>
-        <div className="mt-auto space-y-2">
-          <button
-            className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold"
-            onClick={() => {
-              setSelectedSeasonId('');
-              setSelectedTeamId('');
-            }}
-          >
-            Switch team
-          </button>
-          <button
-            className="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-            onClick={() => supabase.auth.signOut()}
-          >
-            Sign out
-          </button>
-        </div>
-      </aside>
+      <SidebarNav
+        selectedSeasonName={selectedSeason.name}
+        navItems={navItems}
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        onSwitchTeam={() => {
+          setSelectedSeasonId('');
+          setSelectedTeamId('');
+        }}
+        onSignOut={() => supabase.auth.signOut()}
+      />
 
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/85 px-6 py-4 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Water Polo Platform</p>
-            <h1 className="text-2xl font-bold text-slate-900 lg:text-3xl">Good evening, Paul</h1>
-            <p className="text-xs text-slate-500">
-              {selectedSeason.name} · {selectedTeam.name} · {session.user.email}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <select
-              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm"
-              value={selectedSeasonId}
-              onChange={(event) => {
-                const nextSeasonId = event.target.value;
-                const nextSeason = seasons.find((season) => season.id === nextSeasonId);
-                setSelectedSeasonId(nextSeasonId);
-                setSelectedTeamId(nextSeason?.teams?.[0]?.id || '');
-              }}
-            >
-              {seasons.map((season) => (
-                <option key={season.id} value={season.id}>
-                  {season.name}
-                </option>
-              ))}
-            </select>
-            <select
-              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm"
-              value={selectedTeamId}
-              onChange={(event) => setSelectedTeamId(event.target.value)}
-              disabled={(selectedSeason.teams || []).length === 0}
-            >
-              {(selectedSeason.teams || []).map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        selectedSeasonName={selectedSeason.name}
+        selectedTeamName={selectedTeam.name}
+        userEmail={session.user.email}
+        seasons={seasons}
+        selectedSeasonId={selectedSeasonId}
+        onSelectSeason={(nextSeasonId) => {
+          const nextSeason = seasons.find((season) => season.id === nextSeasonId);
+          setSelectedSeasonId(nextSeasonId);
+          setSelectedTeamId(nextSeason?.teams?.[0]?.id || '');
+        }}
+        teamOptions={selectedSeason.teams || []}
+        selectedTeamId={selectedTeamId}
+        onSelectTeam={setSelectedTeamId}
+      />
 
       <main className="mx-auto max-w-7xl space-y-6 p-6">
         {activeTab === 'hub' && <HubView showTips={preferences.showHubTips} />}
@@ -946,71 +892,22 @@ const App = () => {
         </div>
       </footer>
 
-      <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-slate-200 bg-white p-2 lg:hidden">
-        {mobilePrimaryItems.map((item) => (
-          <button
-            key={item.key}
-            className={`flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold ${
-              activeTab === item.key ? 'text-cyan-700' : 'text-slate-500'
-            }`}
-            onClick={() => {
-              setActiveTab(item.key);
-              setMobileMenuOpen(false);
-            }}
-          >
-            {item.icon}
-            {item.label}
-          </button>
-        ))}
-        <button
-          className={`flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold ${
-            mobileOverflowItems.some((item) => item.key === activeTab) || activeTab === 'privacy'
-              ? 'text-cyan-700'
-              : 'text-slate-500'
-          }`}
-          onClick={() => setMobileMenuOpen((prev) => !prev)}
-        >
-          <Ellipsis size={16} />
-          More
-        </button>
-      </div>
-
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-[60] lg:hidden">
-          <button className="absolute inset-0 bg-slate-900/30" onClick={() => setMobileMenuOpen(false)} />
-          <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-white p-4 shadow-2xl">
-            <div className="mb-3 h-1.5 w-12 rounded-full bg-slate-200 mx-auto" />
-            <div className="grid grid-cols-2 gap-2">
-              {mobileOverflowItems.map((item) => (
-                <button
-                  key={item.key}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
-                    activeTab === item.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
-                  }`}
-                  onClick={() => {
-                    setActiveTab(item.key);
-                    setMobileMenuOpen(false);
-                  }}
-                >
-                  {item.icon}
-                  {item.label}
-                </button>
-              ))}
-              <button
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
-                  activeTab === 'privacy' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
-                }`}
-                onClick={() => {
-                  setActiveTab('privacy');
-                  setMobileMenuOpen(false);
-                }}
-              >
-                Privacy
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <MobileNav
+        activeTab={activeTab}
+        primaryItems={mobilePrimaryItems}
+        overflowItems={mobileOverflowItems}
+        mobileMenuOpen={mobileMenuOpen}
+        onSelectTab={(key) => {
+          setActiveTab(key);
+          setMobileMenuOpen(false);
+        }}
+        onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
+        onCloseMobileMenu={() => setMobileMenuOpen(false)}
+        onOpenPrivacy={() => {
+          setActiveTab('privacy');
+          setMobileMenuOpen(false);
+        }}
+      />
     </div>
   );
 };

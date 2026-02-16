@@ -4,7 +4,6 @@ import {
   Plus,
   X,
   BarChart2,
-  LogOut,
   Users,
   IdCard,
   HelpCircle,
@@ -20,11 +19,10 @@ import { supabase } from './lib/supabase';
 import AppHeader from './components/AppHeader';
 import MobileNav from './components/MobileNav';
 import SidebarNav from './components/SidebarNav';
-
-const FIELD_WIDTH = 15;
-const FIELD_HEIGHT = 12.5;
-const FULL_FIELD_WIDTH = 15;
-const FULL_FIELD_HEIGHT = 25;
+import { useAuthSession } from './hooks/useAuthSession';
+import { useSeasonsTeams } from './hooks/useSeasonsTeams';
+import { detectZone, distanceMeters, penaltyPosition, valueToColor, VIRIDIS } from './utils/field';
+import { computeAge, formatShotTime, normalizeTime, splitTimeParts, timeToSeconds } from './utils/time';
 
 const ZONES = [
   { id: 1, label: '1', left: 0, top: 0, width: 26.67, height: 16 },
@@ -248,103 +246,16 @@ const loadTeamMatchesOverview = async (teamId) => {
   return Array.from(byMatch.values());
 };
 
-const detectZone = (x, y) => {
-  if (x >= 80 && y >= 75) return 14;
-  for (const zone of ZONES) {
-    if (zone.id === 14) continue;
-    if (x >= zone.left && x <= zone.left + zone.width && y >= zone.top && y <= zone.top + zone.height) {
-      return zone.id;
-    }
-  }
-  return null;
-};
-
-const formatShotTime = () => '7:00';
-
-const normalizeTime = (value) => {
-  if (!value) return '7:00';
-  const parts = value.split(':');
-  const minutes = Math.min(7, Math.max(0, Number(parts[0] || 0)));
-  const seconds = Math.min(59, Math.max(0, Number(parts[1] || 0)));
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-};
-
-const splitTimeParts = (value) => {
-  const normalized = normalizeTime(value);
-  const [min, sec] = normalized.split(':');
-  return { minutes: Number(min), seconds: Number(sec) };
-};
-
-const timeToSeconds = (value) => {
-  const normalized = normalizeTime(value);
-  const [min, sec] = normalized.split(':').map(Number);
-  return min * 60 + sec;
-};
-
-const distanceMeters = (shot) => {
-  const x = (shot.x / 100) * FIELD_WIDTH;
-  const y = (shot.y / 100) * FIELD_HEIGHT;
-  return Math.sqrt((x - 7.5) ** 2 + y ** 2);
-};
-
-const computeAge = (birthday) => {
-  if (!birthday) return null;
-  const birth = new Date(birthday);
-  if (Number.isNaN(birth.getTime())) return null;
-  return Math.max(0, Math.floor((Date.now() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000)));
-};
-
-const penaltyPosition = (index) => {
-  const colCount = 3;
-  const col = index % colCount;
-  const row = Math.floor(index / colCount);
-  const zone = ZONES.find((z) => z.id === 14);
-  const cellWidth = zone.width / colCount;
-  const cellHeight = zone.height / 4;
-  return {
-    x: zone.left + cellWidth * col + cellWidth / 2,
-    y: zone.top + cellHeight * row + cellHeight / 2
-  };
-};
-
-const VIRIDIS = ['#440154', '#46327e', '#365c8d', '#277f8e', '#1fa187', '#4ac16d', '#a0da39', '#fde725'];
-
-const valueToColor = (value, max, scheme) => {
-  if (value == null || max === 0) return 'rgba(255,255,255,0)';
-  const ratio = Math.min(value / max, 1);
-  if (scheme === 'viridis' || scheme === 'viridisReverse') {
-    const palette = scheme === 'viridisReverse' ? [...VIRIDIS].reverse() : VIRIDIS;
-    const idx = ratio * (palette.length - 1);
-    const low = Math.floor(idx);
-    const high = Math.min(palette.length - 1, low + 1);
-    const t = idx - low;
-    const hexToRgb = (hex) => {
-      const res = hex.replace('#', '');
-      const num = parseInt(res, 16);
-      return [num >> 16, (num >> 8) & 255, num & 255];
-    };
-    const [r1, g1, b1] = hexToRgb(palette[low]);
-    const [r2, g2, b2] = hexToRgb(palette[high]);
-    const r = Math.round(r1 + (r2 - r1) * t);
-    const g = Math.round(g1 + (g2 - g1) * t);
-    const b = Math.round(b1 + (b2 - b1) * t);
-    return `rgba(${r}, ${g}, ${b}, 0.5)`;
-  }
-  return 'rgba(255,255,255,0)';
-};
-
 const App = () => {
   const [activeTab, setActiveTab] = useState('hub');
-  const [session, setSession] = useState(null);
+  const { session, authLoading } = useAuthSession();
+  const { seasons, setSeasons, loadingSeasons } = useSeasonsTeams(session?.user?.id);
   const [authEmail, setAuthEmail] = useState('');
   const [authMessage, setAuthMessage] = useState('');
-  const [authLoading, setAuthLoading] = useState(true);
-  const [seasons, setSeasons] = useState([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [seasonForm, setSeasonForm] = useState('');
   const [teamForm, setTeamForm] = useState('');
-  const [loadingSeasons, setLoadingSeasons] = useState(true);
   const [moduleVisibility, setModuleVisibility] = useState({});
   const [preferences, setPreferences] = useState({
     rememberLastTab: true,
@@ -352,58 +263,6 @@ const App = () => {
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const didApplyStartTab = useRef(false);
-
-  useEffect(() => {
-    let active = true;
-    const init = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!active) return;
-      setSession(data.session || null);
-      setAuthLoading(false);
-    };
-    init();
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (!active) return;
-      setSession(nextSession);
-    });
-    return () => {
-      active = false;
-      listener?.subscription?.unsubscribe();
-    };
-  }, []);
-
-  const loadSeasons = async (userId) => {
-    const [seasonsRes, teamsRes] = await Promise.all([
-      supabase.from('seasons').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
-      supabase.from('teams').select('*').eq('user_id', userId).order('created_at', { ascending: true })
-    ]);
-    if (seasonsRes.error || teamsRes.error) throw new Error('Failed to load seasons');
-    const seasonsWithTeams = (seasonsRes.data || []).map((season) => ({
-      id: season.id,
-      name: season.name,
-      teams: (teamsRes.data || []).filter((team) => team.season_id === season.id)
-    }));
-    return seasonsWithTeams;
-  };
-
-  useEffect(() => {
-    if (!session?.user) return;
-    let active = true;
-    const load = async () => {
-      try {
-        const data = await loadSeasons(session.user.id);
-        if (!active) return;
-        setSeasons(data);
-        setLoadingSeasons(false);
-      } catch (e) {
-        if (active) setLoadingSeasons(false);
-      }
-    };
-    load();
-    return () => {
-      active = false;
-    };
-  }, [session]);
 
   const moduleConfig = useMemo(
     () => [
@@ -996,7 +855,7 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
     const x = ((event.clientX - rect.left) / rect.width) * 100;
     const y = ((event.clientY - rect.top) / rect.height) * 100;
     if (x >= 80 && y >= 75) return;
-    const zone = detectZone(x, y);
+    const zone = detectZone(x, y, ZONES);
     if (!zone) return;
     setPendingShot({
       x,
@@ -1639,7 +1498,7 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
                 {filteredShots.map((shot) => {
                   const isPenalty = shot.attackType === 'strafworp';
                   const position = isPenalty
-                    ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id))
+                    ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id), ZONES)
                     : { x: shot.x, y: shot.y };
                   return (
                     <div
@@ -2459,15 +2318,15 @@ const HelpView = () => (
           <div className="mt-3 grid grid-cols-1 gap-3 text-sm text-slate-600 sm:grid-cols-2">
             <div className="flex items-center gap-3">
               <span className="h-3 w-3 rounded-full bg-green-500" />
-              Goal (raak)
+              Goal
             </div>
             <div className="flex items-center gap-3">
               <span className="h-3 w-3 rounded-full bg-orange-400" />
-              Saved (redding)
+              Saved
             </div>
             <div className="flex items-center gap-3">
               <span className="h-3 w-3 rounded-full bg-red-500" />
-              Miss (mis)
+              Miss
             </div>
             <div className="flex items-center gap-3">
               <span className="h-3 w-3 rounded-sm bg-slate-900" />
@@ -3450,7 +3309,7 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                   analyticsShots.map((shot) => {
                     const isPenalty = shot.attackType === 'strafworp';
                     const position = isPenalty
-                      ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id))
+                      ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id), ZONES)
                       : { x: shot.x, y: shot.y };
                     return (
                       <div
@@ -3476,7 +3335,7 @@ const AnalyticsView = ({ seasonId, teamId, userId }) => {
                   analyticsShots.map((shot) => {
                     const isPenalty = shot.attackType === 'strafworp';
                     const position = isPenalty
-                      ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id))
+                      ? penaltyPosition(penaltyShots.findIndex((item) => item.id === shot.id), ZONES)
                       : { x: shot.x, y: shot.y };
                     return (
                       <div

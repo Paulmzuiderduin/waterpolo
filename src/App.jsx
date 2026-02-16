@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Download,
   Plus,
-  X,
   BarChart2,
   Users,
   IdCard,
@@ -75,16 +74,6 @@ const HEAT_TYPES = [
   { key: 'miss', label: '% Miss', metric: 'miss', color: 'viridisReverse' },
   { key: 'distance', label: '📏 Distance', metric: 'distance', color: 'none' }
 ];
-
-const DEFAULT_MATCH = () => ({
-  info: {
-    id: `match_${Date.now()}`,
-    name: 'New match',
-    date: new Date().toISOString().slice(0, 10),
-    opponent: ''
-  },
-  shots: []
-});
 
 const notifyDataUpdated = () => {
   if (typeof window === 'undefined') return;
@@ -787,8 +776,6 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
     attackTypes: [],
     matches: []
   });
-  const [rosterForm, setRosterForm] = useState({ name: '', capNumber: '' });
-  const [editingRosterId, setEditingRosterId] = useState(null);
   const [lastShotMeta, setLastShotMeta] = useState(() => ({
     period: '1',
     time: formatShotTime()
@@ -994,119 +981,6 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
     notifyDataUpdated();
   };
 
-  const handleRosterAdd = async () => {
-    if (!rosterForm.name || !rosterForm.capNumber) {
-      setError('Enter name and cap number.');
-      return;
-    }
-    let data;
-    if (editingRosterId) {
-      const { data: updated, error: updateError } = await supabase
-        .from('roster')
-        .update({ name: rosterForm.name, cap_number: rosterForm.capNumber })
-        .eq('id', editingRosterId)
-        .select('*')
-        .single();
-      if (updateError) return;
-      data = updated;
-    } else {
-      const { data: inserted, error: insertError } = await supabase
-        .from('roster')
-        .insert({
-          team_id: teamId,
-          user_id: userId,
-          name: rosterForm.name,
-          cap_number: rosterForm.capNumber
-        })
-        .select('*')
-        .single();
-      if (insertError) return;
-      data = inserted;
-    }
-    const nextRoster = roster
-      .map((player) =>
-        player.id === editingRosterId
-          ? { id: data.id, name: data.name, capNumber: data.cap_number }
-          : player
-      )
-      .concat(
-        editingRosterId
-          ? []
-          : [{ id: data.id, name: data.name, capNumber: data.cap_number }]
-      );
-    setRoster(nextRoster);
-    setRosterForm({ name: '', capNumber: '' });
-    setEditingRosterId(null);
-    setError('');
-    notifyDataUpdated();
-  };
-
-  const removeRosterPlayer = async (playerId) => {
-    if (!window.confirm('Delete this player?')) return;
-    const { error: deleteError } = await supabase.from('roster').delete().eq('id', playerId);
-    if (deleteError) return;
-    const nextRoster = roster.filter((player) => player.id !== playerId);
-    setRoster(nextRoster);
-    notifyDataUpdated();
-  };
-
-  const addMatch = async () => {
-    const draft = DEFAULT_MATCH();
-    const { data, error: insertError } = await supabase
-      .from('matches')
-      .insert({
-        name: draft.info.name,
-        date: draft.info.date,
-        opponent_name: draft.info.opponent,
-        season_id: seasonId,
-        team_id: teamId,
-        user_id: userId
-      })
-      .select('*')
-      .single();
-    if (insertError) return;
-    const fresh = {
-      info: { id: data.id, name: data.name, date: data.date, opponent: data.opponent_name || '' },
-      shots: []
-    };
-    const nextMatches = [...matches, fresh];
-    setMatches(nextMatches);
-    setCurrentMatchId(fresh.info.id);
-    notifyDataUpdated();
-  };
-
-  const deleteMatch = async (matchId) => {
-    if (!window.confirm('Delete this match?')) return;
-    const { error: deleteError } = await supabase.from('matches').delete().eq('id', matchId);
-    if (deleteError) return;
-    const nextMatches = matches.filter((match) => match.info.id !== matchId);
-    setMatches(nextMatches);
-    setCurrentMatchId(nextMatches[0]?.info?.id || '');
-    notifyDataUpdated();
-  };
-
-  const updateMatchInfo = async (field, value) => {
-    if (!currentMatch) return;
-    const { error: updateError } = await supabase
-      .from('matches')
-      .update({ [field]: value })
-      .eq('id', currentMatch.info.id);
-    if (updateError) return;
-    const nextMatches = matches.map((match) =>
-      match.info.id === currentMatch.info.id
-        ? {
-            ...match,
-            info: {
-              ...match.info,
-              ...(field === 'opponent_name' ? { opponent: value } : { [field]: value })
-            }
-          }
-        : match
-    );
-    setMatches(nextMatches);
-    notifyDataUpdated();
-  };
-
   const filteredShots = useMemo(() => {
     const relevantMatches = seasonMode
       ? matches.filter((match) =>
@@ -1249,50 +1123,27 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
                 Season mode
               </button>
             </div>
-            <button
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
-              onClick={addMatch}
-            >
-              <Plus size={16} />
-              New match
-            </button>
+            {matches.length === 0 && (
+              <div className="text-xs font-semibold text-slate-500">
+                Create matches in the `Matches` tab first.
+              </div>
+            )}
           </div>
 
-          {!seasonMode && currentMatch && (
+          {!seasonMode && (
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_160px]">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Match name</label>
-                  <input
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    value={currentMatch.info.name}
-                    onChange={(event) => updateMatchInfo('name', event.target.value)}
-                  />
+              <h3 className="text-sm font-semibold text-slate-700">Match selection</h3>
+              {matches.length === 0 && (
+                <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  No matches available. Create a match in the `Matches` tab.
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Opponent</label>
-                  <input
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    value={currentMatch.info.opponent || ''}
-                    onChange={(event) => updateMatchInfo('opponent_name', event.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Date</label>
-                  <input
-                    type="date"
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    value={currentMatch.info.date}
-                    onChange={(event) => updateMatchInfo('date', event.target.value)}
-                  />
-                </div>
-              </div>
+              )}
               <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                 {matches.map((match) => (
                   <button
                     key={match.info.id}
                     className={`rounded-full px-3 py-1 ${
-                      match.info.id === currentMatch.info.id
+                      match.info.id === currentMatch?.info?.id
                         ? 'bg-cyan-600 text-white'
                         : 'bg-slate-100 text-slate-600'
                     }`}
@@ -1301,16 +1152,21 @@ const ShotmapView = ({ seasonId, teamId, userId }) => {
                     {match.info.name}
                   </button>
                 ))}
-                {matches.length > 1 && (
-                  <button
-                    className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-red-500"
-                    onClick={() => deleteMatch(currentMatch.info.id)}
-                  >
-                    <X size={14} />
-                    Delete match
-                  </button>
-                )}
               </div>
+              {currentMatch && (
+                <div className="mt-3 text-xs text-slate-500">
+                  {currentMatch.info.name}
+                  {currentMatch.info.opponent ? ` vs ${currentMatch.info.opponent}` : ''} · {currentMatch.info.date}
+                </div>
+              )}
+              {!currentMatch && matches.length > 0 && (
+                <div className="mt-3 text-xs text-slate-500">Select a match to track shots.</div>
+              )}
+              {!currentMatch && matches.length === 0 && (
+                <div className="mt-3 text-xs text-slate-500">
+                  Tracking is disabled until a match is created in `Matches`.
+                </div>
+              )}
             </div>
           )}
 
@@ -2484,11 +2340,19 @@ const SettingsView = ({
   </div>
 );
 
-const MatchesView = ({ seasonId, teamId }) => {
+const MatchesView = ({ seasonId, teamId, userId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [matches, setMatches] = useState([]);
   const [query, setQuery] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState({
+    name: 'New match',
+    opponentName: '',
+    date: new Date().toISOString().slice(0, 10)
+  });
+  const [editingId, setEditingId] = useState('');
+  const [editForm, setEditForm] = useState({ name: '', opponentName: '', date: '' });
 
   useEffect(() => {
     if (!seasonId || !teamId) return;
@@ -2539,6 +2403,127 @@ const MatchesView = ({ seasonId, teamId }) => {
     [filteredMatches]
   );
 
+  const createMatch = async () => {
+    if (!creating.name.trim()) {
+      setError('Match name is required.');
+      return;
+    }
+    try {
+      setSaving(true);
+      const { data, error: insertError } = await supabase
+        .from('matches')
+        .insert({
+          name: creating.name.trim(),
+          date: creating.date || new Date().toISOString().slice(0, 10),
+          opponent_name: creating.opponentName.trim(),
+          season_id: seasonId,
+          team_id: teamId,
+          user_id: userId
+        })
+        .select('*')
+        .single();
+      if (insertError) throw insertError;
+      setMatches((prev) => [
+        {
+          id: data.id,
+          name: data.name,
+          date: data.date,
+          opponentName: data.opponent_name || '',
+          shots: 0,
+          shotGoals: 0,
+          shotSaved: 0,
+          shotMissed: 0,
+          penalties: 0,
+          events: 0,
+          goals: 0,
+          exclusions: 0,
+          fouls: 0,
+          turnoversWon: 0,
+          turnoversLost: 0,
+          possessions: 0,
+          passes: 0
+        },
+        ...prev
+      ]);
+      setCreating({
+        name: 'New match',
+        opponentName: '',
+        date: new Date().toISOString().slice(0, 10)
+      });
+      setError('');
+      notifyDataUpdated();
+    } catch {
+      setError('Failed to create match.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEdit = (match) => {
+    setEditingId(match.id);
+    setEditForm({
+      name: match.name || '',
+      opponentName: match.opponentName || '',
+      date: match.date || new Date().toISOString().slice(0, 10)
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    if (!editForm.name.trim()) {
+      setError('Match name is required.');
+      return;
+    }
+    try {
+      setSaving(true);
+      const { error: updateError } = await supabase
+        .from('matches')
+        .update({
+          name: editForm.name.trim(),
+          opponent_name: editForm.opponentName.trim(),
+          date: editForm.date
+        })
+        .eq('id', editingId);
+      if (updateError) throw updateError;
+      setMatches((prev) =>
+        prev.map((match) =>
+          match.id === editingId
+            ? {
+                ...match,
+                name: editForm.name.trim(),
+                opponentName: editForm.opponentName.trim(),
+                date: editForm.date
+              }
+            : match
+        )
+      );
+      setEditingId('');
+      setError('');
+      notifyDataUpdated();
+    } catch {
+      setError('Failed to update match.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteMatch = async (matchId) => {
+    if (!window.confirm('Delete this match and all linked data?')) return;
+    try {
+      setSaving(true);
+      const { error: deleteError } = await supabase.from('matches').delete().eq('id', matchId);
+      if (deleteError) throw deleteError;
+      setMatches((prev) => prev.filter((match) => match.id !== matchId));
+      if (editingId === matchId) setEditingId('');
+      setError('');
+      notifyDataUpdated();
+    } catch {
+      setError('Failed to delete match.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-10 text-slate-700">Loading...</div>;
   }
@@ -2562,6 +2547,40 @@ const MatchesView = ({ seasonId, teamId }) => {
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
+
+      <div className="rounded-2xl bg-white p-4 shadow-sm">
+        <h3 className="text-sm font-semibold text-slate-700">Create match</h3>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_160px_auto]">
+          <input
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            value={creating.name}
+            onChange={(event) => setCreating((prev) => ({ ...prev, name: event.target.value }))}
+            placeholder="Match name"
+          />
+          <input
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            value={creating.opponentName}
+            onChange={(event) => setCreating((prev) => ({ ...prev, opponentName: event.target.value }))}
+            placeholder="Opponent"
+          />
+          <input
+            type="date"
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            value={creating.date}
+            onChange={(event) => setCreating((prev) => ({ ...prev, date: event.target.value }))}
+          />
+          <button
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            onClick={createMatch}
+            disabled={saving}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Plus size={14} />
+              Create
+            </span>
+          </button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <div className="rounded-xl bg-white p-4 shadow-sm">
@@ -2596,12 +2615,13 @@ const MatchesView = ({ seasonId, teamId }) => {
                 <th className="px-4 py-3">Shots</th>
                 <th className="px-4 py-3">Scoring Events</th>
                 <th className="px-4 py-3">Possession</th>
+                <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredMatches.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-slate-500" colSpan={5}>
+                  <td className="px-4 py-6 text-slate-500" colSpan={6}>
                     No matches found.
                   </td>
                 </tr>
@@ -2609,12 +2629,43 @@ const MatchesView = ({ seasonId, teamId }) => {
               {filteredMatches.map((match) => (
                 <tr key={match.id} className="border-t border-slate-100 text-slate-700">
                   <td className="px-4 py-3">
-                    <div className="font-semibold text-slate-900">{match.name || 'Match'}</div>
-                    <div className="text-xs text-slate-500">
-                      {match.opponentName ? `vs ${match.opponentName}` : 'No opponent set'}
-                    </div>
+                    {editingId === match.id ? (
+                      <div className="space-y-2">
+                        <input
+                          className="w-full rounded-lg border border-slate-200 px-2 py-1 text-sm"
+                          value={editForm.name}
+                          onChange={(event) => setEditForm((prev) => ({ ...prev, name: event.target.value }))}
+                        />
+                        <input
+                          className="w-full rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                          value={editForm.opponentName}
+                          onChange={(event) =>
+                            setEditForm((prev) => ({ ...prev, opponentName: event.target.value }))
+                          }
+                          placeholder="Opponent"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="font-semibold text-slate-900">{match.name || 'Match'}</div>
+                        <div className="text-xs text-slate-500">
+                          {match.opponentName ? `vs ${match.opponentName}` : 'No opponent set'}
+                        </div>
+                      </>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{match.date || '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {editingId === match.id ? (
+                      <input
+                        type="date"
+                        className="rounded-lg border border-slate-200 px-2 py-1 text-sm"
+                        value={editForm.date}
+                        onChange={(event) => setEditForm((prev) => ({ ...prev, date: event.target.value }))}
+                      />
+                    ) : (
+                      match.date || '—'
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-xs text-slate-600">
                     <div>Total: {match.shots}</div>
                     <div>Goal: {match.shotGoals}</div>
@@ -2633,6 +2684,42 @@ const MatchesView = ({ seasonId, teamId }) => {
                   <td className="px-4 py-3 text-xs text-slate-600">
                     <div>Possessions: {match.possessions}</div>
                     <div>Passes: {match.passes}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      {editingId === match.id ? (
+                        <>
+                          <button
+                            className="rounded-md bg-slate-900 px-2 py-1 font-semibold text-white disabled:opacity-50"
+                            onClick={saveEdit}
+                            disabled={saving}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="rounded-md border border-slate-200 px-2 py-1 font-semibold text-slate-700"
+                            onClick={() => setEditingId('')}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className="rounded-md border border-slate-200 px-2 py-1 font-semibold text-slate-700"
+                            onClick={() => startEdit(match)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="rounded-md border border-red-200 px-2 py-1 font-semibold text-red-600"
+                            onClick={() => deleteMatch(match.id)}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -3893,6 +3980,7 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
                   value={currentMatchId}
                   onChange={(event) => setCurrentMatchId(event.target.value)}
                 >
+                  {matches.length === 0 && <option value="">No matches</option>}
                   {matches.map((match) => (
                     <option key={match.id} value={match.id}>
                       {match.name}
@@ -3901,41 +3989,12 @@ const ScoringView = ({ seasonId, teamId, userId }) => {
                   ))}
                 </select>
               </div>
-              <button
-                className="mt-6 inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
-                onClick={async () => {
-                  const draft = DEFAULT_MATCH();
-                  const { data, error: insertError } = await supabase
-                    .from('matches')
-                    .insert({
-                      name: draft.info.name,
-                      date: draft.info.date,
-                      opponent_name: draft.info.opponent,
-                      season_id: seasonId,
-                      team_id: teamId,
-                      user_id: userId
-                    })
-                    .select('*')
-                    .single();
-                  if (insertError) {
-                    setError('Failed to create match.');
-                    return;
-                  }
-                  const fresh = {
-                    id: data.id,
-                    name: data.name,
-                    date: data.date,
-                    opponent_name: data.opponent_name || ''
-                  };
-                  setMatches((prev) => [...prev, fresh]);
-                  setCurrentMatchId(fresh.id);
-                  notifyDataUpdated();
-                }}
-              >
-                <Plus size={14} />
-                New match
-              </button>
             </div>
+            {matches.length === 0 && (
+              <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                No matches found. Create one in the `Matches` tab.
+              </div>
+            )}
 
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
               <div>

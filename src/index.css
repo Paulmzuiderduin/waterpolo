@@ -32,29 +32,28 @@ body {
   min-height: 100vh;
 }
 
-.bg-white {
-  background-color: rgba(255, 255, 255, 0.88) !important;
+.wp-surface {
+  background-color: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(18px);
 }
 
-.shadow-sm {
-  box-shadow: 0 24px 60px -44px rgba(16, 22, 34, 0.45) !important;
+.wp-card {
+  background-color: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 60px -44px rgba(16, 22, 34, 0.45);
+  border: 1px solid rgba(16, 22, 34, 0.08);
 }
 
-.bg-slate-900 {
-  background-color: var(--primary) !important;
+.wp-primary-bg {
+  background-color: var(--primary);
 }
 
-.text-cyan-700 {
-  color: var(--primary) !important;
+.wp-primary-text {
+  color: var(--primary);
 }
 
-.border-slate-200 {
-  border-color: rgba(16, 22, 34, 0.14) !important;
-}
-
-.border-slate-100 {
-  border-color: rgba(16, 22, 34, 0.08) !important;
+.wp-border {
+  border-color: rgba(16, 22, 34, 0.14);
 }
 
 select {
@@ -71,15 +70,15 @@ select {
     calc(100% - 2.4rem) 0.65rem;
   background-size: 6px 6px, 6px 6px, 1px 1.6rem;
   background-repeat: no-repeat;
-  padding-right: 2.6rem !important;
+  padding-right: 2.6rem;
   border-radius: 14px;
-  border-color: rgba(16, 22, 34, 0.18) !important;
+  border-color: rgba(16, 22, 34, 0.18);
   background-color: rgba(255, 255, 255, 0.9);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 select:focus {
   outline: none;
-  border-color: rgba(37, 106, 244, 0.75) !important;
+  border-color: rgba(37, 106, 244, 0.75);
   box-shadow: 0 0 0 3px rgba(37, 106, 244, 0.2);
 }

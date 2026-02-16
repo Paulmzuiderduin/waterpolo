@@ -12,12 +12,12 @@ const MobileNav = ({
   onOpenPrivacy
 }) => (
   <>
-    <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-slate-200 bg-white p-2 lg:hidden">
+    <div className="wp-surface wp-border fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t p-2 lg:hidden">
       {primaryItems.map((item) => (
         <button
           key={item.key}
           className={`flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold ${
-            activeTab === item.key ? 'text-cyan-700' : 'text-slate-500'
+            activeTab === item.key ? 'wp-primary-text' : 'text-slate-500'
           }`}
           onClick={() => onSelectTab(item.key)}
         >
@@ -28,7 +28,7 @@ const MobileNav = ({
       <button
         className={`flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold ${
           overflowItems.some((item) => item.key === activeTab) || activeTab === 'privacy'
-            ? 'text-cyan-700'
+            ? 'wp-primary-text'
             : 'text-slate-500'
         }`}
         onClick={onToggleMobileMenu}
@@ -48,7 +48,7 @@ const MobileNav = ({
               <button
                 key={item.key}
                 className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
-                  activeTab === item.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
+                  activeTab === item.key ? 'wp-primary-bg text-white' : 'bg-slate-100 text-slate-700'
                 }`}
                 onClick={() => onSelectTab(item.key)}
               >
@@ -58,7 +58,7 @@ const MobileNav = ({
             ))}
             <button
               className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
-                activeTab === 'privacy' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
+                activeTab === 'privacy' ? 'wp-primary-bg text-white' : 'bg-slate-100 text-slate-700'
               }`}
               onClick={onOpenPrivacy}
             >

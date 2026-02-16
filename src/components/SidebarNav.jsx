@@ -8,10 +8,10 @@ const SidebarNav = ({
   onSwitchTeam,
   onSignOut
 }) => (
-  <aside className="fixed left-0 top-0 hidden h-full w-64 flex-col border-r border-slate-200 bg-white p-6 shadow-sm lg:flex">
+  <aside className="wp-surface wp-border fixed left-0 top-0 hidden h-full w-64 flex-col border-r p-6 shadow-sm lg:flex">
     <div className="mb-10">
       <p className="text-xl font-black uppercase italic tracking-tight text-slate-900">
-        Waterpolo <span className="text-cyan-700">Hub</span>
+        Waterpolo <span className="wp-primary-text">Hub</span>
       </p>
       <p className="text-xs text-slate-500">{selectedSeasonName}</p>
     </div>
@@ -20,7 +20,7 @@ const SidebarNav = ({
         <button
           key={item.key}
           className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
-            activeTab === item.key ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+            activeTab === item.key ? 'wp-primary-bg text-white' : 'text-slate-600 hover:bg-slate-100'
           }`}
           onClick={() => onSelectTab(item.key)}
         >
@@ -37,7 +37,7 @@ const SidebarNav = ({
         Switch team
       </button>
       <button
-        className="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+        className="wp-primary-bg w-full rounded-xl px-4 py-2 text-sm font-semibold text-white"
         onClick={onSignOut}
       >
         Sign out

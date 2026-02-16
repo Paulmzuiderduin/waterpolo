@@ -11,10 +11,10 @@ const AppHeader = ({
   selectedTeamId,
   onSelectTeam
 }) => (
-  <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/85 px-6 py-4 backdrop-blur-md">
+  <header className="wp-surface wp-border sticky top-0 z-40 border-b px-6 py-4">
     <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Water Polo Platform</p>
+        <p className="wp-primary-text text-xs font-semibold uppercase tracking-wide">Water Polo Platform</p>
         <h1 className="text-2xl font-bold text-slate-900 lg:text-3xl">Good evening, Paul</h1>
         <p className="text-xs text-slate-500">
           {selectedSeasonName} · {selectedTeamName} · {userEmail}

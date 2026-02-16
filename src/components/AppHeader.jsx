@@ -22,7 +22,7 @@ const AppHeader = ({
       </div>
       <div className="flex items-center gap-2">
         <select
-          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm"
+          className="min-w-[9.5rem] rounded-full border border-slate-200 bg-white px-3 py-2 pr-11 text-sm"
           value={selectedSeasonId}
           onChange={(event) => onSelectSeason(event.target.value)}
         >
@@ -33,7 +33,7 @@ const AppHeader = ({
           ))}
         </select>
         <select
-          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm"
+          className="min-w-[9rem] rounded-full border border-slate-200 bg-white px-3 py-2 pr-11 text-sm"
           value={selectedTeamId}
           onChange={(event) => onSelectTeam(event.target.value)}
           disabled={teamOptions.length === 0}

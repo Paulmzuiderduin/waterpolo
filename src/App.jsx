@@ -895,7 +895,7 @@ const App = () => {
             <div className="flex items-center gap-4">
               <a
                 className="font-semibold text-cyan-700 underline decoration-transparent transition hover:decoration-current"
-                href="mailto:info@paulzuiderduin.com?subject=Waterpolo%20Feature%20Request"
+                href="https://mail.google.com/mail/?view=cm&fs=1&to=info@paulzuiderduin.com&su=Waterpolo%20Feature%20Request"
               >
                 Request Feature
               </a>
@@ -1039,7 +1039,7 @@ const App = () => {
           <div className="flex items-center gap-4">
             <a
               className="font-semibold text-cyan-700 underline decoration-transparent transition hover:decoration-current"
-              href="mailto:info@paulzuiderduin.com?subject=Waterpolo%20Feature%20Request"
+              href="https://mail.google.com/mail/?view=cm&fs=1&to=info@paulzuiderduin.com&su=Waterpolo%20Feature%20Request"
             >
               Request Feature
             </a>

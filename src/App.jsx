@@ -72,6 +72,66 @@ const HEAT_TYPES = [
   { key: 'miss', label: '% Miss', metric: 'miss', color: 'viridisReverse' },
   { key: 'distance', label: '📏 Distance', metric: 'distance', color: 'none' }
 ];
+const IS_E2E_SMOKE = import.meta.env.VITE_E2E_SMOKE === '1';
+const E2E_DATE = '2026-01-20';
+const E2E_SAMPLE = {
+  roster: [
+    { id: 'smoke-r1', name: 'Alex Example', cap_number: '1', dominant_hand: 'right', birthday: '2000-01-01' },
+    { id: 'smoke-r2', name: 'Sam Demo', cap_number: '5', dominant_hand: 'left', birthday: '2002-06-05' }
+  ],
+  matches: [
+    { id: 'smoke-m1', name: 'Demo Match', date: E2E_DATE, opponent_name: 'Test Club' }
+  ],
+  shots: [
+    {
+      id: 'smoke-s1',
+      match_id: 'smoke-m1',
+      x: 42,
+      y: 24,
+      zone: 6,
+      result: 'raak',
+      player_cap: '1',
+      attack_type: '6vs6',
+      period: '1',
+      time: '6:21'
+    }
+  ],
+  events: [
+    {
+      id: 'smoke-e1',
+      match_id: 'smoke-m1',
+      event_type: 'goal',
+      team_side: 'for',
+      player_cap: '1',
+      period: '1',
+      time: '6:21',
+      created_at: new Date().toISOString()
+    }
+  ],
+  possessions: [
+    {
+      id: 'smoke-p1',
+      match_id: 'smoke-m1',
+      outcome: 'goal',
+      created_at: new Date().toISOString()
+    }
+  ],
+  passes: [
+    {
+      id: 'smoke-pass-1',
+      match_id: 'smoke-m1',
+      possession_id: 'smoke-p1',
+      from_player_cap: '1',
+      to_player_cap: '5',
+      from_x: 30,
+      from_y: 70,
+      to_x: 50,
+      to_y: 45,
+      sequence: 1,
+      created_at: new Date().toISOString()
+    }
+  ]
+};
 
 const notifyDataUpdated = () => {
   if (typeof window === 'undefined') return;
@@ -79,6 +139,33 @@ const notifyDataUpdated = () => {
 };
 
 const loadTeamData = async (teamId) => {
+  if (IS_E2E_SMOKE) {
+    return {
+      roster: E2E_SAMPLE.roster,
+      matches: E2E_SAMPLE.matches.map((match) => ({
+        info: {
+          id: match.id,
+          name: match.name,
+          date: match.date,
+          opponent: match.opponent_name || ''
+        },
+        shots: E2E_SAMPLE.shots
+          .filter((shot) => shot.match_id === match.id)
+          .map((shot) => ({
+            id: shot.id,
+            matchId: shot.match_id,
+            x: shot.x,
+            y: shot.y,
+            zone: shot.zone,
+            result: shot.result,
+            playerCap: shot.player_cap,
+            attackType: shot.attack_type,
+            time: shot.time,
+            period: shot.period
+          }))
+      }))
+    };
+  }
   if (!teamId) return { roster: [], matches: [] };
   const [rosterRes, matchRes, shotRes] = await Promise.all([
     supabase.from('roster').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
@@ -120,6 +207,13 @@ const loadTeamData = async (teamId) => {
 };
 
 const loadTeamScoring = async (teamId) => {
+  if (IS_E2E_SMOKE) {
+    return {
+      roster: E2E_SAMPLE.roster,
+      matches: E2E_SAMPLE.matches,
+      events: E2E_SAMPLE.events
+    };
+  }
   if (!teamId) return { roster: [], matches: [], events: [] };
   const [rosterRes, matchRes, eventRes] = await Promise.all([
     supabase.from('roster').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
@@ -137,6 +231,14 @@ const loadTeamScoring = async (teamId) => {
 };
 
 const loadTeamPossessions = async (teamId) => {
+  if (IS_E2E_SMOKE) {
+    return {
+      roster: E2E_SAMPLE.roster,
+      matches: E2E_SAMPLE.matches,
+      possessions: E2E_SAMPLE.possessions,
+      passes: E2E_SAMPLE.passes
+    };
+  }
   if (!teamId) return { roster: [], matches: [], possessions: [], passes: [] };
   const [rosterRes, matchRes, possessionRes, passRes] = await Promise.all([
     supabase.from('roster').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
@@ -156,6 +258,29 @@ const loadTeamPossessions = async (teamId) => {
 };
 
 const loadTeamMatchesOverview = async (teamId) => {
+  if (IS_E2E_SMOKE) {
+    return [
+      {
+        id: 'smoke-m1',
+        name: 'Demo Match',
+        date: E2E_DATE,
+        opponentName: 'Test Club',
+        shots: 1,
+        shotGoals: 1,
+        shotSaved: 0,
+        shotMissed: 0,
+        penalties: 0,
+        events: 1,
+        goals: 1,
+        exclusions: 0,
+        fouls: 0,
+        turnoversWon: 0,
+        turnoversLost: 0,
+        possessions: 1,
+        passes: 1
+      }
+    ];
+  }
   if (!teamId) return [];
   const [matchRes, shotRes, eventRes, possessionRes, passRes] = await Promise.all([
     supabase
@@ -767,12 +892,20 @@ const App = () => {
         <footer className="mx-auto mt-8 max-w-5xl px-6 pb-8 text-xs text-slate-500">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white/70 px-4 py-3 shadow-sm">
             <span>© {new Date().getFullYear()} Waterpolo Shotmap & Analytics</span>
-            <button
-              className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
-              onClick={() => setActiveTab('privacy')}
-            >
-              Privacy
-            </button>
+            <div className="flex items-center gap-4">
+              <a
+                className="font-semibold text-cyan-700 underline decoration-transparent transition hover:decoration-current"
+                href="mailto:info@paulzuiderduin.com?subject=Waterpolo%20Feature%20Request"
+              >
+                Request Feature
+              </a>
+              <button
+                className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
+                onClick={() => setActiveTab('privacy')}
+              >
+                Privacy
+              </button>
+            </div>
           </div>
         </footer>
         {renderUiOverlays()}
@@ -903,12 +1036,20 @@ const App = () => {
       <footer className="mx-auto mb-14 max-w-7xl px-6 text-xs text-slate-500 lg:mb-6">
         <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
           <span>© {new Date().getFullYear()} Waterpolo Hub</span>
-          <button
-            className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
-            onClick={() => setActiveTab('privacy')}
-          >
-            Privacy Policy
-          </button>
+          <div className="flex items-center gap-4">
+            <a
+              className="font-semibold text-cyan-700 underline decoration-transparent transition hover:decoration-current"
+              href="mailto:info@paulzuiderduin.com?subject=Waterpolo%20Feature%20Request"
+            >
+              Request Feature
+            </a>
+            <button
+              className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
+              onClick={() => setActiveTab('privacy')}
+            >
+              Privacy Policy
+            </button>
+          </div>
         </div>
       </footer>
 

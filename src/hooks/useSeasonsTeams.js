@@ -4,8 +4,24 @@ import { supabase } from '../lib/supabase';
 export const useSeasonsTeams = (userId) => {
   const [seasons, setSeasons] = useState([]);
   const [loadingSeasons, setLoadingSeasons] = useState(true);
+  const isSmokeMode = import.meta.env.VITE_E2E_SMOKE === '1';
 
   useEffect(() => {
+    if (isSmokeMode) {
+      setSeasons([
+        {
+          id: 'smoke-season-1',
+          name: '2025-2026',
+          teams: [
+            { id: 'smoke-team-1', name: 'dwt H1', season_id: 'smoke-season-1' },
+            { id: 'smoke-team-2', name: 'dwt U18', season_id: 'smoke-season-1' }
+          ]
+        }
+      ]);
+      setLoadingSeasons(false);
+      return;
+    }
+
     if (!userId) {
       setSeasons([]);
       setLoadingSeasons(false);
@@ -38,7 +54,7 @@ export const useSeasonsTeams = (userId) => {
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, [userId, isSmokeMode]);
 
   return { seasons, setSeasons, loadingSeasons };
 };

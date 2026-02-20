@@ -4134,6 +4134,17 @@ const ScoringView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
     });
   }, [filteredEvents, currentMatchId]);
 
+  const matchEventsSorted = useMemo(() => {
+    if (!currentMatchId) return [];
+    return [...events]
+      .filter((evt) => evt.matchId === currentMatchId)
+      .sort((a, b) => {
+        const periodDiff = (PERIOD_ORDER[b.period] || 0) - (PERIOD_ORDER[a.period] || 0);
+        if (periodDiff !== 0) return periodDiff;
+        return timeToSeconds(b.time) - timeToSeconds(a.time);
+      });
+  }, [events, currentMatchId]);
+
   const stats = useMemo(() => {
     const totals = {
       goal: 0,
@@ -4298,12 +4309,12 @@ const ScoringView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.95fr]">
         <div className="space-y-4">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Match</label>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="min-w-[260px] flex-1">
+                <label className="text-xs font-semibold text-slate-500">Selected match</label>
                 <select
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   value={currentMatchId}
@@ -4318,129 +4329,134 @@ const ScoringView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
                   ))}
                 </select>
               </div>
+              <button
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
+                onClick={undoLastEvent}
+                disabled={!currentMatchId}
+              >
+                Undo last
+              </button>
             </div>
             {matches.length === 0 && (
               <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                 No matches found. Create one in the `Matches` tab.
               </div>
             )}
-
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="text-xs font-semibold text-slate-500">Players</label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                      form.playerCap === '' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-                    }`}
-                    onClick={() => setForm((prev) => ({ ...prev, playerCap: '' }))}
-                  >
-                    Team
-                  </button>
-                  {roster.map((player) => (
+                <label className="text-xs font-semibold text-slate-500">Period</label>
+                <select
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={form.period}
+                  onChange={(event) => setForm((prev) => ({ ...prev, period: event.target.value }))}
+                >
+                  {PERIODS.map((period) => (
+                    <option key={period} value={period}>
+                      P{period}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500">Time</label>
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="7"
+                    className="w-20 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    value={splitTimeParts(form.time).minutes}
+                    onChange={(event) => {
+                      const minutes = Math.min(7, Math.max(0, Number(event.target.value)));
+                      const seconds = splitTimeParts(form.time).seconds;
+                      setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
+                    }}
+                  />
+                  <span className="text-xs font-semibold text-slate-500">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    className="w-20 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    value={splitTimeParts(form.time).seconds}
+                    onChange={(event) => {
+                      const minutes = splitTimeParts(form.time).minutes;
+                      const seconds = Math.min(59, Math.max(0, Number(event.target.value)));
+                      setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
+                    }}
+                  />
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px] font-semibold text-slate-600">
+                  {['7:00', '6:00', '5:00', '4:00', '3:00', '2:00', '1:00'].map((preset) => (
                     <button
-                      key={player.id}
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        form.playerCap === player.capNumber
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                      onClick={() => setForm((prev) => ({ ...prev, playerCap: player.capNumber }))}
+                      key={preset}
+                      className="rounded-full border border-slate-200 px-2 py-1"
+                      onClick={() => setForm((prev) => ({ ...prev, time: preset }))}
                     >
-                      #{player.capNumber}
+                      {preset}
                     </button>
                   ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Period</label>
-                  <select
-                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    value={form.period}
-                    onChange={(event) => setForm((prev) => ({ ...prev, period: event.target.value }))}
+                  <button
+                    className="rounded-full border border-slate-200 px-2 py-1"
+                    onClick={() => {
+                      const total = Math.max(0, timeToSeconds(form.time) - 10);
+                      const minutes = Math.floor(total / 60);
+                      const seconds = total % 60;
+                      setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
+                    }}
                   >
-                    {PERIODS.map((period) => (
-                      <option key={period} value={period}>
-                        P{period}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Time</label>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      max="7"
-                      className="w-16 rounded-lg border border-slate-200 px-3 py-2"
-                      value={splitTimeParts(form.time).minutes}
-                      onChange={(event) => {
-                        const minutes = Math.min(7, Math.max(0, Number(event.target.value)));
-                        const seconds = splitTimeParts(form.time).seconds;
-                        setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
-                      }}
-                    />
-                    <span className="text-xs font-semibold text-slate-500">min</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="59"
-                      className="w-16 rounded-lg border border-slate-200 px-3 py-2"
-                      value={splitTimeParts(form.time).seconds}
-                      onChange={(event) => {
-                        const minutes = splitTimeParts(form.time).minutes;
-                        const seconds = Math.min(59, Math.max(0, Number(event.target.value)));
-                        setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
-                      }}
-                    />
-                    <span className="text-xs font-semibold text-slate-500">sec</span>
-                    <div className="w-full">
-                      <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px] font-semibold text-slate-600">
-                        {['7:00', '6:00', '5:00', '4:00', '3:00', '2:00', '1:00'].map((preset) => (
-                          <button
-                            key={preset}
-                            className="rounded-full border border-slate-200 px-2 py-1"
-                            onClick={() => setForm((prev) => ({ ...prev, time: preset }))}
-                          >
-                            {preset}
-                          </button>
-                        ))}
-                        <button
-                          className="rounded-full border border-slate-200 px-2 py-1"
-                          onClick={() => {
-                            const total = Math.max(0, timeToSeconds(form.time) - 10);
-                            const minutes = Math.floor(total / 60);
-                            const seconds = total % 60;
-                            setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
-                          }}
-                        >
-                          -10s
-                        </button>
-                        <button
-                          className="rounded-full border border-slate-200 px-2 py-1"
-                          onClick={() => {
-                            const total = Math.min(7 * 60, timeToSeconds(form.time) + 10);
-                            const minutes = Math.floor(total / 60);
-                            const seconds = total % 60;
-                            setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
-                          }}
-                        >
-                          +10s
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                    -10s
+                  </button>
+                  <button
+                    className="rounded-full border border-slate-200 px-2 py-1"
+                    onClick={() => {
+                      const total = Math.min(7 * 60, timeToSeconds(form.time) + 10);
+                      const minutes = Math.floor(total / 60);
+                      const seconds = total % 60;
+                      setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
+                    }}
+                  >
+                    +10s
+                  </button>
                 </div>
               </div>
             </div>
+          </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Select player</h3>
+            <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+              <button
+                className={`rounded-xl border px-3 py-3 text-sm font-semibold ${
+                  form.playerCap === '' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-slate-50 text-slate-700'
+                }`}
+                onClick={() => setForm((prev) => ({ ...prev, playerCap: '' }))}
+              >
+                Team
+              </button>
+              {roster.map((player) => (
+                <button
+                  key={player.id}
+                  className={`rounded-xl border px-3 py-3 text-sm font-semibold ${
+                    form.playerCap === player.capNumber
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-slate-50 text-slate-700'
+                  }`}
+                  onClick={() => setForm((prev) => ({ ...prev, playerCap: player.capNumber }))}
+                >
+                  #{player.capNumber}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Log action</h3>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {SCORING_EVENTS.map((evt) => (
                 <button
                   key={evt.key}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold text-white ${evt.color}`}
+                  className={`rounded-xl px-4 py-3 text-sm font-semibold text-white ${evt.color}`}
                   onClick={() => saveEvent(evt.key)}
                 >
                   + {evt.label}
@@ -4456,21 +4472,16 @@ const ScoringView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
               </div>
             )}
           </div>
+        </div>
 
+        <div className="space-y-4">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-slate-700">Event log</h3>
-              <button
-                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
-                onClick={undoLastEvent}
-                disabled={!currentMatchId}
-              >
-                Undo last
-              </button>
+              <h3 className="text-sm font-semibold text-slate-700">Event log (selected match)</h3>
             </div>
-            <div className="mt-3 space-y-2 text-sm text-slate-600">
-              {sortedEvents.length === 0 && <div>No events logged yet.</div>}
-              {sortedEvents.map((evt) => {
+            <div className="mt-3 max-h-[420px] space-y-2 overflow-y-auto pr-1 text-sm text-slate-600">
+              {matchEventsSorted.length === 0 && <div>No events logged yet.</div>}
+              {matchEventsSorted.map((evt) => {
                 const matchData = matches.find((match) => match.id === evt.matchId);
                 const matchName = matchData?.name || 'Match';
                 const matchOpponent = matchData?.opponent_name ? ` vs ${matchData.opponent_name}` : '';
@@ -4511,9 +4522,7 @@ const ScoringView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
               })}
             </div>
           </div>
-        </div>
 
-        <div className="space-y-4">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-700">Stats scope</h3>
             <label className="mt-3 block text-xs font-semibold text-slate-500">Match selection</label>

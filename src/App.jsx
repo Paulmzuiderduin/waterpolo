@@ -1095,6 +1095,7 @@ const ShotmapView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
     time: formatShotTime()
   }));
   const fieldRef = useRef(null);
+  const addShotRef = useRef(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -1134,6 +1135,11 @@ const ShotmapView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
     if (!currentMatch) return;
     setCurrentMatchId(currentMatch.info.id);
   }, [currentMatch]);
+
+  useEffect(() => {
+    if (!pendingShot || !addShotRef.current) return;
+    addShotRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [pendingShot]);
 
   const refreshData = async () => {
     const payload = await loadTeamData(teamId);
@@ -1626,7 +1632,7 @@ const ShotmapView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
             </div>
           )}
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <div ref={addShotRef} className="rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-700">Interactive field</h3>
               <div className="text-xs text-slate-500">Click to add a shot</div>
@@ -4401,13 +4407,13 @@ const ScoringView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
                     <div className="flex flex-col gap-1">
                       <button
                         className="h-9 w-9 rounded-lg border border-slate-200 bg-slate-50 text-base font-bold text-slate-700"
-                        onClick={() => adjustSeconds(10)}
+                        onClick={() => adjustSeconds(1)}
                       >
                         ▲
                       </button>
                       <button
                         className="h-9 w-9 rounded-lg border border-slate-200 bg-slate-50 text-base font-bold text-slate-700"
-                        onClick={() => adjustSeconds(-10)}
+                        onClick={() => adjustSeconds(-1)}
                       >
                         ▼
                       </button>

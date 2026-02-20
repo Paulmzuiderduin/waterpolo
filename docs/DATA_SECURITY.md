@@ -47,6 +47,7 @@ From app code and schema.
 ### Files
 - Player photos uploaded to Supabase Storage bucket `player-photos`.
 - App stores/uses public photo URL in `roster.photo_url`.
+- Optional scoring-assist video file selected by the user is handled locally in-browser (object URL) and is not uploaded to Supabase.
 
 ### Field Hockey Hub
 - `seasons`: season name.

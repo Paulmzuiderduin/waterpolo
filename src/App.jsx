@@ -4076,10 +4076,14 @@ const ScoringView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
     period: '1',
     time: formatShotTime()
   });
+  const [videoUrl, setVideoUrl] = useState('');
+  const [videoName, setVideoName] = useState('');
   const [lastEventMeta, setLastEventMeta] = useState(() => ({
     period: '1',
     time: formatShotTime()
   }));
+  const videoInputRef = useRef(null);
+  const videoElementRef = useRef(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -4200,6 +4204,58 @@ const ScoringView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
   useEffect(() => {
     resetForm(true);
   }, [roster]);
+
+  useEffect(() => {
+    return () => {
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
+    };
+  }, [videoUrl]);
+
+  const openVideoPicker = () => {
+    videoInputRef.current?.click();
+  };
+
+  const handleVideoFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    const nextUrl = URL.createObjectURL(file);
+    setVideoUrl(nextUrl);
+    setVideoName(file.name);
+    setError('');
+    event.target.value = '';
+  };
+
+  const clearVideo = () => {
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    setVideoUrl('');
+    setVideoName('');
+    if (videoInputRef.current) videoInputRef.current.value = '';
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.code !== 'Space') return;
+      const target = event.target;
+      const tagName = target?.tagName;
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || tagName === 'BUTTON') {
+        return;
+      }
+      if (target?.isContentEditable) return;
+      const video = videoElementRef.current;
+      if (!video) return;
+      event.preventDefault();
+      if (video.paused) {
+        video.play().catch(() => {});
+      } else {
+        video.pause();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [videoUrl]);
 
   const setTimeFromTotalSeconds = (nextTotal) => {
     const clamped = Math.max(0, Math.min(7 * 60, nextTotal));
@@ -4323,6 +4379,29 @@ const ScoringView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
         <div>
           <p className="text-sm font-semibold text-cyan-700">Scoring & Stats</p>
           <h2 className="text-2xl font-semibold">Match Events</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={handleVideoFileChange}
+          />
+          <button
+            className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
+            onClick={openVideoPicker}
+          >
+            {videoUrl ? 'Change video' : 'Select video (optional)'}
+          </button>
+          {videoUrl && (
+            <button
+              className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600"
+              onClick={clearVideo}
+            >
+              Remove video
+            </button>
+          )}
         </div>
       </div>
 
@@ -4491,11 +4570,36 @@ const ScoringView = ({ seasonId, teamId, userId, confirmAction, toast }) => {
         </div>
 
         <div className="space-y-4">
+          {videoUrl && (
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-slate-700">Video assist</h3>
+                <div className="max-w-[60%] truncate text-xs text-slate-500">{videoName}</div>
+              </div>
+              <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-black">
+                <video
+                  ref={videoElementRef}
+                  className="h-auto max-h-[340px] w-full object-contain"
+                  controls
+                  playsInline
+                  src={videoUrl}
+                />
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                Video stays local in your browser session and is not uploaded.
+              </div>
+            </div>
+          )}
+
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-slate-700">Event log (selected match)</h3>
             </div>
-            <div className="mt-3 max-h-[420px] space-y-2 overflow-y-auto pr-1 text-sm text-slate-600">
+            <div
+              className={`mt-3 space-y-2 overflow-y-auto pr-1 text-sm text-slate-600 ${
+                videoUrl ? 'max-h-[300px]' : 'max-h-[420px]'
+              }`}
+            >
               {matchEventsSorted.length === 0 && <div>No events logged yet.</div>}
               {matchEventsSorted.map((evt) => {
                 const matchData = matches.find((match) => match.id === evt.matchId);

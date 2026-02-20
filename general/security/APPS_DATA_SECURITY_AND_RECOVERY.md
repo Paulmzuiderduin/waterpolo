@@ -71,6 +71,7 @@ Browser local storage:
 
 File storage:
 - Player photos in Supabase storage bucket (`player-photos`), URL saved in `roster.photo_url`.
+- Optional scoring-assist video file is loaded locally in browser only (object URL) and is not uploaded.
 
 ## Field Hockey Hub (from code)
 

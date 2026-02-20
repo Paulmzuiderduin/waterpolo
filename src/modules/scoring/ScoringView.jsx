@@ -45,6 +45,8 @@ const ScoringView = ({
   }));
   const videoInputRef = useRef(null);
   const videoElementRef = useRef(null);
+  const secondsHoldTimeoutRef = useRef(null);
+  const secondsHoldIntervalRef = useRef(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -218,22 +220,55 @@ const ScoringView = ({
     };
   }, [videoUrl]);
 
-  const setTimeFromTotalSeconds = (nextTotal) => {
+  const toClampedTime = (nextTotal) => {
     const clamped = Math.max(0, Math.min(7 * 60, nextTotal));
     const minutes = Math.floor(clamped / 60);
     const seconds = clamped % 60;
-    setForm((prev) => ({ ...prev, time: `${minutes}:${String(seconds).padStart(2, '0')}` }));
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
   };
 
   const adjustMinutes = (delta) => {
-    const parts = splitTimeParts(form.time);
-    setTimeFromTotalSeconds(parts.minutes * 60 + parts.seconds + delta * 60);
+    setForm((prev) => {
+      const parts = splitTimeParts(prev.time);
+      return { ...prev, time: toClampedTime(parts.minutes * 60 + parts.seconds + delta * 60) };
+    });
   };
 
   const adjustSeconds = (delta) => {
-    const parts = splitTimeParts(form.time);
-    setTimeFromTotalSeconds(parts.minutes * 60 + parts.seconds + delta);
+    setForm((prev) => {
+      const parts = splitTimeParts(prev.time);
+      return { ...prev, time: toClampedTime(parts.minutes * 60 + parts.seconds + delta) };
+    });
   };
+
+  const clearSecondsHold = () => {
+    if (secondsHoldTimeoutRef.current) {
+      window.clearTimeout(secondsHoldTimeoutRef.current);
+      secondsHoldTimeoutRef.current = null;
+    }
+    if (secondsHoldIntervalRef.current) {
+      window.clearInterval(secondsHoldIntervalRef.current);
+      secondsHoldIntervalRef.current = null;
+    }
+  };
+
+  const startSecondsHold = (delta, event) => {
+    if (event.button !== undefined && event.button !== 0) return;
+    event.preventDefault();
+    clearSecondsHold();
+    adjustSeconds(delta);
+    secondsHoldTimeoutRef.current = window.setTimeout(() => {
+      secondsHoldIntervalRef.current = window.setInterval(() => {
+        adjustSeconds(delta);
+      }, 80);
+    }, 260);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearSecondsHold();
+    };
+  }, []);
 
   const saveEvent = async (eventType = form.type) => {
     if (!currentMatch) {
@@ -447,13 +482,31 @@ const ScoringView = ({
                     <div className="flex flex-col gap-1">
                       <button
                         className="h-9 w-9 rounded-lg border border-slate-200 bg-slate-50 text-base font-bold text-slate-700"
-                        onClick={() => adjustSeconds(1)}
+                        onPointerDown={(event) => startSecondsHold(1, event)}
+                        onPointerUp={clearSecondsHold}
+                        onPointerLeave={clearSecondsHold}
+                        onPointerCancel={clearSecondsHold}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            adjustSeconds(1);
+                          }
+                        }}
                       >
                         ▲
                       </button>
                       <button
                         className="h-9 w-9 rounded-lg border border-slate-200 bg-slate-50 text-base font-bold text-slate-700"
-                        onClick={() => adjustSeconds(-1)}
+                        onPointerDown={(event) => startSecondsHold(-1, event)}
+                        onPointerUp={clearSecondsHold}
+                        onPointerLeave={clearSecondsHold}
+                        onPointerCancel={clearSecondsHold}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            adjustSeconds(-1);
+                          }
+                        }}
                       >
                         ▼
                       </button>

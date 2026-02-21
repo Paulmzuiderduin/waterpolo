@@ -186,6 +186,13 @@ const executeWithFallbacks = async (ffmpeg, commands) => {
   throw lastError || new Error('FFmpeg export failed');
 };
 
+const getReadableError = (error) => {
+  if (!error) return 'Unknown export error.';
+  if (typeof error === 'string') return error;
+  if (error?.message) return error.message;
+  return 'Unknown export error.';
+};
+
 const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
@@ -547,7 +554,8 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
         });
         const filterComplex = filterParts.join(';');
         const inputArgs = overlayFiles.flatMap((overlay) => ['-i', overlay.file]);
-        const mapArgs = ['-map', `[${lastLabel}]`, '-map', '0:a?'];
+        const mapWithAudio = ['-map', `[${lastLabel}]`, '-map', '0:a?'];
+        const mapVideoOnly = ['-map', `[${lastLabel}]`];
 
         await executeWithFallbacks(ffmpeg, [
           [
@@ -560,7 +568,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
             ...inputArgs,
             '-filter_complex',
             filterComplex,
-            ...mapArgs,
+            ...mapWithAudio,
             '-c:v',
             'libx264',
             '-preset',
@@ -570,7 +578,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
             '-pix_fmt',
             'yuv420p',
             '-c:a',
-            'aac',
+            'copy',
             '-movflags',
             '+faststart',
             '-shortest',
@@ -586,14 +594,35 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
             ...inputArgs,
             '-filter_complex',
             filterComplex,
-            ...mapArgs,
+            ...mapWithAudio,
             '-c:v',
             'mpeg4',
             '-q:v',
             '4',
             '-c:a',
-            'aac',
+            'copy',
             '-shortest',
+            outputName
+          ],
+          [
+            '-ss',
+            start,
+            '-to',
+            end,
+            '-i',
+            inputName,
+            ...inputArgs,
+            '-filter_complex',
+            filterComplex,
+            ...mapVideoOnly,
+            '-c:v',
+            'libx264',
+            '-preset',
+            'veryfast',
+            '-crf',
+            '24',
+            '-pix_fmt',
+            'yuv420p',
             outputName
           ]
         ]);
@@ -621,12 +650,13 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
             '-pix_fmt',
             'yuv420p',
             '-c:a',
-            'aac',
+            'copy',
             '-movflags',
             '+faststart',
             outputName
           ],
-          ['-ss', start, '-to', end, '-i', inputName, '-c:v', 'mpeg4', '-q:v', '4', '-c:a', 'aac', outputName]
+          ['-ss', start, '-to', end, '-i', inputName, '-c:v', 'mpeg4', '-q:v', '4', '-c:a', 'copy', outputName],
+          ['-ss', start, '-to', end, '-i', inputName, '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '24', '-pix_fmt', 'yuv420p', outputName]
         ]);
       }
 
@@ -644,7 +674,8 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
       } catch {}
     } catch (exportError) {
       if (exportError?.name === 'AbortError') return;
-      setError('Export failed. Try a shorter snippet or a smaller source video.');
+      const reason = getReadableError(exportError);
+      setError(`Export failed. ${reason}`);
       toast?.('Video export failed.', 'error');
     } finally {
       setBusy(false);
@@ -727,8 +758,8 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[330px_minmax(0,1fr)_340px]">
-        <section className="wp-card rounded-3xl p-4">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="wp-card rounded-3xl p-4 xl:col-start-2 xl:row-start-1">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-slate-700">Snippets ({snippets.length})</h3>
             <button
@@ -824,7 +855,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
           </div>
         </section>
 
-        <section className="space-y-4">
+        <section className="space-y-4 xl:col-start-1 xl:row-start-1 xl:row-span-2">
           <div className="wp-card rounded-3xl p-4">
             {!videoUrl ? (
               <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-20 text-center text-sm text-slate-500">
@@ -1012,7 +1043,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
           </div>
         </section>
 
-        <section className="space-y-4">
+        <section className="space-y-4 xl:col-start-2 xl:row-start-2">
           <div className="wp-card rounded-3xl p-4">
             <h3 className="text-sm font-semibold text-slate-700">Drawing tools</h3>
             <div className="mt-3 flex flex-wrap gap-2">

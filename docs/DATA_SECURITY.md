@@ -48,6 +48,8 @@ From app code and schema.
 - Player photos uploaded to Supabase Storage bucket `player-photos`.
 - App stores/uses public photo URL in `roster.photo_url`.
 - Optional scoring-assist video file selected by the user is handled locally in-browser (object URL) and is not uploaded to Supabase.
+- Video Analysis source files, snippet exports, and burned-annotation exports are handled locally on the device (download/File Picker) and are not uploaded to Supabase.
+- Video Analysis annotations/snippet metadata can be stored in browser local storage for the selected season/team and exported as local JSON by the user.
 
 ### Field Hockey Hub
 - `seasons`: season name.

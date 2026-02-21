@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus,
+  Clapperboard,
   BarChart2,
   Users,
   IdCard,
@@ -26,6 +27,7 @@ import HelpView from './modules/help/HelpView';
 import SettingsView from './modules/settings/SettingsView';
 import PrivacyView from './modules/privacy/PrivacyView';
 import HubView from './modules/hub/HubView';
+import VideoAnalysisView from './modules/video/VideoAnalysisView';
 import { useAuthSession } from './hooks/useAuthSession';
 import { useSeasonsTeams } from './hooks/useSeasonsTeams';
 
@@ -92,6 +94,7 @@ const App = () => {
       { key: 'matches', label: 'Matches', icon: <CalendarDays size={16} /> },
       { key: 'shotmap', label: 'Shotmap', icon: <Share2 size={16} /> },
       { key: 'analytics', label: 'Analytics', icon: <BarChart2 size={16} /> },
+      { key: 'video', label: 'Video', icon: <Clapperboard size={16} /> },
       { key: 'scoring', label: 'Scoring', icon: <ClipboardList size={16} /> },
       { key: 'possession', label: 'Possession', icon: <Share2 size={16} /> },
       { key: 'players', label: 'Players', icon: <IdCard size={16} /> },
@@ -668,6 +671,13 @@ const App = () => {
             heatTypes={HEAT_TYPES}
             attackTypes={ATTACK_TYPES}
             periods={PERIODS}
+          />
+        )}
+        {activeTab === 'video' && (
+          <VideoAnalysisView
+            teamId={selectedTeamId}
+            seasonId={selectedSeasonId}
+            toast={toast}
           />
         )}
         {activeTab === 'scoring' && (

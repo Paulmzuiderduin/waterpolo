@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://waterpolo.paulzuiderduin.com/sitemap.xml
+

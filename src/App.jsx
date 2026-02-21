@@ -16,6 +16,7 @@ import { supabase } from './lib/supabase';
 import AppHeader from './components/AppHeader';
 import MobileNav from './components/MobileNav';
 import SidebarNav from './components/SidebarNav';
+import PublicSeoContent from './components/PublicSeoContent';
 import ScoringView from './modules/scoring/ScoringView';
 import PossessionView from './modules/possession/PossessionView';
 import MatchesView from './modules/matches/MatchesView';
@@ -30,6 +31,8 @@ import HubView from './modules/hub/HubView';
 import VideoAnalysisView from './modules/video/VideoAnalysisView';
 import { useAuthSession } from './hooks/useAuthSession';
 import { useSeasonsTeams } from './hooks/useSeasonsTeams';
+import { getSeoMetadata } from './seo/metadata';
+import { useSeoMeta } from './seo/useSeoMeta';
 
 import {
   ATTACK_TYPES,
@@ -172,6 +175,18 @@ const App = () => {
     if (!session?.user || !preferences.rememberLastTab) return;
     localStorage.setItem(`waterpolo_last_tab_${session.user.id}`, activeTab);
   }, [activeTab, preferences.rememberLastTab, session]);
+
+  const seoMeta = useMemo(
+    () =>
+      getSeoMetadata({
+        activeTab,
+        isAuthenticated: Boolean(session?.user),
+        selectedSeasonName: selectedSeason?.name || '',
+        selectedTeamName: selectedTeam?.name || ''
+      }),
+    [activeTab, selectedSeason?.name, selectedTeam?.name, session?.user]
+  );
+  useSeoMeta(seoMeta);
 
   useEffect(() => {
     if (!session?.user) return;
@@ -414,34 +429,39 @@ const App = () => {
   if (!session?.user) {
     return (
       <div className="min-h-screen px-6 py-8">
-        <div className="mx-auto max-w-lg space-y-6">
+        <div className="mx-auto max-w-4xl space-y-6">
           <header className="rounded-3xl bg-white p-6 shadow-sm">
             <p className="text-sm font-semibold text-cyan-700">Water Polo Platform</p>
             <h1 className="text-3xl font-semibold">Sign in</h1>
-            <p className="mt-2 text-sm text-slate-500">We will send you a magic link.</p>
+            <p className="mt-2 text-sm text-slate-500">
+              Track water polo shotmaps, scoring events, possessions, and local video snippets.
+            </p>
           </header>
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <label className="text-xs font-semibold text-slate-500">Email</label>
-            <input
-              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              placeholder="you@example.com"
-              value={authEmail}
-              onChange={(event) => setAuthEmail(event.target.value)}
-            />
-            <button
-              className="mt-4 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-              onClick={handleMagicLink}
-            >
-              Send magic link
-            </button>
-            <button
-              className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
-              onClick={handleMagicLink}
-            >
-              Resend link
-            </button>
-            {authMessage && <div className="mt-3 text-sm text-slate-500">{authMessage}</div>}
-            <div className="mt-2 text-xs text-slate-400">If you don’t see it, check spam.</div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.15fr]">
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <label className="text-xs font-semibold text-slate-500">Email</label>
+              <input
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                placeholder="you@example.com"
+                value={authEmail}
+                onChange={(event) => setAuthEmail(event.target.value)}
+              />
+              <button
+                className="mt-4 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                onClick={handleMagicLink}
+              >
+                Send magic link
+              </button>
+              <button
+                className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+                onClick={handleMagicLink}
+              >
+                Resend link
+              </button>
+              {authMessage && <div className="mt-3 text-sm text-slate-500">{authMessage}</div>}
+              <div className="mt-2 text-xs text-slate-400">If you don’t see it, check spam.</div>
+            </div>
+            <PublicSeoContent />
           </div>
         </div>
         {renderUiOverlays()}

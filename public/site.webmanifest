@@ -1,0 +1,22 @@
+{
+  "name": "Waterpolo Hub",
+  "short_name": "Waterpolo",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#256af4",
+  "description": "Waterpolo Hub for shotmaps, scoring, possession mapping, and local video analysis.",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}
+

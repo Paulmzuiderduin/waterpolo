@@ -30,6 +30,17 @@ const secondsToFfmpeg = (seconds) => {
   return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${secs.padStart(6, '0')}`;
 };
 
+const snippetDuration = (snippet) => round2(Math.max(0, (snippet?.end || 0) - (snippet?.start || 0)));
+
+const normalizeDrawingTiming = (drawing, duration) => {
+  const max = Math.max(0.05, duration || 0.05);
+  const rawFrom = Number(drawing?.showFrom ?? 0);
+  const rawTo = Number(drawing?.showTo ?? max);
+  const showFrom = Math.max(0, Math.min(max, Number.isFinite(rawFrom) ? rawFrom : 0));
+  const showTo = Math.max(showFrom + 0.05, Math.min(max, Number.isFinite(rawTo) ? rawTo : max));
+  return { showFrom: round2(showFrom), showTo: round2(showTo) };
+};
+
 const safeBaseName = (filename = 'video') =>
   filename.replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '_').replace(/_+/g, '_');
 
@@ -151,11 +162,10 @@ const getFfmpegRuntime = async () => {
     ]);
 
     const ffmpeg = new FFmpeg();
-    const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
+    const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';
     await ffmpeg.load({
       coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-      workerURL: await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript')
+      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm')
     });
     return { ffmpeg, fetchFile };
   })();
@@ -187,8 +197,10 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
   const [drawColor, setDrawColor] = useState('#ef4444');
   const [drawWidth, setDrawWidth] = useState(3);
   const [drawDraft, setDrawDraft] = useState(null);
+  const [drawMode, setDrawMode] = useState(false);
   const [loopSnippet, setLoopSnippet] = useState(true);
   const [playingSnippetId, setPlayingSnippetId] = useState('');
+  const [videoTime, setVideoTime] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -201,14 +213,29 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
     () => snippets.find((snippet) => snippet.id === selectedSnippetId) || null,
     [snippets, selectedSnippetId]
   );
+  const selectedSnippetDuration = selectedSnippet ? Math.max(0.05, snippetDuration(selectedSnippet)) : 0;
+  const currentSnippetTime = selectedSnippet
+    ? round2(Math.max(0, Math.min(selectedSnippetDuration, videoTime - selectedSnippet.start)))
+    : 0;
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(storageKey);
       const parsed = raw ? JSON.parse(raw) : null;
       if (parsed?.snippets) {
-        setSnippets(parsed.snippets);
-        setSelectedSnippetId(parsed.snippets[0]?.id || '');
+        const hydrated = parsed.snippets.map((snippet) => {
+          const duration = Math.max(0.05, snippetDuration(snippet));
+          return {
+            ...snippet,
+            drawings: (snippet.drawings || []).map((drawing, index) => ({
+              ...drawing,
+              id: drawing.id || `${snippet.id}_drawing_${index + 1}`,
+              ...normalizeDrawingTiming(drawing, duration)
+            }))
+          };
+        });
+        setSnippets(hydrated);
+        setSelectedSnippetId(hydrated[0]?.id || '');
       } else {
         setSnippets([]);
         setSelectedSnippetId('');
@@ -233,6 +260,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
     const video = videoRef.current;
     if (!video) return;
     const onTimeUpdate = () => {
+      setVideoTime(video.currentTime || 0);
       if (!playingSnippetId) return;
       const snippet = snippets.find((item) => item.id === playingSnippetId);
       if (!snippet) return;
@@ -249,6 +277,29 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
     return () => video.removeEventListener('timeupdate', onTimeUpdate);
   }, [playingSnippetId, loopSnippet, snippets]);
 
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.code !== 'Space') return;
+      const target = event.target;
+      const tagName = target?.tagName;
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || tagName === 'BUTTON') {
+        return;
+      }
+      if (target?.isContentEditable) return;
+      const video = videoRef.current;
+      if (!video) return;
+      event.preventDefault();
+      if (video.paused) {
+        video.play().catch(() => {});
+      } else {
+        video.pause();
+        setPlayingSnippetId('');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const openVideoPicker = () => fileInputRef.current?.click();
 
   const handleVideoChange = (event) => {
@@ -261,6 +312,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
     setStartMarker(null);
     setEndMarker(null);
     setPlayingSnippetId('');
+    setVideoTime(0);
     setError('');
     event.target.value = '';
   };
@@ -418,6 +470,35 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
     }));
   };
 
+  const setDrawingTiming = (drawingId, field, value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return;
+    updateSelectedSnippet((snippet) => {
+      const duration = Math.max(0.05, snippetDuration(snippet));
+      return {
+        ...snippet,
+        drawings: (snippet.drawings || []).map((drawing) => {
+          if (drawing.id !== drawingId) return drawing;
+          const timing = normalizeDrawingTiming(drawing, duration);
+          let from = timing.showFrom;
+          let to = timing.showTo;
+          if (field === 'from') {
+            from = Math.max(0, Math.min(duration, numeric));
+            if (from >= to) to = Math.min(duration, from + 0.05);
+          } else {
+            to = Math.max(0.05, Math.min(duration, numeric));
+            if (to <= from) from = Math.max(0, to - 0.05);
+          }
+          return { ...drawing, showFrom: round2(from), showTo: round2(to) };
+        })
+      };
+    });
+  };
+
+  const setDrawingTimingToNow = (drawingId, field) => {
+    setDrawingTiming(drawingId, field, currentSnippetTime);
+  };
+
   const exportSnippet = async (snippet, withOverlay) => {
     if (!sourceFile || !snippet) return;
     setBusy(true);
@@ -427,7 +508,6 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
       const extension = sourceFile.name.split('.').pop() || 'mp4';
       const token = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const inputName = `input_${token}.${extension}`;
-      const overlayName = `overlay_${token}.png`;
       const outputName = `output_${token}.mp4`;
 
       await ffmpeg.writeFile(inputName, await fetchFile(sourceFile));
@@ -438,8 +518,36 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
         const video = videoRef.current;
         const width = Math.max(320, video?.videoWidth || 1280);
         const height = Math.max(180, video?.videoHeight || 720);
-        const overlayBlob = await renderDrawingsToPng(snippet.drawings, width, height);
-        await ffmpeg.writeFile(overlayName, await fetchFile(overlayBlob));
+        const duration = Math.max(0.05, snippetDuration(snippet));
+        const overlayDrawings = snippet.drawings.map((drawing) => ({
+          ...drawing,
+          ...normalizeDrawingTiming(drawing, duration)
+        }));
+        const overlayFiles = [];
+        for (let index = 0; index < overlayDrawings.length; index += 1) {
+          const drawing = overlayDrawings[index];
+          const overlayFile = `overlay_${token}_${index}.png`;
+          const overlayBlob = await renderDrawingsToPng([drawing], width, height);
+          await ffmpeg.writeFile(overlayFile, await fetchFile(overlayBlob));
+          overlayFiles.push({
+            file: overlayFile,
+            from: drawing.showFrom.toFixed(2),
+            to: drawing.showTo.toFixed(2)
+          });
+        }
+
+        const filterParts = ['[0:v]setpts=PTS-STARTPTS[base]'];
+        let lastLabel = 'base';
+        overlayFiles.forEach((overlay, index) => {
+          const nextLabel = `ov${index}`;
+          filterParts.push(
+            `[${lastLabel}][${index + 1}:v]overlay=0:0:enable='between(t\\,${overlay.from}\\,${overlay.to})'[${nextLabel}]`
+          );
+          lastLabel = nextLabel;
+        });
+        const filterComplex = filterParts.join(';');
+        const inputArgs = overlayFiles.flatMap((overlay) => ['-i', overlay.file]);
+        const mapArgs = ['-map', `[${lastLabel}]`, '-map', '0:a?'];
 
         await executeWithFallbacks(ffmpeg, [
           [
@@ -449,10 +557,10 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
             end,
             '-i',
             inputName,
-            '-i',
-            overlayName,
+            ...inputArgs,
             '-filter_complex',
-            'overlay=0:0',
+            filterComplex,
+            ...mapArgs,
             '-c:v',
             'libx264',
             '-preset',
@@ -475,10 +583,10 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
             end,
             '-i',
             inputName,
-            '-i',
-            overlayName,
+            ...inputArgs,
             '-filter_complex',
-            'overlay=0:0',
+            filterComplex,
+            ...mapArgs,
             '-c:v',
             'mpeg4',
             '-q:v',
@@ -489,6 +597,11 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
             outputName
           ]
         ]);
+        for (const overlay of overlayFiles) {
+          try {
+            await ffmpeg.deleteFile(overlay.file);
+          } catch {}
+        }
       } else {
         await executeWithFallbacks(ffmpeg, [
           ['-ss', start, '-to', end, '-i', inputName, '-c', 'copy', outputName],
@@ -529,9 +642,6 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
       try {
         await ffmpeg.deleteFile(outputName);
       } catch {}
-      try {
-        await ffmpeg.deleteFile(overlayName);
-      } catch {}
     } catch (exportError) {
       if (exportError?.name === 'AbortError') return;
       setError('Export failed. Try a shorter snippet or a smaller source video.');
@@ -555,7 +665,13 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
   };
 
   const renderedDrawings = selectedSnippet
-    ? [...(selectedSnippet.drawings || []), ...(drawDraft ? [drawDraft] : [])]
+    ? [
+        ...(selectedSnippet.drawings || []).filter((drawing) => {
+          const timing = normalizeDrawingTiming(drawing, selectedSnippetDuration);
+          return currentSnippetTime >= timing.showFrom && currentSnippetTime <= timing.showTo;
+        }),
+        ...(drawDraft ? [drawDraft] : [])
+      ]
     : [];
 
   return (

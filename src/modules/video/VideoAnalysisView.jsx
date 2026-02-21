@@ -161,12 +161,33 @@ const getFfmpegRuntime = async () => {
       import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js')
     ]);
 
-    const ffmpeg = new FFmpeg();
     const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm')
-    });
+
+    const loadWithBlobUrls = async () => {
+      const ffmpeg = new FFmpeg();
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm')
+      });
+      return ffmpeg;
+    };
+
+    const loadWithDirectUrls = async () => {
+      const ffmpeg = new FFmpeg();
+      await ffmpeg.load({
+        coreURL: `${baseURL}/ffmpeg-core.js`,
+        wasmURL: `${baseURL}/ffmpeg-core.wasm`
+      });
+      return ffmpeg;
+    };
+
+    let ffmpeg;
+    try {
+      ffmpeg = await loadWithBlobUrls();
+    } catch {
+      ffmpeg = await loadWithDirectUrls();
+    }
+
     return { ffmpeg, fetchFile };
   })();
 
@@ -508,6 +529,11 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
 
   const exportSnippet = async (snippet, withOverlay) => {
     if (!sourceFile || !snippet) return;
+    if (!window.isSecureContext) {
+      setError('Video export requires a secure context (HTTPS).');
+      toast?.('Use HTTPS to export video.', 'error');
+      return;
+    }
     setBusy(true);
     setError('');
     try {

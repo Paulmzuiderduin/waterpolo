@@ -62,6 +62,7 @@ const App = () => {
     rememberLastTab: true,
     showHubTips: true
   });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [promptDialog, setPromptDialog] = useState(null);
@@ -144,6 +145,9 @@ const App = () => {
 
   const selectedSeason = seasons.find((season) => season.id === selectedSeasonId);
   const selectedTeam = selectedSeason?.teams?.find((team) => team.id === selectedTeamId);
+  const sidebarStorageKey = session?.user
+    ? `waterpolo_sidebar_collapsed_${session.user.id}`
+    : 'waterpolo_sidebar_collapsed';
   const navItems = moduleConfig.filter((item) => item.alwaysVisible || moduleVisibility[item.key] !== false);
   const mobilePrimaryKeys = ['hub', 'matches', 'shotmap', 'analytics'];
   const mobilePrimaryItems = navItems.filter((item) => mobilePrimaryKeys.includes(item.key));
@@ -168,6 +172,21 @@ const App = () => {
     if (!session?.user || !preferences.rememberLastTab) return;
     localStorage.setItem(`waterpolo_last_tab_${session.user.id}`, activeTab);
   }, [activeTab, preferences.rememberLastTab, session]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    try {
+      const raw = localStorage.getItem(sidebarStorageKey);
+      setSidebarCollapsed(raw === '1');
+    } catch {
+      setSidebarCollapsed(false);
+    }
+  }, [session, sidebarStorageKey]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    localStorage.setItem(sidebarStorageKey, sidebarCollapsed ? '1' : '0');
+  }, [session, sidebarStorageKey, sidebarCollapsed]);
 
   const handleMagicLink = async () => {
     if (!authEmail) return;
@@ -604,7 +623,7 @@ const App = () => {
   }
 
   return (
-    <div className="min-h-screen pb-20 lg:pl-64">
+    <div className={`min-h-screen pb-20 transition-[padding] duration-200 ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
       <SidebarNav
         selectedSeasonName={selectedSeason.name}
         navItems={navItems}
@@ -615,6 +634,8 @@ const App = () => {
           setSelectedTeamId('');
         }}
         onSignOut={() => supabase.auth.signOut()}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
       />
 
       <AppHeader

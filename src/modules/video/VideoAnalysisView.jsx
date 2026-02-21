@@ -294,11 +294,13 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
   };
 
   const deleteSnippet = (snippetId) => {
-    setSnippets((prev) => prev.filter((snippet) => snippet.id !== snippetId));
-    if (selectedSnippetId === snippetId) {
-      const rest = snippets.filter((snippet) => snippet.id !== snippetId);
-      setSelectedSnippetId(rest[0]?.id || '');
-    }
+    setSnippets((prev) => {
+      const next = prev.filter((snippet) => snippet.id !== snippetId);
+      if (selectedSnippetId === snippetId) {
+        setSelectedSnippetId(next[0]?.id || '');
+      }
+      return next;
+    });
   };
 
   const playSnippet = (snippet) => {
@@ -319,6 +321,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
   };
 
   const handlePointerDown = (event) => {
+    if (!drawMode) return;
     if (!selectedSnippet) return;
     const point = getPointerPercent(event);
     if (!point) return;
@@ -336,7 +339,9 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
             y: point.y,
             text: text.trim(),
             color: drawColor,
-            size: 28
+            size: 28,
+            showFrom: 0,
+            showTo: selectedSnippetDuration
           }
         ]
       }));
@@ -359,12 +364,15 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
         x2: point.x,
         y2: point.y,
         color: drawColor,
-        width: drawWidth
+        width: drawWidth,
+        showFrom: 0,
+        showTo: selectedSnippetDuration
       });
     }
   };
 
   const handlePointerMove = (event) => {
+    if (!drawMode) return;
     if (!drawDraft) return;
     const point = getPointerPercent(event);
     if (!point) return;
@@ -383,6 +391,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
   };
 
   const handlePointerUp = () => {
+    if (!drawMode) return;
     if (!drawDraft || !selectedSnippet) return;
     if (drawDraft.type === 'freehand' && drawDraft.points.length < 2) {
       setDrawDraft(null);
@@ -550,147 +559,290 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
     : [];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-cyan-700">Video Analysis</p>
-          <h2 className="text-2xl font-semibold">Local Snippets & Annotations</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Works locally in-browser. Exported MP4 snippets can be played without this website.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="video/*"
-            className="hidden"
-            onChange={handleVideoChange}
-          />
-          <button
-            className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
-            onClick={openVideoPicker}
-          >
-            <Upload size={14} />
-            {sourceFile ? 'Change video' : 'Select video'}
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
-            onClick={exportProjectJson}
-            disabled={snippets.length === 0}
-          >
-            <Download size={14} />
-            Export annotations JSON
-          </button>
+    <div className="space-y-5">
+      <div className="wp-card relative overflow-hidden rounded-3xl p-5 md:p-6">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-cyan-200/40 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-20 left-24 h-44 w-44 rounded-full bg-sky-200/30 blur-3xl" />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Video Analysis</p>
+            <h2 className="mt-1 text-2xl font-semibold text-slate-900">Local Snippets & Drawings</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Optional video workflow. Clips and annotations stay local in-browser unless you export.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Space = play/pause</span>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1">No cloud upload</span>
+              {sourceFile && (
+                <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-cyan-700">
+                  {sourceFile.name}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={handleVideoChange}
+            />
+            <button
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
+              onClick={openVideoPicker}
+            >
+              <Upload size={14} />
+              {sourceFile ? 'Change video' : 'Select video'}
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={exportProjectJson}
+              disabled={snippets.length === 0}
+            >
+              <Download size={14} />
+              Export JSON
+            </button>
+          </div>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.95fr]">
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[330px_minmax(0,1fr)_340px]">
+        <section className="wp-card rounded-3xl p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-slate-700">Snippets ({snippets.length})</h3>
+            <button
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => {
+                setSelectedSnippetId('');
+                setDrawDraft(null);
+                setDrawMode(false);
+              }}
+              disabled={!selectedSnippetId}
+            >
+              Unselect
+            </button>
+          </div>
+          <div className="mt-3 max-h-[690px] space-y-2 overflow-y-auto pr-1">
+            {snippets.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-6 text-center text-sm text-slate-500">
+                Add your first snippet from the video panel.
+              </div>
+            )}
+            {snippets.map((snippet) => {
+              const selected = snippet.id === selectedSnippetId;
+              return (
+                <div
+                  key={snippet.id}
+                  className={`rounded-xl border p-3 transition ${
+                    selected ? 'border-cyan-300 bg-cyan-50/60' : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 text-sm"
+                      value={snippet.name}
+                      onChange={(event) =>
+                        setSnippets((prev) =>
+                          prev.map((item) =>
+                            item.id === snippet.id ? { ...item, name: event.target.value } : item
+                          )
+                        )
+                      }
+                    />
+                    <button
+                      className="rounded-md border border-red-200 p-1 text-red-600 hover:bg-red-50"
+                      onClick={() => deleteSnippet(snippet.id)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-600">
+                    {formatClock(snippet.start)} - {formatClock(snippet.end)}
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-500">{snippet.drawings?.length || 0} drawings</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                        selected
+                          ? 'border border-cyan-300 bg-cyan-100 text-cyan-700'
+                          : 'border border-slate-200 bg-white text-slate-700'
+                      }`}
+                      onClick={() => setSelectedSnippetId(snippet.id)}
+                    >
+                      {selected ? 'Selected' : 'Select'}
+                    </button>
+                    <button
+                      className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+                      onClick={() => playSnippet(snippet)}
+                    >
+                      <Play size={12} />
+                      Play
+                    </button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      className="inline-flex items-center justify-center gap-1 rounded-md bg-slate-900 px-2 py-1 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={() => exportSnippet(snippet, true)}
+                      disabled={busy || !sourceFile}
+                    >
+                      {busy ? <Loader2 size={12} className="animate-spin" /> : <Scissors size={12} />}
+                      MP4 + Draw
+                    </button>
+                    <button
+                      className="inline-flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={() => exportSnippet(snippet, false)}
+                      disabled={busy || !sourceFile}
+                    >
+                      <Download size={12} />
+                      MP4
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="wp-card rounded-3xl p-4">
             {!videoUrl ? (
-              <div className="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500">
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-20 text-center text-sm text-slate-500">
                 Select a local video to start analysis.
               </div>
             ) : (
-              <div
-                ref={drawAreaRef}
-                className="relative overflow-hidden rounded-xl border border-slate-200 bg-black"
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerUp}
-              >
-                <video ref={videoRef} className="h-auto max-h-[520px] w-full object-contain" controls src={videoUrl} />
-                {selectedSnippet && (
-                  <svg
-                    className="pointer-events-none absolute inset-0 h-full w-full"
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
+              <>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                    Current: {formatClock(videoTime)}
+                  </div>
+                  <div
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                      drawMode ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                    }`}
                   >
-                    {renderedDrawings.map((drawing) => {
-                      if (drawing.type === 'arrow') {
-                        return (
-                          <g key={drawing.id}>
-                            <line
-                              x1={drawing.x1}
-                              y1={drawing.y1}
-                              x2={drawing.x2}
-                              y2={drawing.y2}
+                    {drawMode ? 'Drawing mode ON' : 'Drawing mode OFF'}
+                  </div>
+                </div>
+                <div
+                  ref={drawAreaRef}
+                  className="relative overflow-hidden rounded-xl border border-slate-200 bg-black"
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerLeave={handlePointerUp}
+                >
+                  <video
+                    ref={videoRef}
+                    className="h-auto max-h-[560px] w-full object-contain"
+                    controls={!drawMode}
+                    src={videoUrl}
+                  />
+                  {selectedSnippet && (
+                    <svg
+                      className="pointer-events-none absolute inset-0 h-full w-full"
+                      viewBox="0 0 100 100"
+                      preserveAspectRatio="none"
+                    >
+                      {renderedDrawings.map((drawing) => {
+                        if (drawing.type === 'arrow') {
+                          const markerId = `preview-arrowhead-${drawing.id}`;
+                          return (
+                            <g key={drawing.id}>
+                              <defs>
+                                <marker
+                                  id={markerId}
+                                  markerWidth="4"
+                                  markerHeight="4"
+                                  refX="3.5"
+                                  refY="2"
+                                  orient="auto"
+                                >
+                                  <path d="M0,0 L4,2 L0,4 Z" fill={drawing.color} />
+                                </marker>
+                              </defs>
+                              <line
+                                x1={drawing.x1}
+                                y1={drawing.y1}
+                                x2={drawing.x2}
+                                y2={drawing.y2}
+                                stroke={drawing.color}
+                                strokeWidth={(drawing.width || 3) / 10}
+                                strokeLinecap="round"
+                                markerEnd={`url(#${markerId})`}
+                              />
+                            </g>
+                          );
+                        }
+                        if (drawing.type === 'circle') {
+                          const cx = (drawing.x1 + drawing.x2) / 2;
+                          const cy = (drawing.y1 + drawing.y2) / 2;
+                          const rx = Math.abs(drawing.x2 - drawing.x1) / 2;
+                          const ry = Math.abs(drawing.y2 - drawing.y1) / 2;
+                          return (
+                            <ellipse
+                              key={drawing.id}
+                              cx={cx}
+                              cy={cy}
+                              rx={rx}
+                              ry={ry}
+                              fill="none"
+                              stroke={drawing.color}
+                              strokeWidth={(drawing.width || 3) / 10}
+                            />
+                          );
+                        }
+                        if (drawing.type === 'freehand') {
+                          const points = (drawing.points || []).map((point) => `${point.x},${point.y}`).join(' ');
+                          return (
+                            <polyline
+                              key={drawing.id}
+                              points={points}
+                              fill="none"
                               stroke={drawing.color}
                               strokeWidth={(drawing.width || 3) / 10}
                               strokeLinecap="round"
+                              strokeLinejoin="round"
                             />
-                          </g>
-                        );
-                      }
-                      if (drawing.type === 'circle') {
-                        const cx = (drawing.x1 + drawing.x2) / 2;
-                        const cy = (drawing.y1 + drawing.y2) / 2;
-                        const rx = Math.abs(drawing.x2 - drawing.x1) / 2;
-                        const ry = Math.abs(drawing.y2 - drawing.y1) / 2;
-                        return (
-                          <ellipse
-                            key={drawing.id}
-                            cx={cx}
-                            cy={cy}
-                            rx={rx}
-                            ry={ry}
-                            fill="none"
-                            stroke={drawing.color}
-                            strokeWidth={(drawing.width || 3) / 10}
-                          />
-                        );
-                      }
-                      if (drawing.type === 'freehand') {
-                        const points = (drawing.points || [])
-                          .map((point) => `${point.x},${point.y}`)
-                          .join(' ');
-                        return (
-                          <polyline
-                            key={drawing.id}
-                            points={points}
-                            fill="none"
-                            stroke={drawing.color}
-                            strokeWidth={(drawing.width || 3) / 10}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        );
-                      }
-                      if (drawing.type === 'text') {
-                        return (
-                          <text
-                            key={drawing.id}
-                            x={drawing.x}
-                            y={drawing.y}
-                            fill={drawing.color}
-                            fontSize="3.2"
-                            fontWeight="700"
-                          >
-                            {drawing.text}
-                          </text>
-                        );
-                      }
-                      return null;
-                    })}
-                  </svg>
-                )}
-              </div>
+                          );
+                        }
+                        if (drawing.type === 'text') {
+                          return (
+                            <text
+                              key={drawing.id}
+                              x={drawing.x}
+                              y={drawing.y}
+                              fill={drawing.color}
+                              fontSize="3.2"
+                              fontWeight="700"
+                            >
+                              {drawing.text}
+                            </text>
+                          );
+                        }
+                        return null;
+                      })}
+                    </svg>
+                  )}
+                </div>
+              </>
             )}
           </div>
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Snippet markers</h3>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <div className="wp-card rounded-3xl p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-slate-700">Snippet controls</h3>
+              {selectedSnippet && (
+                <div className="text-xs font-semibold text-slate-500">Active: {selectedSnippet.name}</div>
+              )}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
               <button
-                className="rounded-lg border border-slate-200 px-3 py-2 font-semibold text-slate-700"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => {
                   if (!videoRef.current) return;
                   setStartMarker(round2(videoRef.current.currentTime));
@@ -700,7 +852,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
                 Mark in
               </button>
               <button
-                className="rounded-lg border border-slate-200 px-3 py-2 font-semibold text-slate-700"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => {
                   if (!videoRef.current) return;
                   setEndMarker(round2(videoRef.current.currentTime));
@@ -710,44 +862,51 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
                 Mark out
               </button>
               <button
-                className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 font-semibold text-white disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={addSnippet}
                 disabled={!videoUrl}
               >
                 <Plus size={14} />
                 Add snippet
               </button>
-              <label className="ml-2 inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
+              <label className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-700">
                 <input
                   type="checkbox"
+                  className="h-4 w-4"
                   checked={loopSnippet}
                   onChange={(event) => setLoopSnippet(event.target.checked)}
                 />
-                Loop snippet playback
+                Loop playback
               </label>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
+              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
                 <div className="text-xs text-slate-500">In</div>
-                <div className="font-semibold">{startMarker === null ? '—' : formatClock(startMarker)}</div>
+                <div className="font-semibold text-slate-700">
+                  {startMarker === null ? '--' : formatClock(startMarker)}
+                </div>
               </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
+              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
                 <div className="text-xs text-slate-500">Out</div>
-                <div className="font-semibold">{endMarker === null ? '—' : formatClock(endMarker)}</div>
+                <div className="font-semibold text-slate-700">
+                  {endMarker === null ? '--' : formatClock(endMarker)}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
+        <section className="space-y-4">
+          <div className="wp-card rounded-3xl p-4">
             <h3 className="text-sm font-semibold text-slate-700">Drawing tools</h3>
             <div className="mt-3 flex flex-wrap gap-2">
               {TOOL_OPTIONS.map((option) => (
                 <button
                   key={option.key}
                   className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                    tool === option.key ? 'bg-slate-900 text-white' : 'border border-slate-200 text-slate-700'
+                    tool === option.key
+                      ? 'bg-slate-900 text-white'
+                      : 'border border-slate-200 bg-white text-slate-700'
                   }`}
                   onClick={() => setTool(option.key)}
                   disabled={!selectedSnippet}
@@ -775,87 +934,92 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
                 disabled={!selectedSnippet}
               />
             </div>
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 grid grid-cols-3 gap-2">
               <button
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                className={`rounded-lg px-2 py-2 text-xs font-semibold ${
+                  drawMode ? 'bg-amber-600 text-white' : 'border border-slate-200 bg-white text-slate-700'
+                }`}
+                onClick={() => {
+                  setDrawMode((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      videoRef.current?.pause();
+                      setPlayingSnippetId('');
+                    }
+                    return next;
+                  });
+                }}
+                disabled={!selectedSnippet}
+              >
+                {drawMode ? 'Draw ON' : 'Draw OFF'}
+              </button>
+              <button
+                className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={removeLastDrawing}
                 disabled={!selectedSnippet || !selectedSnippet.drawings?.length}
               >
-                Undo drawing
+                Undo
               </button>
               <button
-                className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 disabled:opacity-50"
+                className="rounded-lg border border-red-200 bg-white px-2 py-2 text-xs font-semibold text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={clearDrawings}
                 disabled={!selectedSnippet || !selectedSnippet.drawings?.length}
               >
-                Clear drawings
+                Clear
               </button>
             </div>
+            <p className="mt-2 text-[11px] text-slate-500">Enable Draw ON only when you want to place overlays.</p>
           </div>
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Snippets</h3>
-            <div className="mt-3 space-y-2">
-              {snippets.length === 0 && <div className="text-sm text-slate-500">No snippets yet.</div>}
-              {snippets.map((snippet) => {
-                const selected = snippet.id === selectedSnippetId;
+          <div className="wp-card rounded-3xl p-4">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+              <span>Drawing visibility window</span>
+              <span>{selectedSnippet ? formatClock(currentSnippetTime) : '--'}</span>
+            </div>
+            <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto pr-1">
+              {!selectedSnippet?.drawings?.length && (
+                <div className="text-xs text-slate-500">No drawings yet.</div>
+              )}
+              {(selectedSnippet?.drawings || []).map((drawing, index) => {
+                const timing = normalizeDrawingTiming(drawing, selectedSnippetDuration);
                 return (
-                  <div
-                    key={snippet.id}
-                    className={`rounded-xl border px-3 py-3 ${selected ? 'border-cyan-400 bg-cyan-50' : 'border-slate-100'}`}
-                  >
-                    <div className="flex items-center gap-2">
+                  <div key={drawing.id} className="rounded-lg border border-slate-200 bg-white px-2 py-2">
+                    <div className="text-[11px] font-semibold text-slate-600">
+                      #{index + 1} - {drawing.type}
+                    </div>
+                    <div className="mt-1 grid grid-cols-[1fr_1fr_auto] items-center gap-1">
                       <input
-                        className="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 text-sm"
-                        value={snippet.name}
-                        onChange={(event) =>
-                          setSnippets((prev) =>
-                            prev.map((item) =>
-                              item.id === snippet.id ? { ...item, name: event.target.value } : item
-                            )
-                          )
-                        }
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max={selectedSnippetDuration || 0}
+                        className="rounded border border-slate-200 px-2 py-1 text-[11px]"
+                        value={timing.showFrom}
+                        onChange={(event) => setDrawingTiming(drawing.id, 'from', event.target.value)}
                       />
-                      <button
-                        className="rounded-md border border-red-200 p-1 text-red-600"
-                        onClick={() => deleteSnippet(snippet.id)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                    <div className="mt-2 text-xs text-slate-500">
-                      {formatClock(snippet.start)} → {formatClock(snippet.end)} · {snippet.drawings?.length || 0} drawings
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700"
-                        onClick={() => setSelectedSnippetId(snippet.id)}
-                      >
-                        Select
-                      </button>
-                      <button
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700"
-                        onClick={() => playSnippet(snippet)}
-                      >
-                        <Play size={12} />
-                        Play
-                      </button>
-                      <button
-                        className="inline-flex items-center gap-1 rounded-md bg-slate-900 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
-                        onClick={() => exportSnippet(snippet, true)}
-                        disabled={busy || !sourceFile}
-                      >
-                        {busy ? <Loader2 size={12} className="animate-spin" /> : <Scissors size={12} />}
-                        Export MP4 + drawings
-                      </button>
-                      <button
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-60"
-                        onClick={() => exportSnippet(snippet, false)}
-                        disabled={busy || !sourceFile}
-                      >
-                        <Download size={12} />
-                        Export MP4 only
-                      </button>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max={selectedSnippetDuration || 0}
+                        className="rounded border border-slate-200 px-2 py-1 text-[11px]"
+                        value={timing.showTo}
+                        onChange={(event) => setDrawingTiming(drawing.id, 'to', event.target.value)}
+                      />
+                      <div className="flex gap-1">
+                        <button
+                          className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600"
+                          onClick={() => setDrawingTimingToNow(drawing.id, 'from')}
+                        >
+                          Now to In
+                        </button>
+                        <button
+                          className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600"
+                          onClick={() => setDrawingTimingToNow(drawing.id, 'to')}
+                        >
+                          Now to Out
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -863,11 +1027,11 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
             </div>
           </div>
 
-          <div className="rounded-2xl bg-white p-4 text-xs text-slate-500 shadow-sm">
-            Exported snippets are local files and play in normal media players. Drawings are burned into the video only
-            when you use “Export MP4 + drawings”.
+          <div className="wp-card rounded-3xl p-4 text-xs text-slate-600">
+            Exported MP4 snippets are local files. Use <span className="font-semibold">MP4 + Draw</span> to burn the
+            visible overlays into the clip.
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );

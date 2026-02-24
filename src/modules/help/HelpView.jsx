@@ -1,6 +1,18 @@
 import React from 'react';
+import StatTooltipLabel from '../../components/StatTooltipLabel';
 
-const HelpView = () => (
+const HELP_TOOLTIPS = {
+  goal: 'A shot with outcome "Goal" that results in a score.',
+  saved: 'A shot blocked or stopped by the goalkeeper/defense.',
+  miss: 'A shot that does not result in a goal and is not saved.',
+  penalty: 'Penalty shot event marked with a square P marker.',
+  seasonTeam: 'All data is scoped to the selected season + team folder.',
+  editShot: 'Open a shot from the list, change details, then save.',
+  playerDelete: 'Deleting a player does not remove historical shots/events.',
+  reportScope: 'Report cards only include selected seasons and matches.'
+};
+
+const HelpView = ({ showTooltips = true }) => (
   <div className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div>
@@ -27,19 +39,23 @@ const HelpView = () => (
           <div className="mt-3 grid grid-cols-1 gap-3 text-sm text-slate-600 sm:grid-cols-2">
             <div className="flex items-center gap-3">
               <span className="h-3 w-3 rounded-full bg-green-500" />
-              Goal
+              <StatTooltipLabel label="Goal" tooltip={HELP_TOOLTIPS.goal} enabled={showTooltips} />
             </div>
             <div className="flex items-center gap-3">
               <span className="h-3 w-3 rounded-full bg-orange-400" />
-              Saved
+              <StatTooltipLabel label="Saved" tooltip={HELP_TOOLTIPS.saved} enabled={showTooltips} />
             </div>
             <div className="flex items-center gap-3">
               <span className="h-3 w-3 rounded-full bg-red-500" />
-              Miss
+              <StatTooltipLabel label="Miss" tooltip={HELP_TOOLTIPS.miss} enabled={showTooltips} />
             </div>
             <div className="flex items-center gap-3">
               <span className="h-3 w-3 rounded-sm bg-slate-900" />
-              Penalty shot (P marker)
+              <StatTooltipLabel
+                label="Penalty shot (P marker)"
+                tooltip={HELP_TOOLTIPS.penalty}
+                enabled={showTooltips}
+              />
             </div>
           </div>
           <div className="mt-4 text-xs text-slate-500">
@@ -53,19 +69,43 @@ const HelpView = () => (
           <h3 className="text-sm font-semibold text-slate-700">FAQ</h3>
           <div className="mt-3 space-y-3 text-sm text-slate-600">
             <div>
-              <div className="font-semibold text-slate-700">Why don’t I see my players?</div>
+              <div className="font-semibold text-slate-700">
+                <StatTooltipLabel
+                  label="Why don’t I see my players?"
+                  tooltip={HELP_TOOLTIPS.seasonTeam}
+                  enabled={showTooltips}
+                />
+              </div>
               Make sure you selected the correct season and team folder.
             </div>
             <div>
-              <div className="font-semibold text-slate-700">Can I change a shot?</div>
+              <div className="font-semibold text-slate-700">
+                <StatTooltipLabel
+                  label="Can I change a shot?"
+                  tooltip={HELP_TOOLTIPS.editShot}
+                  enabled={showTooltips}
+                />
+              </div>
               Yes. Click a shot in the list, edit details, and save.
             </div>
             <div>
-              <div className="font-semibold text-slate-700">What happens if I delete a player?</div>
+              <div className="font-semibold text-slate-700">
+                <StatTooltipLabel
+                  label="What happens if I delete a player?"
+                  tooltip={HELP_TOOLTIPS.playerDelete}
+                  enabled={showTooltips}
+                />
+              </div>
               Shots remain; the cap number keeps the historical data intact.
             </div>
             <div>
-              <div className="font-semibold text-slate-700">Why are some matches missing in reports?</div>
+              <div className="font-semibold text-slate-700">
+                <StatTooltipLabel
+                  label="Why are some matches missing in reports?"
+                  tooltip={HELP_TOOLTIPS.reportScope}
+                  enabled={showTooltips}
+                />
+              </div>
               Check the scope selector in the Players tab. You can include or exclude matches.
             </div>
             <div>

@@ -65,6 +65,14 @@ const SettingsView = ({
             onChange={(event) => onSetPreference('showHubTips', event.target.checked)}
           />
         </label>
+        <label className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
+          <span className="text-sm font-medium text-slate-700">Show help tooltips</span>
+          <input
+            type="checkbox"
+            checked={Boolean(preferences.showHelpTooltips)}
+            onChange={(event) => onSetPreference('showHelpTooltips', event.target.checked)}
+          />
+        </label>
       </div>
     </div>
   </div>

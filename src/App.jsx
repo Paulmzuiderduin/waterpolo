@@ -63,7 +63,8 @@ const App = () => {
   const [moduleVisibility, setModuleVisibility] = useState({});
   const [preferences, setPreferences] = useState({
     rememberLastTab: true,
-    showHubTips: true
+    showHubTips: true,
+    showHelpTooltips: true
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -137,7 +138,7 @@ const App = () => {
       const parsed = raw ? JSON.parse(raw) : {};
       setPreferences((prev) => ({ ...prev, ...parsed }));
     } catch {
-      setPreferences({ rememberLastTab: true, showHubTips: true });
+      setPreferences({ rememberLastTab: true, showHubTips: true, showHelpTooltips: true });
     }
   }, [session]);
 
@@ -768,7 +769,7 @@ const App = () => {
             onDataUpdated={notifyDataUpdated}
           />
         )}
-        {activeTab === 'help' && <HelpView />}
+        {activeTab === 'help' && <HelpView showTooltips={preferences.showHelpTooltips} />}
         {activeTab === 'settings' && (
           <SettingsView
             moduleConfig={moduleConfig}

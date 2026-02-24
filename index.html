@@ -59,12 +59,108 @@
       }
     </script>
   
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-KGLTSPFH64"></script>
     <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-KGLTSPFH64');
+      (function () {
+        var CONSENT_KEY = 'pz_analytics_consent_v1';
+        var MEASUREMENT_ID = 'G-KGLTSPFH64';
+
+        function loadAnalytics() {
+          if (window.__gaLoaded) return;
+          window.__gaLoaded = true;
+          window.dataLayer = window.dataLayer || [];
+          window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+          gtag('js', new Date());
+          gtag('config', MEASUREMENT_ID, { anonymize_ip: true });
+          var script = document.createElement('script');
+          script.async = true;
+          script.src = 'https://www.googletagmanager.com/gtag/js?id=' + MEASUREMENT_ID;
+          document.head.appendChild(script);
+        }
+
+        function saveConsent(value) {
+          try {
+            localStorage.setItem(CONSENT_KEY, value);
+          } catch (error) {
+            // Ignore storage errors and continue without persistence.
+          }
+        }
+
+        function readConsent() {
+          try {
+            return localStorage.getItem(CONSENT_KEY);
+          } catch (error) {
+            return null;
+          }
+        }
+
+        function removeBanner() {
+          var banner = document.getElementById('consent-banner');
+          if (banner) banner.remove();
+        }
+
+        function createBanner() {
+          if (document.getElementById('consent-banner')) return;
+          var banner = document.createElement('div');
+          banner.id = 'consent-banner';
+          banner.setAttribute('role', 'dialog');
+          banner.setAttribute('aria-live', 'polite');
+          banner.style.cssText = [
+            'position:fixed',
+            'left:16px',
+            'right:16px',
+            'bottom:16px',
+            'z-index:9999',
+            'padding:12px 14px',
+            'border-radius:12px',
+            'border:1px solid rgba(15,23,42,0.18)',
+            'background:#ffffff',
+            'box-shadow:0 14px 32px -22px rgba(2,6,23,0.6)',
+            'display:flex',
+            'flex-wrap:wrap',
+            'align-items:center',
+            'gap:10px',
+            'font:500 13px/1.4 Manrope, Arial, sans-serif',
+            'color:#0f172a'
+          ].join(';');
+
+          var text = document.createElement('span');
+          text.style.flex = '1 1 260px';
+          text.textContent = 'Allow privacy-friendly analytics to improve this website?';
+
+          var reject = document.createElement('button');
+          reject.type = 'button';
+          reject.textContent = 'Reject';
+          reject.style.cssText = 'border:1px solid rgba(15,23,42,0.18);background:#fff;color:#0f172a;border-radius:999px;padding:7px 12px;font:700 12px Manrope, Arial,sans-serif;cursor:pointer;';
+          reject.onclick = function () {
+            saveConsent('denied');
+            removeBanner();
+          };
+
+          var accept = document.createElement('button');
+          accept.type = 'button';
+          accept.textContent = 'Accept';
+          accept.style.cssText = 'border:1px solid transparent;background:#0f4ea6;color:#fff;border-radius:999px;padding:7px 12px;font:700 12px Manrope, Arial,sans-serif;cursor:pointer;';
+          accept.onclick = function () {
+            saveConsent('granted');
+            loadAnalytics();
+            removeBanner();
+          };
+
+          banner.appendChild(text);
+          banner.appendChild(reject);
+          banner.appendChild(accept);
+          document.body.appendChild(banner);
+        }
+
+        var consent = readConsent();
+        if (consent === 'granted') {
+          loadAnalytics();
+        }
+
+        window.addEventListener('DOMContentLoaded', function () {
+          if (!readConsent()) createBanner();
+        });
+      })();
     </script>
   </head>
   <body>

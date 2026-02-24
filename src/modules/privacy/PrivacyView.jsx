@@ -6,7 +6,7 @@ const PrivacyView = () => (
       <div>
         <p className="text-sm font-semibold text-cyan-700">Privacy</p>
         <h2 className="text-2xl font-semibold">Privacy Policy</h2>
-        <p className="mt-2 text-xs text-slate-500">Last updated: February 10, 2026</p>
+        <p className="mt-2 text-xs text-slate-500">Last updated: February 24, 2026</p>
       </div>
     </div>
 
@@ -30,6 +30,7 @@ const PrivacyView = () => (
           <li>Team & match data: Seasons, teams, matches, and shot records you create.</li>
           <li>Player data: Name, cap number, birthday (used only to calculate age), dominant hand, height/weight, notes.</li>
           <li>Media: Optional player photos.</li>
+          <li>Website analytics data (optional): Aggregated usage signals (page views, referrer, device, location at coarse level).</li>
           <li>Technical data: Session tokens, IP address, browser/device metadata necessary for security and service operation.</li>
         </ul>
       </div>
@@ -37,19 +38,23 @@ const PrivacyView = () => (
       <div>
         <h3 className="text-sm font-semibold text-slate-700">3. Purposes and Legal Bases (GDPR)</h3>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Service delivery: Authentication, storage, and analytics.</li>
+          <li>Service delivery: Authentication, storage, and app functionality.</li>
           <li>Security and maintenance: Monitoring, stability, and troubleshooting.</li>
           <li>Reporting: Generating analytics and PDF reports.</li>
+          <li>Website improvement: Measuring site usage trends through optional analytics consent.</li>
         </ul>
         <p className="mt-2">
           Legal bases: Performance of contract (Art. 6(1)(b)), legitimate interests (Art. 6(1)(f)), and consent
-          (Art. 6(1)(a)) for optional data such as photos.
+          (Art. 6(1)(a)) for optional data such as photos and website analytics.
         </p>
       </div>
 
       <div>
         <h3 className="text-sm font-semibold text-slate-700">4. Processors and Storage</h3>
         <p>We use Supabase for authentication, database, and file storage. Supabase acts as a data processor on our behalf.</p>
+        <p>
+          For website analytics, we use Google Analytics 4 only after consent is provided via the on-site consent prompt.
+        </p>
         <p>Data may be processed internationally. Where required, appropriate safeguards (e.g., Standard Contractual Clauses) are used.</p>
       </div>
 

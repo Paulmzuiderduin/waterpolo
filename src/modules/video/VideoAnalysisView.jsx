@@ -227,6 +227,88 @@ const getReadableError = (error) => {
   return 'Unknown export error.';
 };
 
+const pickRecorderMimeType = () => {
+  if (typeof window === 'undefined' || typeof window.MediaRecorder === 'undefined') return '';
+  const candidates = [
+    'video/mp4;codecs=h264,aac',
+    'video/mp4',
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm'
+  ];
+  return candidates.find((mime) => window.MediaRecorder.isTypeSupported?.(mime)) || '';
+};
+
+const waitForVideoEvent = (video, eventName) =>
+  new Promise((resolve, reject) => {
+    const onEvent = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error(`Video event "${eventName}" failed`));
+    };
+    const cleanup = () => {
+      video.removeEventListener(eventName, onEvent);
+      video.removeEventListener('error', onError);
+    };
+    video.addEventListener(eventName, onEvent, { once: true });
+    video.addEventListener('error', onError, { once: true });
+  });
+
+const drawDrawingOnCanvas = (ctx, drawing, width, height) => {
+  const color = drawing.color || '#ef4444';
+  const lineWidth = drawing.width || 3;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (drawing.type === 'arrow') {
+    drawArrowCanvas(
+      ctx,
+      (drawing.x1 / 100) * width,
+      (drawing.y1 / 100) * height,
+      (drawing.x2 / 100) * width,
+      (drawing.y2 / 100) * height
+    );
+    return;
+  }
+
+  if (drawing.type === 'circle') {
+    const x1 = (drawing.x1 / 100) * width;
+    const y1 = (drawing.y1 / 100) * height;
+    const x2 = (drawing.x2 / 100) * width;
+    const y2 = (drawing.y2 / 100) * height;
+    const cx = (x1 + x2) / 2;
+    const cy = (y1 + y2) / 2;
+    const radius = Math.hypot(x2 - x1, y2 - y1) / 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    return;
+  }
+
+  if (drawing.type === 'freehand') {
+    if (!drawing.points?.length) return;
+    ctx.beginPath();
+    ctx.moveTo((drawing.points[0].x / 100) * width, (drawing.points[0].y / 100) * height);
+    drawing.points.slice(1).forEach((point) => {
+      ctx.lineTo((point.x / 100) * width, (point.y / 100) * height);
+    });
+    ctx.stroke();
+    return;
+  }
+
+  if (drawing.type === 'text' && drawing.text?.trim()) {
+    const fontSize = drawing.size || 28;
+    ctx.font = `700 ${fontSize}px Inter, Arial, sans-serif`;
+    ctx.fillText(drawing.text, (drawing.x / 100) * width, (drawing.y / 100) * height);
+  }
+};
+
 const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
@@ -540,6 +622,97 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
     setDrawingTiming(drawingId, field, currentSnippetTime);
   };
 
+  const exportSnippetWithRecorderFallback = async (snippet, withOverlay) => {
+    if (!videoUrl) throw new Error('No video loaded for recorder fallback.');
+    if (typeof document === 'undefined' || typeof window === 'undefined') {
+      throw new Error('Recorder fallback unavailable in this environment.');
+    }
+    if (!HTMLCanvasElement.prototype.captureStream || typeof window.MediaRecorder === 'undefined') {
+      throw new Error('This browser does not support local fallback export.');
+    }
+
+    const mimeType = pickRecorderMimeType();
+    if (!mimeType) throw new Error('No supported recording format found in this browser.');
+
+    const recorderVideo = document.createElement('video');
+    recorderVideo.src = videoUrl;
+    recorderVideo.muted = true;
+    recorderVideo.playsInline = true;
+    recorderVideo.crossOrigin = 'anonymous';
+
+    if (recorderVideo.readyState < 1) {
+      await waitForVideoEvent(recorderVideo, 'loadedmetadata');
+    }
+
+    const width = Math.max(320, recorderVideo.videoWidth || 1280);
+    const height = Math.max(180, recorderVideo.videoHeight || 720);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Unable to initialize canvas renderer.');
+
+    const stream = canvas.captureStream(30);
+    const chunks = [];
+    const recorder = new window.MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+    recorder.ondataavailable = (event) => {
+      if (event.data?.size) chunks.push(event.data);
+    };
+
+    const recorderStopped = new Promise((resolve) => {
+      recorder.onstop = resolve;
+    });
+
+    recorder.start(250);
+
+    recorderVideo.currentTime = Math.max(0, snippet.start || 0);
+    await waitForVideoEvent(recorderVideo, 'seeked');
+    await recorderVideo.play();
+
+    const clipDuration = Math.max(0.05, snippetDuration(snippet));
+    const drawings = (snippet.drawings || []).map((drawing) => ({
+      ...drawing,
+      ...normalizeDrawingTiming(drawing, clipDuration)
+    }));
+
+    await new Promise((resolve) => {
+      const tick = () => {
+        const now = recorderVideo.currentTime || 0;
+        const local = Math.max(0, now - snippet.start);
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(recorderVideo, 0, 0, width, height);
+
+        if (withOverlay && drawings.length) {
+          drawings.forEach((drawing) => {
+            if (local >= drawing.showFrom && local <= drawing.showTo) {
+              drawDrawingOnCanvas(ctx, drawing, width, height);
+            }
+          });
+        }
+
+        if (now >= snippet.end || recorderVideo.ended) {
+          resolve();
+          return;
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+
+    recorderVideo.pause();
+    recorder.stop();
+    await recorderStopped;
+    stream.getTracks().forEach((track) => track.stop());
+
+    const outputType = chunks[0]?.type || (mimeType.includes('mp4') ? 'video/mp4' : 'video/webm');
+    const ext = outputType.includes('mp4') ? 'mp4' : 'webm';
+    const filename = `${snippet.name || 'snippet'}.${ext}`;
+    const blob = new Blob(chunks, { type: outputType });
+    await saveBlobLocally(blob, filename);
+    toast?.('Snippet exported with browser fallback.', 'success');
+  };
+
   const exportSnippet = async (snippet, withOverlay) => {
     if (!sourceFile || !snippet) return;
     if (!window.isSecureContext) {
@@ -721,6 +894,17 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
       } catch {}
     } catch (exportError) {
       if (exportError?.name === 'AbortError') return;
+      if (exportStep === 'load ffmpeg') {
+        try {
+          await exportSnippetWithRecorderFallback(snippet, withOverlay);
+          return;
+        } catch (fallbackError) {
+          const fallbackReason = getReadableError(fallbackError);
+          setError(`Export failed at "${exportStep}". FFmpeg + fallback both failed. ${fallbackReason}`);
+          toast?.('Video export failed.', 'error');
+          return;
+        }
+      }
       const reason = getReadableError(exportError);
       setError(`Export failed at "${exportStep}". ${reason}`);
       toast?.('Video export failed.', 'error');

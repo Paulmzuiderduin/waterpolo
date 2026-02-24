@@ -49,15 +49,28 @@ const makeSnippetName = (videoName, index, start, end) =>
 
 const downloadBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 500);
+  try {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch {
+    // Safari fallback if synthetic downloads are restricted.
+    window.open(url, '_blank', 'noopener');
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
 };
 
+const isSafariBrowser = () =>
+  typeof navigator !== 'undefined' &&
+  /^((?!chrome|android).)*safari/i.test(navigator.userAgent || '');
+
 const saveBlobLocally = async (blob, suggestedName) => {
-  if ('showSaveFilePicker' in window) {
+  if ('showSaveFilePicker' in window && !isSafariBrowser()) {
     try {
       const handle = await window.showSaveFilePicker({
         suggestedName,
@@ -536,18 +549,22 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
     }
     setBusy(true);
     setError('');
+    let exportStep = 'start';
     try {
+      exportStep = 'load ffmpeg';
       const { ffmpeg, fetchFile } = await getFfmpegRuntime();
       const extension = sourceFile.name.split('.').pop() || 'mp4';
       const token = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const inputName = `input_${token}.${extension}`;
       const outputName = `output_${token}.mp4`;
 
+      exportStep = 'write source';
       await ffmpeg.writeFile(inputName, await fetchFile(sourceFile));
       const start = secondsToFfmpeg(snippet.start);
       const end = secondsToFfmpeg(snippet.end);
 
       if (withOverlay && snippet.drawings?.length) {
+        exportStep = 'prepare overlays';
         const video = videoRef.current;
         const width = Math.max(320, video?.videoWidth || 1280);
         const height = Math.max(180, video?.videoHeight || 720);
@@ -583,6 +600,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
         const mapWithAudio = ['-map', `[${lastLabel}]`, '-map', '0:a?'];
         const mapVideoOnly = ['-map', `[${lastLabel}]`];
 
+        exportStep = 'render clip with overlays';
         await executeWithFallbacks(ffmpeg, [
           [
             '-ss',
@@ -658,6 +676,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
           } catch {}
         }
       } else {
+        exportStep = 'render clip';
         await executeWithFallbacks(ffmpeg, [
           ['-ss', start, '-to', end, '-i', inputName, '-c', 'copy', outputName],
           [
@@ -686,9 +705,11 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
         ]);
       }
 
+      exportStep = 'read output';
       const data = await ffmpeg.readFile(outputName);
       const blob = new Blob([data.buffer], { type: 'video/mp4' });
       const filename = `${snippet.name || 'snippet'}.mp4`;
+      exportStep = 'save file';
       await saveBlobLocally(blob, filename);
       toast?.(`${withOverlay ? 'Burned' : 'Plain'} MP4 snippet saved locally.`, 'success');
 
@@ -701,7 +722,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
     } catch (exportError) {
       if (exportError?.name === 'AbortError') return;
       const reason = getReadableError(exportError);
-      setError(`Export failed. ${reason}`);
+      setError(`Export failed at "${exportStep}". ${reason}`);
       toast?.('Video export failed.', 'error');
     } finally {
       setBusy(false);

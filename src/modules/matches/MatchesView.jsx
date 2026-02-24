@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import StatTooltipLabel from '../../components/StatTooltipLabel';
+
+const MATCHES_TOOLTIPS = {
+  matches: 'Total matches visible in the current search/filter scope.',
+  shots: 'Total shots logged via Shotmap across visible matches.',
+  goalsScoring: 'Goal events logged in the Scoring module.',
+  possessions: 'Total possessions logged in Possession mapping.',
+  passes: 'Total pass events tracked inside possessions.'
+};
 
 const MatchesView = ({
   seasonId,
@@ -9,7 +18,8 @@ const MatchesView = ({
   confirmAction,
   toast,
   loadOverview,
-  onDataUpdated
+  onDataUpdated,
+  showTooltips = true
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -256,23 +266,45 @@ const MatchesView = ({
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <div className="rounded-xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold text-slate-500">Matches</div>
+          <div className="text-xs font-semibold text-slate-500">
+            <StatTooltipLabel
+              label="Matches"
+              tooltip={MATCHES_TOOLTIPS.matches}
+              enabled={showTooltips}
+            />
+          </div>
           <div className="mt-1 text-2xl font-semibold text-slate-900">{totals.matches}</div>
         </div>
         <div className="rounded-xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold text-slate-500">Shots</div>
+          <div className="text-xs font-semibold text-slate-500">
+            <StatTooltipLabel label="Shots" tooltip={MATCHES_TOOLTIPS.shots} enabled={showTooltips} />
+          </div>
           <div className="mt-1 text-2xl font-semibold text-slate-900">{totals.shots}</div>
         </div>
         <div className="rounded-xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold text-slate-500">Goals (Scoring)</div>
+          <div className="text-xs font-semibold text-slate-500">
+            <StatTooltipLabel
+              label="Goals (Scoring)"
+              tooltip={MATCHES_TOOLTIPS.goalsScoring}
+              enabled={showTooltips}
+            />
+          </div>
           <div className="mt-1 text-2xl font-semibold text-slate-900">{totals.goals}</div>
         </div>
         <div className="rounded-xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold text-slate-500">Possessions</div>
+          <div className="text-xs font-semibold text-slate-500">
+            <StatTooltipLabel
+              label="Possessions"
+              tooltip={MATCHES_TOOLTIPS.possessions}
+              enabled={showTooltips}
+            />
+          </div>
           <div className="mt-1 text-2xl font-semibold text-slate-900">{totals.possessions}</div>
         </div>
         <div className="rounded-xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold text-slate-500">Passes</div>
+          <div className="text-xs font-semibold text-slate-500">
+            <StatTooltipLabel label="Passes" tooltip={MATCHES_TOOLTIPS.passes} enabled={showTooltips} />
+          </div>
           <div className="mt-1 text-2xl font-semibold text-slate-900">{totals.passes}</div>
         </div>
       </div>

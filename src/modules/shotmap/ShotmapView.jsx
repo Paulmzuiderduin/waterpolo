@@ -3,6 +3,19 @@ import { Download } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { detectZone, penaltyPosition } from '../../utils/field';
 import { formatShotTime, normalizeTime, splitTimeParts, timeToSeconds } from '../../utils/time';
+import StatTooltipLabel from '../../components/StatTooltipLabel';
+
+const SHOTMAP_TOOLTIPS = {
+  matchMode: 'Track and edit shots for one selected match.',
+  seasonMode: 'View and filter shots across multiple matches in the selected team scope.',
+  interactiveField:
+    'Click on the field to create a shot draft. Zone 14 is reserved for penalties via the + Penalty button.',
+  result: 'Shot outcome: Goal (scored), Saved (keeper save), or Miss.',
+  attackType: 'Situation at time of shot: even strength, powerplay, or penalty.',
+  period: 'Quarter number in the match timeline.',
+  playClock: 'Remaining time in the period, counting down from a maximum of 7:00.',
+  shotsList: 'Sorted by period, then by descending clock time within each period.'
+};
 
 const ShotmapView = ({
   seasonId,
@@ -15,7 +28,8 @@ const ShotmapView = ({
   periods,
   attackTypes,
   zones,
-  resultColors
+  resultColors,
+  showTooltips = true
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -379,7 +393,11 @@ const ShotmapView = ({
                 }`}
                 onClick={() => setSeasonMode(false)}
               >
-                Match mode
+                <StatTooltipLabel
+                  label="Match mode"
+                  tooltip={SHOTMAP_TOOLTIPS.matchMode}
+                  enabled={showTooltips}
+                />
               </button>
               <button
                 className={`rounded-full px-4 py-2 text-sm font-semibold ${
@@ -387,7 +405,11 @@ const ShotmapView = ({
                 }`}
                 onClick={() => setSeasonMode(true)}
               >
-                Season mode
+                <StatTooltipLabel
+                  label="Season mode"
+                  tooltip={SHOTMAP_TOOLTIPS.seasonMode}
+                  enabled={showTooltips}
+                />
               </button>
             </div>
             {matches.length === 0 && (
@@ -576,7 +598,13 @@ const ShotmapView = ({
 
           <div ref={addShotRef} className="rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-700">Interactive field</h3>
+              <h3 className="text-sm font-semibold text-slate-700">
+                <StatTooltipLabel
+                  label="Interactive field"
+                  tooltip={SHOTMAP_TOOLTIPS.interactiveField}
+                  enabled={showTooltips}
+                />
+              </h3>
               <div className="text-xs text-slate-500">Click to add a shot</div>
             </div>
             <div className="mt-4 flex justify-center">
@@ -671,7 +699,13 @@ const ShotmapView = ({
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs font-semibold text-slate-500">Result</label>
+                    <div className="text-xs font-semibold text-slate-500">
+                      <StatTooltipLabel
+                        label="Result"
+                        tooltip={SHOTMAP_TOOLTIPS.result}
+                        enabled={showTooltips}
+                      />
+                    </div>
                     <select
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
                       value={pendingShot.result}
@@ -685,7 +719,13 @@ const ShotmapView = ({
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-slate-500">Attack</label>
+                    <div className="text-xs font-semibold text-slate-500">
+                      <StatTooltipLabel
+                        label="Attack"
+                        tooltip={SHOTMAP_TOOLTIPS.attackType}
+                        enabled={showTooltips}
+                      />
+                    </div>
                     <select
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
                       value={pendingShot.attackType}
@@ -704,7 +744,13 @@ const ShotmapView = ({
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs font-semibold text-slate-500">Period</label>
+                    <div className="text-xs font-semibold text-slate-500">
+                      <StatTooltipLabel
+                        label="Period"
+                        tooltip={SHOTMAP_TOOLTIPS.period}
+                        enabled={showTooltips}
+                      />
+                    </div>
                     <select
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
                       value={pendingShot.period}
@@ -720,7 +766,13 @@ const ShotmapView = ({
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-slate-500">Time</label>
+                    <div className="text-xs font-semibold text-slate-500">
+                      <StatTooltipLabel
+                        label="Time"
+                        tooltip={SHOTMAP_TOOLTIPS.playClock}
+                        enabled={showTooltips}
+                      />
+                    </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <div className="flex items-center gap-2">
                         <input
@@ -818,7 +870,13 @@ const ShotmapView = ({
           </div>
 
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Shots</h3>
+            <h3 className="text-sm font-semibold text-slate-700">
+              <StatTooltipLabel
+                label="Shots"
+                tooltip={SHOTMAP_TOOLTIPS.shotsList}
+                enabled={showTooltips}
+              />
+            </h3>
             <div className="mt-3 max-h-[280px] space-y-2 overflow-y-auto text-sm">
               {displayShots.length === 0 && (
                 <div className="text-slate-500">No shots recorded.</div>

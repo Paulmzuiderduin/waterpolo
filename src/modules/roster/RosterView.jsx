@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { computeAge } from '../../utils/time';
+import StatTooltipLabel from '../../components/StatTooltipLabel';
+
+const ROSTER_TOOLTIPS = {
+  details: 'Core player profile data used by report cards and filtering in other modules.',
+  birthday: 'Birthdate is used to calculate age automatically.',
+  dominantHand: 'Hand preference helps tactical analysis and matchup planning.',
+  notes: 'Optional context such as role, strengths, or injury notes.',
+  list: 'Roster is shared across all waterpolo modules for this team.'
+};
 
 const RosterView = ({
   seasonId,
@@ -9,7 +18,8 @@ const RosterView = ({
   confirmAction,
   toast,
   loadData,
-  onDataUpdated
+  onDataUpdated,
+  showTooltips = true
 }) => {
   const [roster, setRoster] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -170,7 +180,13 @@ const RosterView = ({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_1fr]">
         <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-700">Player details</h3>
+          <h3 className="text-sm font-semibold text-slate-700">
+            <StatTooltipLabel
+              label="Player details"
+              tooltip={ROSTER_TOOLTIPS.details}
+              enabled={showTooltips}
+            />
+          </h3>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <input
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
@@ -190,6 +206,7 @@ const RosterView = ({
               placeholder="Birthday"
               value={form.birthday}
               onChange={(event) => setForm({ ...form, birthday: event.target.value })}
+              title={showTooltips ? ROSTER_TOOLTIPS.birthday : undefined}
             />
             <input
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
@@ -207,6 +224,7 @@ const RosterView = ({
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
               value={form.dominantHand}
               onChange={(event) => setForm({ ...form, dominantHand: event.target.value })}
+              title={showTooltips ? ROSTER_TOOLTIPS.dominantHand : undefined}
             >
               <option value="">Dominant hand</option>
               <option value="left">Left</option>
@@ -219,6 +237,7 @@ const RosterView = ({
               value={form.notes}
               onChange={(event) => setForm({ ...form, notes: event.target.value })}
               rows={3}
+              title={showTooltips ? ROSTER_TOOLTIPS.notes : undefined}
             />
           </div>
           <div className="mt-4 flex gap-2">
@@ -238,7 +257,13 @@ const RosterView = ({
         </div>
 
         <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-700">Roster list</h3>
+          <h3 className="text-sm font-semibold text-slate-700">
+            <StatTooltipLabel
+              label="Roster list"
+              tooltip={ROSTER_TOOLTIPS.list}
+              enabled={showTooltips}
+            />
+          </h3>
           <div className="mt-3 space-y-3">
             {roster
               .slice()

@@ -1,6 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download } from 'lucide-react';
 import { distanceMeters, penaltyPosition, valueToColor, VIRIDIS } from '../../utils/field';
+import StatTooltipLabel from '../../components/StatTooltipLabel';
+
+const ANALYTICS_TOOLTIPS = {
+  count: 'Total shot attempts in each zone.',
+  success: 'Percentage of shots that were goals in each zone.',
+  save: 'Percentage of shots saved in each zone.',
+  miss: 'Percentage of shots missed in each zone.',
+  distance: 'Average shot distance in meters per zone (penalties excluded).',
+  penaltyStats: 'Penalty shot outcomes for zone 14 in the current filter scope.',
+  avgDistance: 'Average shot distance by outcome in the current filter scope.'
+};
 
 const AnalyticsView = ({
   seasonId,
@@ -10,7 +21,8 @@ const AnalyticsView = ({
   zones,
   heatTypes,
   attackTypes,
-  periods
+  periods,
+  showTooltips = true
 }) => {
   const [data, setData] = useState({ roster: [], matches: [] });
   const [loading, setLoading] = useState(true);
@@ -215,7 +227,11 @@ const AnalyticsView = ({
                     }`}
                     onClick={() => setHeatType(type.key)}
                   >
-                    {type.label}
+                    <StatTooltipLabel
+                      label={type.label}
+                      tooltip={ANALYTICS_TOOLTIPS[type.key]}
+                      enabled={showTooltips}
+                    />
                   </button>
                 ))}
               </div>
@@ -575,7 +591,13 @@ const AnalyticsView = ({
           </div>
 
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Penalty shot stats</h3>
+            <h3 className="text-sm font-semibold text-slate-700">
+              <StatTooltipLabel
+                label="Penalty shot stats"
+                tooltip={ANALYTICS_TOOLTIPS.penaltyStats}
+                enabled={showTooltips}
+              />
+            </h3>
             <div className="mt-3 text-sm text-slate-600">
               {zone14Stats?.total ? (
                 <div className="space-y-1">
@@ -592,7 +614,13 @@ const AnalyticsView = ({
 
           {heatType === 'distance' && distanceByResult && (
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-700">Average distance</h3>
+              <h3 className="text-sm font-semibold text-slate-700">
+                <StatTooltipLabel
+                  label="Average distance"
+                  tooltip={ANALYTICS_TOOLTIPS.avgDistance}
+                  enabled={showTooltips}
+                />
+              </h3>
               <div className="mt-3 space-y-2 text-sm text-slate-600">
                 <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
                   <span>Goal</span>

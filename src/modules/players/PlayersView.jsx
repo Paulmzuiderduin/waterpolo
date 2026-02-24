@@ -2,7 +2,25 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { distanceMeters } from '../../utils/field';
-import { computeAge } from '../../utils/time';
+import { computeAge, timeToSeconds } from '../../utils/time';
+import StatTooltipLabel from '../../components/StatTooltipLabel';
+
+const pct = (value, total) => (total ? ((value / total) * 100).toFixed(1) : '0.0');
+
+const sortByPeriodAndTimeDesc = (a, b) => {
+  const periodDiff = Number(b.period || 0) - Number(a.period || 0);
+  if (periodDiff !== 0) return periodDiff;
+  return timeToSeconds(b.time || '0:00') - timeToSeconds(a.time || '0:00');
+};
+
+const PLAYER_TOOLTIPS = {
+  shotsPerMatch: 'Average shot attempts per selected match.',
+  onTargetPct: 'Goals + saves divided by total shots.',
+  conversionOnTarget: 'Goals divided by on-target shots.',
+  turnoverNet: 'Turnovers won minus turnovers lost.',
+  disciplineLoad: 'Exclusions + fouls + penalties.',
+  scoringImpact: 'Goals as percentage of total logged events.'
+};
 
 const PlayersView = ({
   seasonId,
@@ -11,7 +29,8 @@ const PlayersView = ({
   seasons = [],
   onSelectSeason,
   onSelectTeam,
-  loadData
+  loadData,
+  showTooltips = true
 }) => {
   const [data, setData] = useState({ roster: [], matches: [] });
   const [scoringEvents, setScoringEvents] = useState([]);
@@ -55,7 +74,8 @@ const PlayersView = ({
               type: evt.event_type,
               playerCap: evt.player_cap || '',
               period: evt.period,
-              time: evt.time
+              time: evt.time,
+              createdAt: evt.created_at
             }))
           );
         }
@@ -89,15 +109,32 @@ const PlayersView = ({
   }, [matches, selectedMatches]);
 
   const shots = useMemo(
-    () => scopedMatches.flatMap((match) => match.shots || []),
+    () =>
+      scopedMatches.flatMap((match) =>
+        (match.shots || []).map((shot, index) => ({
+          ...shot,
+          matchName: match.info?.name || 'Match',
+          matchDate: match.info?.date || '',
+          rowId: shot.id || `${match.info?.id || 'match'}_${index}_${shot.playerCap}_${shot.period}_${shot.time}`
+        }))
+      ),
     [scopedMatches]
   );
 
   const scopedScoringEvents = useMemo(() => {
     if (!selectedMatches.length) return [];
     const matchSet = new Set(selectedMatches);
-    return scoringEvents.filter((evt) => matchSet.has(evt.matchId));
-  }, [scoringEvents, selectedMatches]);
+    const matchLookup = Object.fromEntries(
+      matches.map((match) => [match.info.id, { name: match.info?.name || 'Match', date: match.info?.date || '' }])
+    );
+    return scoringEvents
+      .filter((evt) => matchSet.has(evt.matchId))
+      .map((evt) => ({
+        ...evt,
+        matchName: matchLookup[evt.matchId]?.name || 'Match',
+        matchDate: matchLookup[evt.matchId]?.date || ''
+      }));
+  }, [scoringEvents, selectedMatches, matches]);
 
   const scopeSummary = useMemo(() => {
     const seasonLabel = selectedSeason?.name || 'Season';
@@ -131,43 +168,137 @@ const PlayersView = ({
 
   const buildShotmapStats = (player) => {
     if (!player) return null;
-    const playerShots = shots.filter((shot) => shot.playerCap === player.capNumber);
+    const playerShots = shots
+      .filter((shot) => shot.playerCap === player.capNumber)
+      .sort(sortByPeriodAndTimeDesc);
     const goals = playerShots.filter((shot) => shot.result === 'raak');
     const saves = playerShots.filter((shot) => shot.result === 'redding');
     const misses = playerShots.filter((shot) => shot.result === 'mis');
-    const goalPct = playerShots.length ? ((goals.length / playerShots.length) * 100).toFixed(1) : '0.0';
+    const onTarget = goals.length + saves.length;
+    const goalPct = pct(goals.length, playerShots.length);
+    const onTargetPct = pct(onTarget, playerShots.length);
+    const conversionOnTargetPct = pct(goals.length, onTarget);
     const avgDistance = goals.length
       ? (goals.reduce((sum, shot) => sum + distanceMeters(shot), 0) / goals.length).toFixed(1)
       : '—';
+    const avgAllDistance = playerShots.length
+      ? (playerShots.reduce((sum, shot) => sum + distanceMeters(shot), 0) / playerShots.length).toFixed(1)
+      : '—';
     const zoneCount = {};
-    goals.forEach((shot) => {
-      zoneCount[shot.zone] = (zoneCount[shot.zone] || 0) + 1;
+    const zoneBreakdown = {};
+    const periodBreakdown = {};
+    const attackBreakdown = {};
+    playerShots.forEach((shot) => {
+      zoneCount[shot.zone] = (zoneCount[shot.zone] || 0) + (shot.result === 'raak' ? 1 : 0);
+      zoneBreakdown[shot.zone] = zoneBreakdown[shot.zone] || { attempts: 0, goals: 0 };
+      zoneBreakdown[shot.zone].attempts += 1;
+      if (shot.result === 'raak') zoneBreakdown[shot.zone].goals += 1;
+
+      periodBreakdown[shot.period] = periodBreakdown[shot.period] || {
+        attempts: 0,
+        goals: 0,
+        onTarget: 0
+      };
+      periodBreakdown[shot.period].attempts += 1;
+      if (shot.result === 'raak') periodBreakdown[shot.period].goals += 1;
+      if (shot.result === 'raak' || shot.result === 'redding') periodBreakdown[shot.period].onTarget += 1;
+
+      attackBreakdown[shot.attackType] = attackBreakdown[shot.attackType] || {
+        attempts: 0,
+        goals: 0
+      };
+      attackBreakdown[shot.attackType].attempts += 1;
+      if (shot.result === 'raak') attackBreakdown[shot.attackType].goals += 1;
     });
     const preferredZone = Object.keys(zoneCount).sort((a, b) => zoneCount[b] - zoneCount[a])[0] || '—';
+    const topZones = Object.entries(zoneBreakdown)
+      .map(([zone, values]) => ({
+        zone,
+        attempts: values.attempts,
+        goals: values.goals,
+        goalPct: pct(values.goals, values.attempts)
+      }))
+      .sort((a, b) => b.attempts - a.attempts)
+      .slice(0, 5);
+    const periodRows = Object.entries(periodBreakdown)
+      .map(([period, values]) => ({
+        period,
+        attempts: values.attempts,
+        goals: values.goals,
+        onTargetPct: pct(values.onTarget, values.attempts),
+        goalPct: pct(values.goals, values.attempts)
+      }))
+      .sort((a, b) => Number(a.period) - Number(b.period));
+    const attackRows = Object.entries(attackBreakdown)
+      .map(([attackType, values]) => ({
+        attackType,
+        attempts: values.attempts,
+        goals: values.goals,
+        goalPct: pct(values.goals, values.attempts)
+      }))
+      .sort((a, b) => b.attempts - a.attempts);
+    const recentShots = playerShots.slice(0, 8);
     return {
       total: playerShots.length,
       goals: goals.length,
       saves: saves.length,
       misses: misses.length,
       goalPct,
+      onTarget,
+      onTargetPct,
+      conversionOnTargetPct,
       avgDistance,
+      avgAllDistance,
       preferredZone,
-      shots: playerShots
+      shots: playerShots,
+      topZones,
+      periodRows,
+      attackRows,
+      recentShots
     };
   };
 
   const buildScoringStats = (player) => {
     if (!player) return null;
-    const playerEvents = scopedScoringEvents.filter((evt) => evt.playerCap === player.capNumber);
+    const playerEvents = scopedScoringEvents
+      .filter((evt) => evt.playerCap === player.capNumber)
+      .sort(sortByPeriodAndTimeDesc);
     const countBy = (type) => playerEvents.filter((evt) => evt.type === type).length;
+    const periodBreakdown = {};
+    playerEvents.forEach((evt) => {
+      periodBreakdown[evt.period] = periodBreakdown[evt.period] || {
+        total: 0,
+        goals: 0,
+        exclusions: 0,
+        fouls: 0
+      };
+      periodBreakdown[evt.period].total += 1;
+      if (evt.type === 'goal') periodBreakdown[evt.period].goals += 1;
+      if (evt.type === 'exclusion') periodBreakdown[evt.period].exclusions += 1;
+      if (evt.type === 'foul') periodBreakdown[evt.period].fouls += 1;
+    });
+    const goals = countBy('goal');
+    const turnoversWon = countBy('turnover_won');
+    const turnoversLost = countBy('turnover_lost');
+    const exclusions = countBy('exclusion');
+    const fouls = countBy('foul');
+    const penalties = countBy('penalty');
+    const periodRows = Object.entries(periodBreakdown)
+      .map(([period, values]) => ({ period, ...values }))
+      .sort((a, b) => Number(a.period) - Number(b.period));
     return {
-      goals: countBy('goal'),
-      exclusions: countBy('exclusion'),
-      fouls: countBy('foul'),
-      turnoversWon: countBy('turnover_won'),
-      turnoversLost: countBy('turnover_lost'),
-      penalties: countBy('penalty'),
-      total: playerEvents.length
+      goals,
+      exclusions,
+      fouls,
+      turnoversWon,
+      turnoversLost,
+      penalties,
+      turnoverNet: turnoversWon - turnoversLost,
+      disciplineLoad: exclusions + fouls + penalties,
+      total: playerEvents.length,
+      scoringImpactPct: pct(goals, playerEvents.length),
+      periodRows,
+      recentEvents: playerEvents.slice(0, 8)
     };
   };
 
@@ -186,6 +317,57 @@ const PlayersView = ({
     reportSource === 'shotmap'
       ? buildShotmapStats(comparePlayerB)
       : buildScoringStats(comparePlayerB);
+  const selectedMatchCount = selectedMatches.length || 0;
+  const playerBmi =
+    selectedPlayer?.heightCm && selectedPlayer?.weightKg
+      ? (selectedPlayer.weightKg / ((selectedPlayer.heightCm / 100) ** 2)).toFixed(1)
+      : '—';
+  const selectedShotsPerMatch =
+    selectedStats && reportSource === 'shotmap' && selectedMatchCount
+      ? (selectedStats.total / selectedMatchCount).toFixed(1)
+      : '—';
+  const selectedEventsPerMatch =
+    selectedStats && reportSource === 'scoring' && selectedMatchCount
+      ? (selectedStats.total / selectedMatchCount).toFixed(1)
+      : '—';
+  const teamShotLeaders = useMemo(
+    () =>
+      roster
+        .map((player) => {
+          const stats = buildShotmapStats(player);
+          return {
+            id: player.id,
+            capNumber: player.capNumber,
+            name: player.name,
+            goals: stats?.goals || 0,
+            total: stats?.total || 0,
+            goalPct: stats?.goalPct || '0.0'
+          };
+        })
+        .filter((item) => item.total > 0)
+        .sort((a, b) => b.goals - a.goals || b.total - a.total)
+        .slice(0, 5),
+    [roster, shots]
+  );
+  const teamScoringLeaders = useMemo(
+    () =>
+      roster
+        .map((player) => {
+          const stats = buildScoringStats(player);
+          return {
+            id: player.id,
+            capNumber: player.capNumber,
+            name: player.name,
+            goals: stats?.goals || 0,
+            events: stats?.total || 0,
+            turnoverNet: stats?.turnoverNet || 0
+          };
+        })
+        .filter((item) => item.events > 0)
+        .sort((a, b) => b.goals - a.goals || b.events - a.events)
+        .slice(0, 5),
+    [roster, scopedScoringEvents]
+  );
 
   const exportPDF = async () => {
     if (!reportRef.current) return;
@@ -378,72 +560,179 @@ const PlayersView = ({
                 </div>
 
                 {selectedStats && reportSource === 'shotmap' && (
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Shots</div>
-                      <div className="text-lg font-semibold">{selectedStats.total}</div>
+                  <>
+                    <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Shots</div>
+                        <div className="text-lg font-semibold">{selectedStats.total}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Goals</div>
+                        <div className="text-lg font-semibold">{selectedStats.goals}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Goal %</div>
+                        <div className="text-lg font-semibold">{selectedStats.goalPct}%</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">
+                          <StatTooltipLabel
+                            label="On target %"
+                            tooltip={PLAYER_TOOLTIPS.onTargetPct}
+                            enabled={showTooltips}
+                          />
+                        </div>
+                        <div className="text-lg font-semibold">{selectedStats.onTargetPct}%</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">
+                          <StatTooltipLabel
+                            label="Conv. (on target)"
+                            tooltip={PLAYER_TOOLTIPS.conversionOnTarget}
+                            enabled={showTooltips}
+                          />
+                        </div>
+                        <div className="text-lg font-semibold">{selectedStats.conversionOnTargetPct}%</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">
+                          <StatTooltipLabel
+                            label="Shots / match"
+                            tooltip={PLAYER_TOOLTIPS.shotsPerMatch}
+                            enabled={showTooltips}
+                          />
+                        </div>
+                        <div className="text-lg font-semibold">{selectedShotsPerMatch}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Avg shot distance</div>
+                        <div className="text-lg font-semibold">{selectedStats.avgAllDistance}m</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Avg goal distance</div>
+                        <div className="text-lg font-semibold">{selectedStats.avgDistance}m</div>
+                      </div>
                     </div>
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Goal %</div>
-                      <div className="text-lg font-semibold">{selectedStats.goalPct}%</div>
+
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                      <div className="rounded-xl border border-slate-100 p-3 text-sm">
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">By Period</div>
+                        <div className="space-y-2">
+                          {selectedStats.periodRows.map((row) => (
+                            <div key={row.period} className="grid grid-cols-4 gap-2 text-xs">
+                              <span className="font-semibold text-slate-700">P{row.period}</span>
+                              <span className="text-slate-600">{row.attempts} att</span>
+                              <span className="text-slate-600">{row.goalPct}% goal</span>
+                              <span className="text-slate-600">{row.onTargetPct}% on target</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3 text-sm">
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">By Attack Type</div>
+                        <div className="space-y-2">
+                          {selectedStats.attackRows.slice(0, 6).map((row) => (
+                            <div key={row.attackType} className="grid grid-cols-3 gap-2 text-xs">
+                              <span className="font-semibold text-slate-700">{row.attackType}</span>
+                              <span className="text-slate-600">{row.attempts} att</span>
+                              <span className="text-slate-600">{row.goalPct}% goal</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Goals</div>
-                      <div className="text-lg font-semibold">{selectedStats.goals}</div>
+
+                    <div className="rounded-xl border border-slate-100 p-3 text-sm">
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Top Zones</div>
+                      <div className="space-y-2">
+                        {selectedStats.topZones.map((zone) => (
+                          <div key={zone.zone} className="grid grid-cols-4 gap-2 text-xs">
+                            <span className="font-semibold text-slate-700">Zone {zone.zone}</span>
+                            <span className="text-slate-600">{zone.attempts} att</span>
+                            <span className="text-slate-600">{zone.goals} goals</span>
+                            <span className="text-slate-600">{zone.goalPct}% goal</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Saved</div>
-                      <div className="text-lg font-semibold">{selectedStats.saves}</div>
-                    </div>
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Miss</div>
-                      <div className="text-lg font-semibold">{selectedStats.misses}</div>
-                    </div>
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Avg goal distance</div>
-                      <div className="text-lg font-semibold">{selectedStats.avgDistance}m</div>
-                    </div>
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Preferred zone (goals)</div>
-                      <div className="text-lg font-semibold">{selectedStats.preferredZone}</div>
-                    </div>
-                  </div>
+                  </>
                 )}
 
                 {selectedStats && reportSource === 'scoring' && (
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Events</div>
-                      <div className="text-lg font-semibold">{selectedStats.total}</div>
+                  <>
+                    <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Events</div>
+                        <div className="text-lg font-semibold">{selectedStats.total}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Goals</div>
+                        <div className="text-lg font-semibold">{selectedStats.goals}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">
+                          <StatTooltipLabel
+                            label="Scoring impact"
+                            tooltip={PLAYER_TOOLTIPS.scoringImpact}
+                            enabled={showTooltips}
+                          />
+                        </div>
+                        <div className="text-lg font-semibold">{selectedStats.scoringImpactPct}%</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Events / match</div>
+                        <div className="text-lg font-semibold">{selectedEventsPerMatch}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Exclusions</div>
+                        <div className="text-lg font-semibold">{selectedStats.exclusions}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Fouls</div>
+                        <div className="text-lg font-semibold">{selectedStats.fouls}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">
+                          <StatTooltipLabel
+                            label="Turnover net"
+                            tooltip={PLAYER_TOOLTIPS.turnoverNet}
+                            enabled={showTooltips}
+                          />
+                        </div>
+                        <div className={`text-lg font-semibold ${selectedStats.turnoverNet >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {selectedStats.turnoverNet}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">
+                          <StatTooltipLabel
+                            label="Discipline load"
+                            tooltip={PLAYER_TOOLTIPS.disciplineLoad}
+                            enabled={showTooltips}
+                          />
+                        </div>
+                        <div className="text-lg font-semibold">{selectedStats.disciplineLoad}</div>
+                      </div>
                     </div>
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Goals</div>
-                      <div className="text-lg font-semibold">{selectedStats.goals}</div>
+
+                    <div className="rounded-xl border border-slate-100 p-3 text-sm">
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">By Period</div>
+                      <div className="space-y-2">
+                        {selectedStats.periodRows.map((row) => (
+                          <div key={row.period} className="grid grid-cols-5 gap-2 text-xs">
+                            <span className="font-semibold text-slate-700">P{row.period}</span>
+                            <span className="text-slate-600">{row.total} events</span>
+                            <span className="text-slate-600">{row.goals} goals</span>
+                            <span className="text-slate-600">{row.exclusions} excl.</span>
+                            <span className="text-slate-600">{row.fouls} fouls</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Exclusions</div>
-                      <div className="text-lg font-semibold">{selectedStats.exclusions}</div>
-                    </div>
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Fouls</div>
-                      <div className="text-lg font-semibold">{selectedStats.fouls}</div>
-                    </div>
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Turnover won</div>
-                      <div className="text-lg font-semibold">{selectedStats.turnoversWon}</div>
-                    </div>
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Turnover lost</div>
-                      <div className="text-lg font-semibold">{selectedStats.turnoversLost}</div>
-                    </div>
-                    <div className="rounded-xl border border-slate-100 p-3">
-                      <div className="text-xs text-slate-500">Penalties</div>
-                      <div className="text-lg font-semibold">{selectedStats.penalties}</div>
-                    </div>
-                  </div>
+                  </>
                 )}
 
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
                   <div className="rounded-xl border border-slate-100 p-3">
                     <div className="text-xs text-slate-500">Age</div>
                     <div className="text-lg font-semibold">
@@ -458,7 +747,48 @@ const PlayersView = ({
                     <div className="text-xs text-slate-500">Weight</div>
                     <div className="text-lg font-semibold">{selectedPlayer.weightKg ? `${selectedPlayer.weightKg} kg` : '—'}</div>
                   </div>
+                  <div className="rounded-xl border border-slate-100 p-3">
+                    <div className="text-xs text-slate-500">BMI</div>
+                    <div className="text-lg font-semibold">{playerBmi}</div>
+                  </div>
                 </div>
+
+                {selectedStats && reportSource === 'shotmap' && (
+                  <div className="rounded-xl border border-slate-100 p-3 text-sm">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Recent Shots</div>
+                    <div className="space-y-2">
+                      {selectedStats.recentShots.length === 0 && (
+                        <div className="text-xs text-slate-500">No shots in selected scope.</div>
+                      )}
+                      {selectedStats.recentShots.map((shot) => (
+                        <div key={shot.rowId} className="grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-2 text-xs">
+                          <span className="truncate font-medium text-slate-700">{shot.matchName}</span>
+                          <span className="text-slate-600">P{shot.period} {shot.time}</span>
+                          <span className="text-slate-600">Zone {shot.zone}</span>
+                          <span className="text-slate-600">{shot.result}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedStats && reportSource === 'scoring' && (
+                  <div className="rounded-xl border border-slate-100 p-3 text-sm">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Recent Events</div>
+                    <div className="space-y-2">
+                      {selectedStats.recentEvents.length === 0 && (
+                        <div className="text-xs text-slate-500">No scoring events in selected scope.</div>
+                      )}
+                      {selectedStats.recentEvents.map((evt) => (
+                        <div key={evt.id} className="grid grid-cols-[1.3fr_1fr_1fr] gap-2 text-xs">
+                          <span className="truncate font-medium text-slate-700">{evt.matchName}</span>
+                          <span className="text-slate-600">P{evt.period} {evt.time}</span>
+                          <span className="text-slate-600">{evt.type}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {selectedPlayer.notes && (
                   <div className="rounded-xl border border-slate-100 p-3 text-sm text-slate-600">
@@ -499,53 +829,142 @@ const PlayersView = ({
                 ))}
               </select>
             </div>
-            {compareStatsA && compareStatsB && reportSource === 'shotmap' && (
+            {comparePlayerA && comparePlayerB && compareStatsA && compareStatsB && (
               <div className="mt-4 space-y-2 text-sm">
-                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
-                  <span className="text-slate-500">Shots</span>
-                  <span className="font-semibold">{compareStatsA.total}</span>
-                  <span className="font-semibold">{compareStatsB.total}</span>
+                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                  <span>Metric</span>
+                  <span className="truncate">#{comparePlayerA.capNumber} {comparePlayerA.name}</span>
+                  <span className="truncate">#{comparePlayerB.capNumber} {comparePlayerB.name}</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
-                  <span className="text-slate-500">Goal %</span>
-                  <span className="font-semibold">{compareStatsA.goalPct}%</span>
-                  <span className="font-semibold">{compareStatsB.goalPct}%</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
-                  <span className="text-slate-500">Avg distance</span>
-                  <span className="font-semibold">{compareStatsA.avgDistance}m</span>
-                  <span className="font-semibold">{compareStatsB.avgDistance}m</span>
-                </div>
+                {(reportSource === 'shotmap'
+                  ? [
+                      {
+                        label: 'Shots',
+                        a: compareStatsA.total,
+                        b: compareStatsB.total,
+                        better: 'higher'
+                      },
+                      {
+                        label: 'Goals',
+                        a: compareStatsA.goals,
+                        b: compareStatsB.goals,
+                        better: 'higher'
+                      },
+                      {
+                        label: 'Goal %',
+                        a: Number(compareStatsA.goalPct),
+                        b: Number(compareStatsB.goalPct),
+                        aLabel: `${compareStatsA.goalPct}%`,
+                        bLabel: `${compareStatsB.goalPct}%`,
+                        better: 'higher'
+                      },
+                      {
+                        label: 'On target %',
+                        a: Number(compareStatsA.onTargetPct),
+                        b: Number(compareStatsB.onTargetPct),
+                        aLabel: `${compareStatsA.onTargetPct}%`,
+                        bLabel: `${compareStatsB.onTargetPct}%`,
+                        better: 'higher'
+                      },
+                      {
+                        label: 'Avg goal distance',
+                        a: Number(compareStatsA.avgDistance) || 0,
+                        b: Number(compareStatsB.avgDistance) || 0,
+                        aLabel: `${compareStatsA.avgDistance}m`,
+                        bLabel: `${compareStatsB.avgDistance}m`,
+                        better: 'lower'
+                      }
+                    ]
+                  : [
+                      {
+                        label: 'Events',
+                        a: compareStatsA.total,
+                        b: compareStatsB.total,
+                        better: 'higher'
+                      },
+                      {
+                        label: 'Goals',
+                        a: compareStatsA.goals,
+                        b: compareStatsB.goals,
+                        better: 'higher'
+                      },
+                      {
+                        label: 'Scoring impact %',
+                        a: Number(compareStatsA.scoringImpactPct),
+                        b: Number(compareStatsB.scoringImpactPct),
+                        aLabel: `${compareStatsA.scoringImpactPct}%`,
+                        bLabel: `${compareStatsB.scoringImpactPct}%`,
+                        better: 'higher'
+                      },
+                      {
+                        label: 'Turnover net',
+                        a: compareStatsA.turnoverNet,
+                        b: compareStatsB.turnoverNet,
+                        better: 'higher'
+                      },
+                      {
+                        label: 'Discipline load',
+                        a: compareStatsA.disciplineLoad,
+                        b: compareStatsB.disciplineLoad,
+                        better: 'lower'
+                      }
+                    ]
+                ).map((row) => {
+                  const aWins =
+                    row.better === 'lower' ? row.a < row.b : row.a > row.b;
+                  const bWins =
+                    row.better === 'lower' ? row.b < row.a : row.b > row.a;
+                  return (
+                    <div key={row.label} className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                      <span className="text-slate-500">{row.label}</span>
+                      <span className={`font-semibold ${aWins ? 'text-emerald-700' : 'text-slate-800'}`}>
+                        {row.aLabel ?? row.a}
+                      </span>
+                      <span className={`font-semibold ${bWins ? 'text-emerald-700' : 'text-slate-800'}`}>
+                        {row.bLabel ?? row.b}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
+          </div>
 
-            {compareStatsA && compareStatsB && reportSource === 'scoring' && (
-              <div className="mt-4 space-y-2 text-sm">
-                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
-                  <span className="text-slate-500">Events</span>
-                  <span className="font-semibold">{compareStatsA.total}</span>
-                  <span className="font-semibold">{compareStatsB.total}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
-                  <span className="text-slate-500">Goals</span>
-                  <span className="font-semibold">{compareStatsA.goals}</span>
-                  <span className="font-semibold">{compareStatsB.goals}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
-                  <span className="text-slate-500">Exclusions</span>
-                  <span className="font-semibold">{compareStatsA.exclusions}</span>
-                  <span className="font-semibold">{compareStatsB.exclusions}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
-                  <span className="text-slate-500">Turnover won</span>
-                  <span className="font-semibold">{compareStatsA.turnoversWon}</span>
-                  <span className="font-semibold">{compareStatsB.turnoversWon}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 px-3 py-2">
-                  <span className="text-slate-500">Turnover lost</span>
-                  <span className="font-semibold">{compareStatsA.turnoversLost}</span>
-                  <span className="font-semibold">{compareStatsB.turnoversLost}</span>
-                </div>
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700">Team leaderboard (selected scope)</h3>
+            {reportSource === 'shotmap' ? (
+              <div className="mt-3 space-y-2 text-sm">
+                {teamShotLeaders.length === 0 && (
+                  <div className="text-xs text-slate-500">No shot data in current scope.</div>
+                )}
+                {teamShotLeaders.map((player, index) => (
+                  <div key={player.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 rounded-lg border border-slate-100 px-3 py-2 text-xs">
+                    <span className="font-semibold text-slate-500">#{index + 1}</span>
+                    <span className="truncate font-semibold text-slate-700">
+                      #{player.capNumber} {player.name}
+                    </span>
+                    <span className="text-slate-600">{player.goals} goals</span>
+                    <span className="text-slate-600">{player.goalPct}%</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3 space-y-2 text-sm">
+                {teamScoringLeaders.length === 0 && (
+                  <div className="text-xs text-slate-500">No scoring event data in current scope.</div>
+                )}
+                {teamScoringLeaders.map((player, index) => (
+                  <div key={player.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 rounded-lg border border-slate-100 px-3 py-2 text-xs">
+                    <span className="font-semibold text-slate-500">#{index + 1}</span>
+                    <span className="truncate font-semibold text-slate-700">
+                      #{player.capNumber} {player.name}
+                    </span>
+                    <span className="text-slate-600">{player.goals} goals</span>
+                    <span className={`${player.turnoverNet >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      TO net {player.turnoverNet}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, Play, Plus, Scissors, Trash2, Upload } from 'lucide-react';
+import StatTooltipLabel from '../../components/StatTooltipLabel';
 
 const TOOL_OPTIONS = [
   { key: 'arrow', label: 'Arrow' },
@@ -7,6 +8,18 @@ const TOOL_OPTIONS = [
   { key: 'freehand', label: 'Freehand' },
   { key: 'text', label: 'Text' }
 ];
+
+const VIDEO_TOOLTIPS = {
+  snippets: 'Locally stored clips created from your selected source video. Nothing uploads automatically.',
+  controls:
+    'Set In/Out marks and create snippets. Loop playback replays the active snippet continuously.',
+  drawingTools:
+    'Choose shape, color, and width for overlays. Drawings are attached to the selected snippet only.',
+  visibilityWindow:
+    'Control when each drawing appears during snippet playback and export.',
+  export:
+    'MP4 + Draw burns visible overlays into output video. MP4 exports the clean clip without overlays.'
+};
 
 let ffmpegRuntimePromise = null;
 
@@ -309,7 +322,7 @@ const drawDrawingOnCanvas = (ctx, drawing, width, height) => {
   }
 };
 
-const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
+const VideoAnalysisView = ({ teamId, seasonId, toast, showTooltips = true }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
   const [snippets, setSnippets] = useState([]);
@@ -992,7 +1005,13 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <section className="wp-card rounded-3xl p-4 xl:col-start-2 xl:row-start-1">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-slate-700">Snippets ({snippets.length})</h3>
+            <h3 className="text-sm font-semibold text-slate-700">
+              <StatTooltipLabel
+                label={`Snippets (${snippets.length})`}
+                tooltip={VIDEO_TOOLTIPS.snippets}
+                enabled={showTooltips}
+              />
+            </h3>
             <button
               className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={() => {
@@ -1213,7 +1232,13 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
 
           <div className="wp-card rounded-3xl p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-slate-700">Snippet controls</h3>
+              <h3 className="text-sm font-semibold text-slate-700">
+                <StatTooltipLabel
+                  label="Snippet controls"
+                  tooltip={VIDEO_TOOLTIPS.controls}
+                  enabled={showTooltips}
+                />
+              </h3>
               {selectedSnippet && (
                 <div className="text-xs font-semibold text-slate-500">Active: {selectedSnippet.name}</div>
               )}
@@ -1276,7 +1301,13 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
 
         <section className="space-y-4 xl:col-start-2 xl:row-start-2">
           <div className="wp-card rounded-3xl p-4">
-            <h3 className="text-sm font-semibold text-slate-700">Drawing tools</h3>
+            <h3 className="text-sm font-semibold text-slate-700">
+              <StatTooltipLabel
+                label="Drawing tools"
+                tooltip={VIDEO_TOOLTIPS.drawingTools}
+                enabled={showTooltips}
+              />
+            </h3>
             <div className="mt-3 flex flex-wrap gap-2">
               {TOOL_OPTIONS.map((option) => (
                 <button
@@ -1351,7 +1382,13 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
 
           <div className="wp-card rounded-3xl p-4">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
-              <span>Drawing visibility window</span>
+              <span>
+                <StatTooltipLabel
+                  label="Drawing visibility window"
+                  tooltip={VIDEO_TOOLTIPS.visibilityWindow}
+                  enabled={showTooltips}
+                />
+              </span>
               <span>{selectedSnippet ? formatClock(currentSnippetTime) : '--'}</span>
             </div>
             <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto pr-1">
@@ -1406,6 +1443,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast }) => {
           </div>
 
           <div className="wp-card rounded-3xl p-4 text-xs text-slate-600">
+            <StatTooltipLabel label="Export notes" tooltip={VIDEO_TOOLTIPS.export} enabled={showTooltips} />.
             Exported MP4 snippets are local files. Use <span className="font-semibold">MP4 + Draw</span> to burn the
             visible overlays into the clip.
           </div>

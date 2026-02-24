@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import StatTooltipLabel from '../../components/StatTooltipLabel';
+
+const POSSESSION_TOOLTIPS = {
+  fieldView: 'Shows exact pass origins and receptions on the field map for the active possession.',
+  networkView: 'Aggregates pass links between players and counts repeated connections.',
+  replayView: 'Step list of passes in sequence order for the selected possession.',
+  endPossession: 'Set the final outcome to close the active possession and keep data organized by sequence.',
+  networkConnections: 'Counts how often each player-to-player connection occurs in this possession.'
+};
 
 const PossessionView = ({
   seasonId,
@@ -10,7 +19,8 @@ const PossessionView = ({
   toast,
   loadData,
   onDataUpdated,
-  outcomes
+  outcomes,
+  showTooltips = true
 }) => {
   const [roster, setRoster] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -281,19 +291,31 @@ const PossessionView = ({
             className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
             onClick={() => setViewMode('field')}
           >
-            Field
+            <StatTooltipLabel
+              label="Field"
+              tooltip={POSSESSION_TOOLTIPS.fieldView}
+              enabled={showTooltips}
+            />
           </button>
           <button
             className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
             onClick={() => setViewMode('network')}
           >
-            Network
+            <StatTooltipLabel
+              label="Network"
+              tooltip={POSSESSION_TOOLTIPS.networkView}
+              enabled={showTooltips}
+            />
           </button>
           <button
             className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
             onClick={() => setViewMode('replay')}
           >
-            Replay
+            <StatTooltipLabel
+              label="Replay"
+              tooltip={POSSESSION_TOOLTIPS.replayView}
+              enabled={showTooltips}
+            />
           </button>
         </div>
       </div>
@@ -336,7 +358,13 @@ const PossessionView = ({
             </div>
             {activePossessionId && (
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold text-slate-500">End possession:</span>
+                <span className="text-xs font-semibold text-slate-500">
+                  <StatTooltipLabel
+                    label="End possession:"
+                    tooltip={POSSESSION_TOOLTIPS.endPossession}
+                    enabled={showTooltips}
+                  />
+                </span>
                 {outcomes.map((outcome) => (
                   <button
                     key={outcome.key}
@@ -502,7 +530,13 @@ const PossessionView = ({
 
           {viewMode === 'network' && (
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-700">Passing network</h3>
+              <h3 className="text-sm font-semibold text-slate-700">
+                <StatTooltipLabel
+                  label="Passing network"
+                  tooltip={POSSESSION_TOOLTIPS.networkConnections}
+                  enabled={showTooltips}
+                />
+              </h3>
               <div className="mt-3 space-y-2 text-sm text-slate-600">
                 {connectionStats.length === 0 && <div>No passes yet.</div>}
                 {connectionStats.map((row) => (

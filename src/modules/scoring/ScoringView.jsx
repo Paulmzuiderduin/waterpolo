@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatShotTime, normalizeTime, splitTimeParts, timeToSeconds } from '../../utils/time';
+import StatTooltipLabel from '../../components/StatTooltipLabel';
 
 const SCORING_EVENTS = [
   { key: 'goal', label: 'Goal', player: true, color: 'bg-emerald-600' },
@@ -12,6 +13,17 @@ const SCORING_EVENTS = [
   { key: 'timeout', label: 'Timeout', player: false, color: 'bg-slate-700' }
 ];
 
+const SCORING_TOOLTIPS = {
+  goals: 'Goal events logged for the selected stats scope.',
+  exclusions: 'Exclusion events drawn by your team.',
+  fouls: 'Ordinary/personal fouls attributed to your team.',
+  turnoversWon: 'Possessions regained by your team.',
+  turnoversLost: 'Possessions lost by your team.',
+  penalties: 'Penalty events recorded for your team.',
+  timeouts: 'Timeout events logged.',
+  manUp: 'Approximation: goals divided by exclusions, expressed as %.'
+};
+
 const ScoringView = ({
   seasonId,
   teamId,
@@ -21,7 +33,8 @@ const ScoringView = ({
   loadData,
   onDataUpdated,
   periods,
-  periodOrder
+  periodOrder,
+  showTooltips = true
 }) => {
   const [roster, setRoster] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -679,25 +692,52 @@ const ScoringView = ({
             <h3 className="text-sm font-semibold text-slate-700">Team stats</h3>
             <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-600">
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Goals <span className="font-semibold text-slate-900">{stats.totals.goal}</span>
+                <StatTooltipLabel label="Goals" tooltip={SCORING_TOOLTIPS.goals} enabled={showTooltips} />{' '}
+                <span className="font-semibold text-slate-900">{stats.totals.goal}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Exclusions <span className="font-semibold text-slate-900">{stats.totals.exclusion}</span>
+                <StatTooltipLabel
+                  label="Exclusions"
+                  tooltip={SCORING_TOOLTIPS.exclusions}
+                  enabled={showTooltips}
+                />{' '}
+                <span className="font-semibold text-slate-900">{stats.totals.exclusion}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Fouls <span className="font-semibold text-slate-900">{stats.totals.foul}</span>
+                <StatTooltipLabel label="Fouls" tooltip={SCORING_TOOLTIPS.fouls} enabled={showTooltips} />{' '}
+                <span className="font-semibold text-slate-900">{stats.totals.foul}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Turnovers won <span className="font-semibold text-slate-900">{stats.totals.turnover_won}</span>
+                <StatTooltipLabel
+                  label="Turnovers won"
+                  tooltip={SCORING_TOOLTIPS.turnoversWon}
+                  enabled={showTooltips}
+                />{' '}
+                <span className="font-semibold text-slate-900">{stats.totals.turnover_won}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Turnovers lost <span className="font-semibold text-slate-900">{stats.totals.turnover_lost}</span>
+                <StatTooltipLabel
+                  label="Turnovers lost"
+                  tooltip={SCORING_TOOLTIPS.turnoversLost}
+                  enabled={showTooltips}
+                />{' '}
+                <span className="font-semibold text-slate-900">{stats.totals.turnover_lost}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Penalties <span className="font-semibold text-slate-900">{stats.totals.penalty}</span>
+                <StatTooltipLabel
+                  label="Penalties"
+                  tooltip={SCORING_TOOLTIPS.penalties}
+                  enabled={showTooltips}
+                />{' '}
+                <span className="font-semibold text-slate-900">{stats.totals.penalty}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Timeouts <span className="font-semibold text-slate-900">{stats.totals.timeout}</span>
+                <StatTooltipLabel
+                  label="Timeouts"
+                  tooltip={SCORING_TOOLTIPS.timeouts}
+                  enabled={showTooltips}
+                />{' '}
+                <span className="font-semibold text-slate-900">{stats.totals.timeout}</span>
               </div>
             </div>
             <div className="mt-3 text-xs text-slate-500">
@@ -705,7 +745,8 @@ const ScoringView = ({
             </div>
             <div className="mt-2 grid grid-cols-2 gap-3 text-sm text-slate-600">
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                Man-up % <span className="font-semibold text-emerald-700">{stats.manUp}%</span>
+                <StatTooltipLabel label="Man-up %" tooltip={SCORING_TOOLTIPS.manUp} enabled={showTooltips} />{' '}
+                <span className="font-semibold text-emerald-700">{stats.manUp}%</span>
               </div>
             </div>
           </div>

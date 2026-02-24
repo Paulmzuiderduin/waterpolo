@@ -64,7 +64,7 @@ const App = () => {
   const [preferences, setPreferences] = useState({
     rememberLastTab: true,
     showHubTips: true,
-    showHelpTooltips: true
+    showStatTooltips: true
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -136,9 +136,15 @@ const App = () => {
     try {
       const raw = localStorage.getItem(`waterpolo_preferences_${session.user.id}`);
       const parsed = raw ? JSON.parse(raw) : {};
-      setPreferences((prev) => ({ ...prev, ...parsed }));
+      setPreferences((prev) => ({
+        ...prev,
+        ...parsed,
+        // Backward compatibility with previous key name.
+        showStatTooltips:
+          parsed.showStatTooltips != null ? parsed.showStatTooltips : parsed.showHelpTooltips ?? prev.showStatTooltips
+      }));
     } catch {
-      setPreferences({ rememberLastTab: true, showHubTips: true, showHelpTooltips: true });
+      setPreferences({ rememberLastTab: true, showHubTips: true, showStatTooltips: true });
     }
   }, [session]);
 
@@ -676,7 +682,9 @@ const App = () => {
       />
 
       <main className="mx-auto max-w-7xl space-y-6 p-6">
-        {activeTab === 'hub' && <HubView showTips={preferences.showHubTips} />}
+        {activeTab === 'hub' && (
+          <HubView showTips={preferences.showHubTips} showTooltips={preferences.showStatTooltips} />
+        )}
         {activeTab === 'matches' && (
           <MatchesView
             seasonId={selectedSeasonId}
@@ -686,6 +694,7 @@ const App = () => {
             toast={toast}
             loadOverview={loadTeamMatchesOverview}
             onDataUpdated={notifyDataUpdated}
+            showTooltips={preferences.showStatTooltips}
           />
         )}
         {activeTab === 'shotmap' && (
@@ -701,6 +710,7 @@ const App = () => {
             attackTypes={ATTACK_TYPES}
             zones={ZONES}
             resultColors={RESULT_COLORS}
+            showTooltips={preferences.showStatTooltips}
           />
         )}
         {activeTab === 'analytics' && (
@@ -713,6 +723,7 @@ const App = () => {
             heatTypes={HEAT_TYPES}
             attackTypes={ATTACK_TYPES}
             periods={PERIODS}
+            showTooltips={preferences.showStatTooltips}
           />
         )}
         {activeTab === 'video' && (
@@ -720,6 +731,7 @@ const App = () => {
             teamId={selectedTeamId}
             seasonId={selectedSeasonId}
             toast={toast}
+            showTooltips={preferences.showStatTooltips}
           />
         )}
         {activeTab === 'scoring' && (
@@ -733,6 +745,7 @@ const App = () => {
             onDataUpdated={notifyDataUpdated}
             periods={PERIODS}
             periodOrder={PERIOD_ORDER}
+            showTooltips={preferences.showStatTooltips}
           />
         )}
         {activeTab === 'possession' && (
@@ -745,6 +758,7 @@ const App = () => {
             loadData={loadTeamPossessions}
             onDataUpdated={notifyDataUpdated}
             outcomes={POSSESSION_OUTCOMES}
+            showTooltips={preferences.showStatTooltips}
           />
         )}
         {activeTab === 'players' && (
@@ -756,6 +770,7 @@ const App = () => {
             onSelectSeason={setSelectedSeasonId}
             onSelectTeam={setSelectedTeamId}
             loadData={loadTeamData}
+            showTooltips={preferences.showStatTooltips}
           />
         )}
         {activeTab === 'roster' && (
@@ -767,9 +782,10 @@ const App = () => {
             toast={toast}
             loadData={loadTeamData}
             onDataUpdated={notifyDataUpdated}
+            showTooltips={preferences.showStatTooltips}
           />
         )}
-        {activeTab === 'help' && <HelpView showTooltips={preferences.showHelpTooltips} />}
+        {activeTab === 'help' && <HelpView showTooltips={preferences.showStatTooltips} />}
         {activeTab === 'settings' && (
           <SettingsView
             moduleConfig={moduleConfig}

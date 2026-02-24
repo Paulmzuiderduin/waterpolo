@@ -1,6 +1,12 @@
 import React from 'react';
+import StatTooltipLabel from '../../components/StatTooltipLabel';
 
-const HubView = ({ showTips }) => (
+const HUB_TOOLTIPS = {
+  workflow:
+    'Recommended order: set season/team, add roster, create matches, then track in operational modules before reviewing analytics.'
+};
+
+const HubView = ({ showTips, showTooltips = true }) => (
   <div className="space-y-6">
     <div className="rounded-2xl bg-white p-6 shadow-sm">
       <p className="text-sm font-semibold text-cyan-700">Waterpolo Hub</p>
@@ -16,7 +22,13 @@ const HubView = ({ showTips }) => (
 
     <div className={`grid grid-cols-1 gap-4 ${showTips ? 'lg:grid-cols-[1.4fr_1fr]' : ''}`}>
       <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-700">Getting Started</h3>
+        <h3 className="text-sm font-semibold text-slate-700">
+          <StatTooltipLabel
+            label="Getting Started"
+            tooltip={HUB_TOOLTIPS.workflow}
+            enabled={showTooltips}
+          />
+        </h3>
         <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-slate-600">
           <li>Create or select a season and team.</li>
           <li>Open `Roster` and add players first.</li>

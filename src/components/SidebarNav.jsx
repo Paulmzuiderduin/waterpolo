@@ -24,14 +24,14 @@ const SidebarNav = ({
       >
         {isCollapsed ? (
           <img
-            src="/waterpolo-hub-logo.svg"
+            src="/logos/waterpolo-logo-light.png"
             alt="Waterpolo Hub"
             className="h-10 w-10 rounded-xl border border-slate-200 bg-white/90 p-0.5"
           />
         ) : (
           <div className="flex items-center gap-3">
             <img
-              src="/waterpolo-hub-logo.svg"
+              src="/logos/waterpolo-logo-light.png"
               alt="Waterpolo Hub"
               className="h-10 w-10 rounded-xl border border-slate-200 bg-white/90 p-0.5"
             />

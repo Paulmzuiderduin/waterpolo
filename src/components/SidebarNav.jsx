@@ -23,13 +23,24 @@ const SidebarNav = ({
         }`}
       >
         {isCollapsed ? (
-          <p className="text-sm font-black uppercase tracking-tight text-slate-900">WP</p>
+          <img
+            src="/waterpolo-hub-logo.svg"
+            alt="Waterpolo Hub"
+            className="h-10 w-10 rounded-xl border border-slate-200 bg-white/90 p-0.5"
+          />
         ) : (
-          <div>
-            <p className="text-xl font-black uppercase italic tracking-tight text-slate-900">
-              Waterpolo <span className="wp-primary-text">Hub</span>
-            </p>
-            <p className="text-xs text-slate-500">{selectedSeasonName}</p>
+          <div className="flex items-center gap-3">
+            <img
+              src="/waterpolo-hub-logo.svg"
+              alt="Waterpolo Hub"
+              className="h-10 w-10 rounded-xl border border-slate-200 bg-white/90 p-0.5"
+            />
+            <div>
+              <p className="text-xl font-black uppercase italic tracking-tight text-slate-900">
+                Waterpolo <span className="wp-primary-text">Hub</span>
+              </p>
+              <p className="text-xs text-slate-500">{selectedSeasonName}</p>
+            </div>
           </div>
         )}
         <button

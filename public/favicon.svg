@@ -1,5 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#0b4a7a"/>
-  <path d="M8 36c7-8 13-8 20 0s13 8 20 0 13-8 20 0" fill="none" stroke="#1ac8ed" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="48" cy="20" r="6" fill="#ccfccb"/>
+  <defs>
+    <linearGradient id="wpf-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#10263a"/>
+      <stop offset="100%" stop-color="#1d5371"/>
+    </linearGradient>
+    <linearGradient id="wpf-wave" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4be4ff"/>
+      <stop offset="100%" stop-color="#1ac8ed"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#wpf-bg)"/>
+  <circle cx="32" cy="32" r="18" fill="none" stroke="#f3fbff" stroke-width="4.4"/>
+  <path d="M15 36c5-5 10-5 15 0s10 5 15 0 10-5 15 0" fill="none" stroke="url(#wpf-wave)" stroke-width="4.2" stroke-linecap="round"/>
+  <circle cx="46" cy="24" r="6" fill="#ffffff"/>
+  <path d="M40 24h12M46 18c2.6 1 4.2 3.3 4.2 6s-1.6 5-4.2 6M46 18c-2.6 1-4.2 3.3-4.2 6s1.6 5 4.2 6" fill="none" stroke="#1d5371" stroke-width="1.25" stroke-linecap="round"/>
 </svg>

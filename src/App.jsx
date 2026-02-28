@@ -600,6 +600,16 @@ const App = () => {
     </>
   );
 
+  const renderFeatureRequestButton = () => (
+    <button
+      className="fixed bottom-24 right-4 z-[115] inline-flex items-center gap-2 rounded-full bg-cyan-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/20 transition hover:bg-cyan-500 lg:bottom-6"
+      onClick={openFeatureRequestDialog}
+    >
+      <Plus size={16} />
+      Request feature
+    </button>
+  );
+
   if (authLoading) {
     return <div className="p-10 text-slate-700">Loading...</div>;
   }
@@ -831,6 +841,7 @@ const App = () => {
             </div>
           </div>
         </footer>
+        {renderFeatureRequestButton()}
         <VisitCounter siteKey="waterpolo" />
         {renderUiOverlays()}
       </div>
@@ -1039,6 +1050,7 @@ const App = () => {
           setMobileMenuOpen(false);
         }}
       />
+      {renderFeatureRequestButton()}
       <VisitCounter siteKey="waterpolo" />
       {renderUiOverlays()}
     </div>

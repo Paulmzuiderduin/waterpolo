@@ -124,6 +124,12 @@ create table if not exists feature_requests (
   created_at timestamptz not null default now()
 );
 
+create table if not exists site_visit_totals (
+  site_key text primary key,
+  total bigint not null default 0,
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists seasons_user_id_idx on seasons(user_id);
 create index if not exists teams_user_id_idx on teams(user_id);
 create index if not exists roster_team_id_idx on roster(team_id);
@@ -147,6 +153,7 @@ alter table scoring_events enable row level security;
 alter table possessions enable row level security;
 alter table passes enable row level security;
 alter table feature_requests enable row level security;
+alter table site_visit_totals enable row level security;
 
 drop policy if exists "Seasons are user-owned" on seasons;
 create policy "Seasons are user-owned" on seasons
@@ -183,3 +190,30 @@ create policy "Passes are user-owned" on passes
 drop policy if exists "Feature requests are user-owned" on feature_requests;
 create policy "Feature requests are user-owned" on feature_requests
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "Site visit totals are readable" on site_visit_totals;
+create policy "Site visit totals are readable" on site_visit_totals
+  for select to anon, authenticated using (true);
+
+create or replace function increment_site_visit_total(site_input text)
+returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  next_total bigint;
+begin
+  insert into public.site_visit_totals (site_key, total, updated_at)
+  values (site_input, 1, now())
+  on conflict (site_key)
+  do update set
+    total = public.site_visit_totals.total + 1,
+    updated_at = now()
+  returning total into next_total;
+
+  return next_total;
+end;
+$$;
+
+grant execute on function increment_site_visit_total(text) to anon, authenticated;

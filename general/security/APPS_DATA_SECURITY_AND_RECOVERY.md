@@ -66,6 +66,7 @@ Domain data:
 - `possessions`: possession outcome.
 - `passes`: from/to player caps, from/to coordinates, sequence.
 - `feature_requests`: signed-in user email, subject, message, app tab, optional season/team context, status.
+- `site_visit_totals`: aggregate page-view total per site key.
 
 Browser local storage:
 - Module visibility, preferences, last active tab (per user).
@@ -99,6 +100,7 @@ Waterpolo DB schema and RLS source of truth:
 - `/Users/paul/Documents/New project/supabase/schema.sql`
 - Includes table creation and RLS policies per table with `auth.uid() = user_id`.
 - Includes the `feature_requests` table used for in-app Waterpolo Hub request submissions.
+- Includes the `site_visit_totals` table and RPC used for the aggregate page-view counter.
 
 Supabase clients:
 - Waterpolo: `/Users/paul/Documents/New project/src/lib/supabase.js`

@@ -12,11 +12,11 @@ const SidebarNav = ({
   onToggleCollapse
 }) => (
   <aside
-    className={`wp-surface wp-border fixed left-0 top-0 hidden h-full flex-col border-r shadow-sm transition-all duration-200 lg:flex ${
-      isCollapsed ? 'w-20 p-3' : 'w-64 p-6'
+    className={`wp-surface wp-border fixed left-0 top-0 hidden h-full flex-col overflow-y-auto border-r shadow-sm transition-all duration-200 lg:flex ${
+      isCollapsed ? 'w-20 p-3' : 'w-64 p-4'
     }`}
   >
-    <div className={`${isCollapsed ? 'mb-6' : 'mb-10'}`}>
+    <div className={`${isCollapsed ? 'mb-4' : 'mb-6'}`}>
       <div
         className={`flex items-center ${
           isCollapsed ? 'flex-col justify-center gap-2' : 'justify-between'
@@ -52,11 +52,11 @@ const SidebarNav = ({
         </button>
       </div>
     </div>
-    <nav className="flex flex-col gap-2">
+    <nav className="flex flex-col gap-1.5">
       {navItems.map((item) => (
         <button
           key={item.key}
-          className={`flex items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors ${
+          className={`flex items-center rounded-xl py-2.5 text-left text-sm font-semibold transition-colors ${
             activeTab === item.key ? 'wp-primary-bg text-white' : 'text-slate-600 hover:bg-slate-100'
           } ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-4'}`}
           title={isCollapsed ? item.label : undefined}
@@ -67,7 +67,7 @@ const SidebarNav = ({
         </button>
       ))}
     </nav>
-    <div className="mt-auto space-y-2">
+    <div className="mt-4 space-y-2 pb-1">
       <button
         className={`w-full rounded-xl border border-slate-200 py-2 text-sm font-semibold ${
           isCollapsed ? 'px-2' : 'px-4'

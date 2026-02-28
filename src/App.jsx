@@ -17,6 +17,7 @@ import AppHeader from './components/AppHeader';
 import MobileNav from './components/MobileNav';
 import SidebarNav from './components/SidebarNav';
 import PublicSeoContent from './components/PublicSeoContent';
+import VisitCounter from './components/VisitCounter';
 import ScoringView from './modules/scoring/ScoringView';
 import PossessionView from './modules/possession/PossessionView';
 import MatchesView from './modules/matches/MatchesView';
@@ -73,6 +74,7 @@ const App = () => {
   const [featureRequestDialog, setFeatureRequestDialog] = useState(null);
   const [toasts, setToasts] = useState([]);
   const didApplyStartTab = useRef(false);
+  const didApplyWorkspaceSelection = useRef(false);
 
   const toast = useCallback((message, type = 'info') => {
     const id = `${Date.now()}_${Math.random()}`;
@@ -154,6 +156,43 @@ const App = () => {
     localStorage.setItem(`waterpolo_preferences_${session.user.id}`, JSON.stringify(preferences));
   }, [preferences, session]);
 
+  useEffect(() => {
+    if (!session?.user) {
+      didApplyWorkspaceSelection.current = false;
+      return;
+    }
+    if (loadingSeasons || didApplyWorkspaceSelection.current) return;
+
+    try {
+      const raw = localStorage.getItem(`waterpolo_workspace_${session.user.id}`);
+      const parsed = raw ? JSON.parse(raw) : null;
+      const storedSeasonId = parsed?.seasonId || '';
+      const storedTeamId = parsed?.teamId || '';
+      const matchedSeason = seasons.find((season) => season.id === storedSeasonId) || seasons[0];
+      const matchedTeam =
+        matchedSeason?.teams?.find((team) => team.id === storedTeamId) || matchedSeason?.teams?.[0];
+
+      setSelectedSeasonId(matchedSeason?.id || '');
+      setSelectedTeamId(matchedTeam?.id || '');
+    } catch {
+      setSelectedSeasonId(seasons[0]?.id || '');
+      setSelectedTeamId(seasons[0]?.teams?.[0]?.id || '');
+    }
+
+    didApplyWorkspaceSelection.current = true;
+  }, [loadingSeasons, seasons, session]);
+
+  useEffect(() => {
+    if (!session?.user || !didApplyWorkspaceSelection.current) return;
+    localStorage.setItem(
+      `waterpolo_workspace_${session.user.id}`,
+      JSON.stringify({
+        seasonId: selectedSeasonId || '',
+        teamId: selectedTeamId || ''
+      })
+    );
+  }, [selectedSeasonId, selectedTeamId, session]);
+
   const selectedSeason = seasons.find((season) => season.id === selectedSeasonId);
   const selectedTeam = selectedSeason?.teams?.find((team) => team.id === selectedTeamId);
   const sidebarStorageKey = session?.user
@@ -183,6 +222,17 @@ const App = () => {
     if (!session?.user || !preferences.rememberLastTab) return;
     localStorage.setItem(`waterpolo_last_tab_${session.user.id}`, activeTab);
   }, [activeTab, preferences.rememberLastTab, session]);
+
+  useEffect(() => {
+    if (!selectedSeason && selectedSeasonId) {
+      setSelectedSeasonId('');
+      setSelectedTeamId('');
+      return;
+    }
+    if (selectedSeason && !selectedTeam && selectedTeamId) {
+      setSelectedTeamId(selectedSeason.teams?.[0]?.id || '');
+    }
+  }, [selectedSeason, selectedSeasonId, selectedTeam, selectedTeamId]);
 
   const seoMeta = useMemo(
     () =>
@@ -781,6 +831,7 @@ const App = () => {
             </div>
           </div>
         </footer>
+        <VisitCounter siteKey="waterpolo" />
         {renderUiOverlays()}
       </div>
     );
@@ -988,6 +1039,7 @@ const App = () => {
           setMobileMenuOpen(false);
         }}
       />
+      <VisitCounter siteKey="waterpolo" />
       {renderUiOverlays()}
     </div>
   );

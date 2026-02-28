@@ -412,7 +412,7 @@ const ScoringView = ({
             onChange={handleVideoFileChange}
           />
           <button
-            className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
+            className="rounded-full border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
             onClick={openVideoPicker}
           >
             {videoUrl ? 'Change video' : 'Select video (optional)'}

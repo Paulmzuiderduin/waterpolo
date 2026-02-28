@@ -302,7 +302,11 @@ const PossessionView = ({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+            className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+              viewMode === 'field'
+                ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                : 'border-slate-900 bg-slate-900/85 text-white hover:bg-slate-900'
+            }`}
             onClick={() => setViewMode('field')}
           >
             <StatTooltipLabel
@@ -312,7 +316,11 @@ const PossessionView = ({
             />
           </button>
           <button
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+            className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+              viewMode === 'network'
+                ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                : 'border-slate-900 bg-slate-900/85 text-white hover:bg-slate-900'
+            }`}
             onClick={() => setViewMode('network')}
           >
             <StatTooltipLabel
@@ -322,7 +330,11 @@ const PossessionView = ({
             />
           </button>
           <button
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+            className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+              viewMode === 'replay'
+                ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                : 'border-slate-900 bg-slate-900/85 text-white hover:bg-slate-900'
+            }`}
             onClick={() => setViewMode('replay')}
           >
             <StatTooltipLabel
@@ -341,62 +353,6 @@ const PossessionView = ({
       )}
 
       <div className="space-y-4">
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-[240px] flex-1">
-              <label className="text-xs font-semibold text-slate-500">Match</label>
-              <select
-                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                value={currentMatchId}
-                onChange={(event) => setCurrentMatchId(event.target.value)}
-              >
-                {sortedMatches.map((match) => (
-                  <option key={match.id} value={match.id}>
-                    {match.name}
-                    {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
-              onClick={startPossession}
-            >
-              <Plus size={14} />
-              Start possession
-            </button>
-            <button
-              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
-              onClick={() => setPassDraft({ fromPlayer: '', toPlayer: '', fromPos: null, toPos: null })}
-            >
-              Reset pass
-            </button>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            Click to set start location → choose passer. Click again → choose receiver.
-          </div>
-          {activePossessionId && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500">
-                <StatTooltipLabel
-                  label="End possession:"
-                  tooltip={POSSESSION_TOOLTIPS.endPossession}
-                  enabled={showTooltips}
-                />
-              </span>
-              {outcomes.map((outcome) => (
-                <button
-                  key={outcome.key}
-                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold"
-                  onClick={() => endPossession(outcome.key)}
-                >
-                  {outcome.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -519,6 +475,67 @@ const PossessionView = ({
           </div>
 
           <div className="space-y-4">
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-700">Match & controls</h3>
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Match</label>
+                  <select
+                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    value={currentMatchId}
+                    onChange={(event) => setCurrentMatchId(event.target.value)}
+                  >
+                    {sortedMatches.map((match) => (
+                      <option key={match.id} value={match.id}>
+                        {match.name}
+                        {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                    onClick={startPossession}
+                  >
+                    <Plus size={14} />
+                    Start possession
+                  </button>
+                  <button
+                    className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+                    onClick={() => setPassDraft({ fromPlayer: '', toPlayer: '', fromPos: null, toPos: null })}
+                  >
+                    Reset pass
+                  </button>
+                </div>
+                <div className="text-xs text-slate-500">
+                  Click to set start location, choose passer, then click again to choose the receiver.
+                </div>
+                {activePossessionId && (
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold text-slate-500">
+                      <StatTooltipLabel
+                        label="End possession:"
+                        tooltip={POSSESSION_TOOLTIPS.endPossession}
+                        enabled={showTooltips}
+                      />
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {outcomes.map((outcome) => (
+                        <button
+                          key={outcome.key}
+                          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold"
+                          onClick={() => endPossession(outcome.key)}
+                        >
+                          {outcome.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-700">Active possession</h3>
               <div className="mt-3 space-y-2 text-sm text-slate-600">

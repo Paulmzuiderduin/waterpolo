@@ -39,6 +39,7 @@ From app code and schema.
 - `possessions`: outcome + links.
 - `passes`: from/to player caps, coordinates, sequence.
 - `feature_requests`: signed-in user email, subject, message, current app tab, optional season/team context, status.
+- `site_visit_totals`: aggregate page-view total per site key, without user profile fields.
 
 ### Browser local storage
 - UI preferences and module visibility per user.
@@ -69,6 +70,7 @@ Waterpolo schema defined in: `/Users/paul/Documents/New project/supabase/schema.
 - RLS is enabled on all main tables.
 - Policies are user-owned (`auth.uid() = user_id`) for `for all`.
 - Waterpolo also stores in-app feature requests in Postgres, scoped to the signed-in user through the same RLS ownership model.
+- Waterpolo also stores an aggregate page-view counter in Postgres. It contains only site key, total count, and timestamp.
 
 Field Hockey:
 - Uses Supabase tables in app code (`seasons`, `teams`, `players`, `matches`, `events`).

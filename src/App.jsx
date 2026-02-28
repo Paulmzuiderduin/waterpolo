@@ -70,6 +70,7 @@ const App = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [promptDialog, setPromptDialog] = useState(null);
+  const [featureRequestDialog, setFeatureRequestDialog] = useState(null);
   const [toasts, setToasts] = useState([]);
   const didApplyStartTab = useRef(false);
 
@@ -223,6 +224,62 @@ const App = () => {
       return;
     }
     setAuthMessage('Check your inbox for the magic link.');
+  };
+
+  const openFeatureRequestDialog = useCallback(() => {
+    if (!session?.user) {
+      toast('Sign in first to send a feature request.', 'info');
+      return;
+    }
+    const tabLabel =
+      moduleConfig.find((item) => item.key === activeTab)?.label || 'Waterpolo Hub';
+    setFeatureRequestDialog({
+      subject: `Waterpolo Feature Request - ${tabLabel}`,
+      message: '',
+      submitting: false,
+      error: ''
+    });
+  }, [activeTab, moduleConfig, session?.user, toast]);
+
+  const submitFeatureRequest = async () => {
+    if (!session?.user || !featureRequestDialog) return;
+    const subject = featureRequestDialog.subject.trim();
+    const message = featureRequestDialog.message.trim();
+    if (!subject || !message) {
+      setFeatureRequestDialog((prev) =>
+        prev ? { ...prev, error: 'Please enter both a subject and a message.' } : prev
+      );
+      return;
+    }
+
+    setFeatureRequestDialog((prev) => (prev ? { ...prev, submitting: true, error: '' } : prev));
+
+    const { error } = await supabase.from('feature_requests').insert({
+      user_id: session.user.id,
+      season_id: selectedSeasonId || null,
+      team_id: selectedTeamId || null,
+      app: 'waterpolo',
+      context_tab: activeTab,
+      email: session.user.email || null,
+      subject,
+      message
+    });
+
+    if (error) {
+      setFeatureRequestDialog((prev) =>
+        prev
+          ? {
+              ...prev,
+              submitting: false,
+              error: error.message || 'Failed to send request.'
+            }
+          : prev
+      );
+      return;
+    }
+
+    setFeatureRequestDialog(null);
+    toast('Feature request sent.', 'success');
   };
 
   const createSeason = async () => {
@@ -412,6 +469,70 @@ const App = () => {
         </div>
       )}
 
+      {featureRequestDialog && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/35 px-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+            <h3 className="text-sm font-semibold text-slate-800">Request a feature</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This request will be stored in Supabase together with your current Waterpolo Hub context.
+            </p>
+            <div className="mt-4 grid gap-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-500">Subject</label>
+                <input
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={featureRequestDialog.subject}
+                  onChange={(event) =>
+                    setFeatureRequestDialog((prev) =>
+                      prev ? { ...prev, subject: event.target.value } : prev
+                    )
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500">Message</label>
+                <textarea
+                  className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={featureRequestDialog.message}
+                  onChange={(event) =>
+                    setFeatureRequestDialog((prev) =>
+                      prev ? { ...prev, message: event.target.value } : prev
+                    )
+                  }
+                  placeholder="Describe the feature, workflow, or pain point."
+                />
+              </div>
+              <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                Signed in as {session?.user?.email || 'unknown'} · Context: {activeTab}
+                {selectedSeason?.name ? ` · Season: ${selectedSeason.name}` : ''}
+                {selectedTeam?.name ? ` · Team: ${selectedTeam.name}` : ''}
+              </div>
+              {featureRequestDialog.error && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {featureRequestDialog.error}
+                </div>
+              )}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
+                onClick={() => setFeatureRequestDialog(null)}
+                disabled={featureRequestDialog.submitting}
+              >
+                Cancel
+              </button>
+              <button
+                className="wp-primary-bg rounded-lg px-3 py-2 text-sm font-semibold text-white"
+                onClick={submitFeatureRequest}
+                disabled={featureRequestDialog.submitting}
+              >
+                {featureRequestDialog.submitting ? 'Sending...' : 'Send request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="fixed right-4 top-4 z-[130] flex w-[min(360px,95vw)] flex-col gap-2">
         {toasts.map((item) => (
           <div
@@ -466,7 +587,23 @@ const App = () => {
                 Resend link
               </button>
               {authMessage && <div className="mt-3 text-sm text-slate-500">{authMessage}</div>}
-              <div className="mt-2 text-xs text-slate-400">If you don’t see it, check spam.</div>
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <h2 className="text-sm font-semibold text-slate-900">How the magic link works</h2>
+                <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-slate-600">
+                  <li>Enter your email address and click <span className="font-semibold text-slate-900">Send magic link</span>.</li>
+                  <li>You will receive a Supabase sign-in email.</li>
+                  <li>Open the email and click the confirmation link to sign in to Waterpolo Hub.</li>
+                </ol>
+                <div className="mt-4 space-y-1 text-xs text-slate-500">
+                  <div>
+                    <span className="font-semibold text-slate-700">Sender:</span> usually <span className="font-mono">Supabase Auth</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-700">Subject:</span> usually <span className="font-mono">Confirm Your Signup</span>
+                  </div>
+                  <div>If you do not see the email, check your spam folder first.</div>
+                </div>
+              </div>
             </div>
             <PublicSeoContent />
           </div>
@@ -629,12 +766,12 @@ const App = () => {
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white/70 px-4 py-3 shadow-sm">
             <span>© {new Date().getFullYear()} Waterpolo Shotmap & Analytics</span>
             <div className="flex items-center gap-4">
-              <a
+              <button
                 className="font-semibold text-cyan-700 underline decoration-transparent transition hover:decoration-current"
-                href="https://mail.google.com/mail/?view=cm&fs=1&to=info@paulzuiderduin.com&su=Waterpolo%20Feature%20Request"
+                onClick={openFeatureRequestDialog}
               >
                 Request Feature
-              </a>
+              </button>
               <button
                 className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
                 onClick={() => setActiveTab('privacy')}
@@ -819,12 +956,12 @@ const App = () => {
         <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
           <span>© {new Date().getFullYear()} Waterpolo Hub</span>
           <div className="flex items-center gap-4">
-            <a
+            <button
               className="font-semibold text-cyan-700 underline decoration-transparent transition hover:decoration-current"
-              href="https://mail.google.com/mail/?view=cm&fs=1&to=info@paulzuiderduin.com&su=Waterpolo%20Feature%20Request"
+              onClick={openFeatureRequestDialog}
             >
               Request Feature
-            </a>
+            </button>
             <button
               className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
               onClick={() => setActiveTab('privacy')}

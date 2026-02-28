@@ -110,6 +110,20 @@ create table if not exists passes (
   created_at timestamptz not null default now()
 );
 
+create table if not exists feature_requests (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  season_id uuid references seasons(id) on delete set null,
+  team_id uuid references teams(id) on delete set null,
+  app text not null default 'waterpolo',
+  context_tab text,
+  email text,
+  subject text not null,
+  message text not null,
+  status text not null default 'new',
+  created_at timestamptz not null default now()
+);
+
 create index if not exists seasons_user_id_idx on seasons(user_id);
 create index if not exists teams_user_id_idx on teams(user_id);
 create index if not exists roster_team_id_idx on roster(team_id);
@@ -122,6 +136,7 @@ create index if not exists possessions_team_id_idx on possessions(team_id);
 create index if not exists possessions_match_id_idx on possessions(match_id);
 create index if not exists passes_team_id_idx on passes(team_id);
 create index if not exists passes_possession_id_idx on passes(possession_id);
+create index if not exists feature_requests_user_id_idx on feature_requests(user_id);
 
 alter table seasons enable row level security;
 alter table teams enable row level security;
@@ -131,6 +146,7 @@ alter table shots enable row level security;
 alter table scoring_events enable row level security;
 alter table possessions enable row level security;
 alter table passes enable row level security;
+alter table feature_requests enable row level security;
 
 drop policy if exists "Seasons are user-owned" on seasons;
 create policy "Seasons are user-owned" on seasons
@@ -162,4 +178,8 @@ create policy "Possessions are user-owned" on possessions
 
 drop policy if exists "Passes are user-owned" on passes;
 create policy "Passes are user-owned" on passes
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "Feature requests are user-owned" on feature_requests;
+create policy "Feature requests are user-owned" on feature_requests
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

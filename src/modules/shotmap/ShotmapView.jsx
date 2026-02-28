@@ -68,7 +68,12 @@ const ShotmapView = ({
         }));
         setRoster(mappedRoster);
         setMatches(payload.matches);
-        setCurrentMatchId(payload.matches[0]?.info?.id || '');
+        const sortedPayloadMatches = [...payload.matches].sort((a, b) => {
+          const ad = a.info?.date ? new Date(a.info.date).getTime() : 0;
+          const bd = b.info?.date ? new Date(b.info.date).getTime() : 0;
+          return bd - ad;
+        });
+        setCurrentMatchId(sortedPayloadMatches[0]?.info?.id || '');
         setError('');
       } catch (e) {
         if (active) setError('Could not load data.');
@@ -81,6 +86,15 @@ const ShotmapView = ({
       active = false;
     };
   }, [teamId]);
+
+  const sortedMatches = useMemo(() => {
+    const readDate = (match) => {
+      const raw = match.info?.date || '';
+      const stamp = raw ? new Date(raw).getTime() : 0;
+      return Number.isNaN(stamp) ? 0 : stamp;
+    };
+    return [...matches].sort((a, b) => readDate(b) - readDate(a));
+  }, [matches]);
 
   const currentMatch = useMemo(
     () => matches.find((match) => match.info.id === currentMatchId) || matches[0],
@@ -428,7 +442,7 @@ const ShotmapView = ({
                 </div>
               )}
               <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                {matches.map((match) => (
+                {sortedMatches.map((match) => (
                   <button
                     key={match.info.id}
                     className={`rounded-full px-3 py-1 ${
@@ -466,7 +480,7 @@ const ShotmapView = ({
                 <div>
                   <label className="text-xs font-semibold text-slate-500">Matches</label>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {matches.map((match) => (
+                    {sortedMatches.map((match) => (
                       <button
                         key={match.info.id}
                         className={`rounded-full px-3 py-1 text-xs ${

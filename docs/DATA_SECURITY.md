@@ -1,6 +1,6 @@
 # Sport Apps Data, Storage, and Safety
 
-Last updated: 2026-02-20
+Last updated: 2026-02-28
 Scope:
 - Waterpolo Hub: `/Users/paul/Documents/New project`
 - Field Hockey Hub (code-reviewed via source): `/Users/paul/Documents/fieldhockey`
@@ -38,6 +38,7 @@ From app code and schema.
 - `scoring_events`: event type, team side, player cap, period, time.
 - `possessions`: outcome + links.
 - `passes`: from/to player caps, coordinates, sequence.
+- `feature_requests`: signed-in user email, subject, message, current app tab, optional season/team context, status.
 
 ### Browser local storage
 - UI preferences and module visibility per user.
@@ -67,6 +68,7 @@ Waterpolo schema defined in: `/Users/paul/Documents/New project/supabase/schema.
 - Tables include explicit `user_id` foreign keys to `auth.users(id)`.
 - RLS is enabled on all main tables.
 - Policies are user-owned (`auth.uid() = user_id`) for `for all`.
+- Waterpolo also stores in-app feature requests in Postgres, scoped to the signed-in user through the same RLS ownership model.
 
 Field Hockey:
 - Uses Supabase tables in app code (`seasons`, `teams`, `players`, `matches`, `events`).

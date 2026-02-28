@@ -87,7 +87,12 @@ const ScoringView = ({
             createdAt: evt.created_at
           }))
         );
-        setCurrentMatchId(payload.matches?.[0]?.id || '');
+        const sortedPayloadMatches = [...(payload.matches || [])].sort((a, b) => {
+          const ad = a.date ? new Date(a.date).getTime() : 0;
+          const bd = b.date ? new Date(b.date).getTime() : 0;
+          return bd - ad;
+        });
+        setCurrentMatchId(sortedPayloadMatches[0]?.id || '');
         setStatsMatchId('');
         setError('');
       } catch (e) {
@@ -101,6 +106,15 @@ const ScoringView = ({
       active = false;
     };
   }, [teamId]);
+
+  const sortedMatches = useMemo(() => {
+    const readDate = (match) => {
+      const raw = match.date || '';
+      const stamp = raw ? new Date(raw).getTime() : 0;
+      return Number.isNaN(stamp) ? 0 : stamp;
+    };
+    return [...matches].sort((a, b) => readDate(b) - readDate(a));
+  }, [matches]);
 
   const currentMatch = matches.find((match) => match.id === currentMatchId);
 
@@ -432,7 +446,7 @@ const ScoringView = ({
                   onChange={(event) => setCurrentMatchId(event.target.value)}
                 >
                   {matches.length === 0 && <option value="">No matches</option>}
-                  {matches.map((match) => (
+                  {sortedMatches.map((match) => (
                     <option key={match.id} value={match.id}>
                       {match.name}
                       {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
@@ -527,6 +541,20 @@ const ScoringView = ({
                     <div className="w-16 rounded-lg border border-slate-200 bg-white py-2 text-center text-lg font-semibold">
                       {String(splitTimeParts(form.time).seconds).padStart(2, '0')}
                     </div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700"
+                      onClick={() => adjustSeconds(10)}
+                    >
+                      +10s
+                    </button>
+                    <button
+                      className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700"
+                      onClick={() => adjustSeconds(-10)}
+                    >
+                      -10s
+                    </button>
                   </div>
                   <div className="flex flex-wrap items-center gap-1 text-[11px] font-semibold text-slate-600">
                     {['7:00', '6:00', '5:00', '4:00', '3:00', '2:00', '1:00'].map((preset) => (
@@ -679,7 +707,7 @@ const ScoringView = ({
               onChange={(event) => setStatsMatchId(event.target.value)}
             >
               <option value="">All matches</option>
-              {matches.map((match) => (
+              {sortedMatches.map((match) => (
                 <option key={match.id} value={match.id}>
                   {match.name}
                   {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}

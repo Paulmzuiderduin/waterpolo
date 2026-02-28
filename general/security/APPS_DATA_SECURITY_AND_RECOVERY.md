@@ -1,6 +1,6 @@
 # Apps Data Security & Recovery (Waterpolo + Field Hockey)
 
-Last updated: 2026-02-20
+Last updated: 2026-02-28
 Prepared from source review (no assumptions beyond code and SQL files in local repos).
 
 Reviewed codebases:
@@ -65,6 +65,7 @@ Domain data:
 - `scoring_events`: event type, team side, player cap, period, time.
 - `possessions`: possession outcome.
 - `passes`: from/to player caps, from/to coordinates, sequence.
+- `feature_requests`: signed-in user email, subject, message, app tab, optional season/team context, status.
 
 Browser local storage:
 - Module visibility, preferences, last active tab (per user).
@@ -97,6 +98,7 @@ No file upload path found in current Field Hockey app code.
 Waterpolo DB schema and RLS source of truth:
 - `/Users/paul/Documents/New project/supabase/schema.sql`
 - Includes table creation and RLS policies per table with `auth.uid() = user_id`.
+- Includes the `feature_requests` table used for in-app Waterpolo Hub request submissions.
 
 Supabase clients:
 - Waterpolo: `/Users/paul/Documents/New project/src/lib/supabase.js`

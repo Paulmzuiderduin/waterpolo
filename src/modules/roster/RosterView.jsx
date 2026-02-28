@@ -304,7 +304,7 @@ const RosterView = ({
                           if (file) uploadPhoto(player.id, file);
                         }}
                       />
-                      Upload
+                      Upload photo
                     </label>
                     <button
                       className="text-xs font-semibold text-slate-600"

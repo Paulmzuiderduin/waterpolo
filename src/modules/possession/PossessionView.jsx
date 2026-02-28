@@ -76,7 +76,12 @@ const PossessionView = ({
             sequence: pass.sequence
           }))
         );
-        setCurrentMatchId(payload.matches?.[0]?.id || '');
+        const sortedPayloadMatches = [...(payload.matches || [])].sort((a, b) => {
+          const ad = a.date ? new Date(a.date).getTime() : 0;
+          const bd = b.date ? new Date(b.date).getTime() : 0;
+          return bd - ad;
+        });
+        setCurrentMatchId(sortedPayloadMatches[0]?.id || '');
         setError('');
       } catch (e) {
         if (active) setError('Could not load possession data.');
@@ -89,6 +94,15 @@ const PossessionView = ({
       active = false;
     };
   }, [teamId]);
+
+  const sortedMatches = useMemo(() => {
+    const readDate = (match) => {
+      const raw = match.date || '';
+      const stamp = raw ? new Date(raw).getTime() : 0;
+      return Number.isNaN(stamp) ? 0 : stamp;
+    };
+    return [...matches].sort((a, b) => readDate(b) - readDate(a));
+  }, [matches]);
 
   const currentMatch = matches.find((match) => match.id === currentMatchId);
 
@@ -326,74 +340,80 @@ const PossessionView = ({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Match</label>
-                <select
-                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  value={currentMatchId}
-                  onChange={(event) => setCurrentMatchId(event.target.value)}
-                >
-                  {matches.map((match) => (
-                    <option key={match.id} value={match.id}>
-                      {match.name}
-                      {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button
-                className="mt-6 inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
-                onClick={startPossession}
+      <div className="space-y-4">
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[240px] flex-1">
+              <label className="text-xs font-semibold text-slate-500">Match</label>
+              <select
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={currentMatchId}
+                onChange={(event) => setCurrentMatchId(event.target.value)}
               >
-                <Plus size={14} />
-                Start possession
-              </button>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              Click to set start location → choose passer. Click again → choose receiver.
-            </div>
-            {activePossessionId && (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold text-slate-500">
-                  <StatTooltipLabel
-                    label="End possession:"
-                    tooltip={POSSESSION_TOOLTIPS.endPossession}
-                    enabled={showTooltips}
-                  />
-                </span>
-                {outcomes.map((outcome) => (
-                  <button
-                    key={outcome.key}
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold"
-                    onClick={() => endPossession(outcome.key)}
-                  >
-                    {outcome.label}
-                  </button>
+                {sortedMatches.map((match) => (
+                  <option key={match.id} value={match.id}>
+                    {match.name}
+                    {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
+                  </option>
                 ))}
-              </div>
-            )}
-            <div className="mt-3 flex items-center gap-2">
-              <button
-                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
-                onClick={() => setPassDraft({ fromPlayer: '', toPlayer: '', fromPos: null, toPos: null })}
-              >
-                Reset pass
-              </button>
+              </select>
             </div>
+            <button
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+              onClick={startPossession}
+            >
+              <Plus size={14} />
+              Start possession
+            </button>
+            <button
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
+              onClick={() => setPassDraft({ fromPlayer: '', toPlayer: '', fromPos: null, toPos: null })}
+            >
+              Reset pass
+            </button>
           </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            Click to set start location → choose passer. Click again → choose receiver.
+          </div>
+          {activePossessionId && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500">
+                <StatTooltipLabel
+                  label="End possession:"
+                  tooltip={POSSESSION_TOOLTIPS.endPossession}
+                  enabled={showTooltips}
+                />
+              </span>
+              {outcomes.map((outcome) => (
+                <button
+                  key={outcome.key}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold"
+                  onClick={() => endPossession(outcome.key)}
+                >
+                  {outcome.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Possession field</h3>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-slate-700">Possession field</h3>
+              <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">Attacking side: top goal</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">Defending side: bottom goal</span>
+              </div>
+            </div>
             <div className="mt-4 flex justify-center">
               <div
                 ref={fieldRef}
                 onClick={handleFieldClick}
-                className="relative h-[700px] w-full max-w-[720px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
+                className="relative aspect-[15/25] w-full max-w-[560px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
               >
+                <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-emerald-500/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">Attack</div>
+                <div className="absolute left-1/2 bottom-3 -translate-x-1/2 rounded-full bg-slate-900/70 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">Defend</div>
                 <div className="absolute left-0 top-1/2 h-[2px] w-full bg-white/90" />
                 <div className="absolute left-0 top-[24%] h-[2px] w-full bg-yellow-300/90" />
                 <div className="absolute left-0 top-[20%] h-[2px] w-full bg-red-400/90" />
@@ -497,84 +517,100 @@ const PossessionView = ({
               </div>
             </div>
           </div>
+
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-700">Active possession</h3>
+              <div className="mt-3 space-y-2 text-sm text-slate-600">
+                {!activePossessionId && <div>No active possession selected.</div>}
+                {activePossessionId && (
+                  <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-3">
+                    <div className="font-semibold text-cyan-700">
+                      {possessionLabelMap[activePossessionId] || 'Possession'}
+                    </div>
+                    <div className="mt-1 text-xs text-cyan-700/80">
+                      {activePossession?.outcome ? activePossession.outcome.replace('_', ' ') : 'Open possession'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {viewMode === 'network' && (
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-700">
+                  <StatTooltipLabel
+                    label="Passing network"
+                    tooltip={POSSESSION_TOOLTIPS.networkConnections}
+                    enabled={showTooltips}
+                  />
+                </h3>
+                <div className="mt-3 space-y-2 text-sm text-slate-600">
+                  {connectionStats.length === 0 && <div>No passes yet.</div>}
+                  {connectionStats.map((row) => (
+                    <div key={`${row.from}-${row.to}`} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+                      <span>
+                        #{row.from} → #{row.to}
+                      </span>
+                      <span className="font-semibold">{row.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {viewMode === 'replay' && (
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-700">Replay</h3>
+                <div className="mt-3 space-y-2 text-sm text-slate-600">
+                  {activePasses.length === 0 && <div>No passes yet.</div>}
+                  {activePasses.map((pass) => (
+                    <div key={pass.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                      <div>
+                        <div className="font-semibold text-slate-700">
+                          #{pass.fromPlayer} → #{pass.toPlayer}
+                        </div>
+                        <div className="text-xs text-slate-500">Pass {pass.sequence}</div>
+                      </div>
+                      <button
+                        className="text-xs font-semibold text-red-500"
+                        onClick={() => deletePass(pass.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Possessions</h3>
-            <div className="mt-3 space-y-2 text-sm text-slate-600">
-              {matchPossessions.length === 0 && <div>No possessions yet.</div>}
-              {matchPossessions.map((pos) => (
-                <div
-                  key={pos.id}
-                  className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm ${
-                    pos.id === activePossessionId
-                      ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
-                      : 'border-slate-100 text-slate-600'
-                  }`}
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-700">Possessions</h3>
+          <div className="mt-3 space-y-2 text-sm text-slate-600">
+            {matchPossessions.length === 0 && <div>No possessions yet.</div>}
+            {matchPossessions.map((pos) => (
+              <div
+                key={pos.id}
+                className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm ${
+                  pos.id === activePossessionId
+                    ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
+                    : 'border-slate-100 text-slate-600'
+                }`}
+              >
+                <button className="flex-1 text-left" onClick={() => setActivePossessionId(pos.id)}>
+                  {possessionLabelMap[pos.id] || 'Possession'} · {pos.outcome ? pos.outcome.replace('_', ' ') : 'open'}
+                </button>
+                <button
+                  className="text-xs font-semibold text-red-500"
+                  onClick={() => deletePossession(pos.id)}
                 >
-                  <button className="flex-1 text-left" onClick={() => setActivePossessionId(pos.id)}>
-                    {possessionLabelMap[pos.id] || 'Possession'} ·{' '}
-                    {pos.outcome ? pos.outcome.replace('_', ' ') : 'open'}
-                  </button>
-                  <button
-                    className="text-xs font-semibold text-red-500"
-                    onClick={() => deletePossession(pos.id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
+                  Delete
+                </button>
+              </div>
+            ))}
           </div>
-
-          {viewMode === 'network' && (
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-700">
-                <StatTooltipLabel
-                  label="Passing network"
-                  tooltip={POSSESSION_TOOLTIPS.networkConnections}
-                  enabled={showTooltips}
-                />
-              </h3>
-              <div className="mt-3 space-y-2 text-sm text-slate-600">
-                {connectionStats.length === 0 && <div>No passes yet.</div>}
-                {connectionStats.map((row) => (
-                  <div key={`${row.from}-${row.to}`} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                    <span>
-                      #{row.from} → #{row.to}
-                    </span>
-                    <span className="font-semibold">{row.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {viewMode === 'replay' && (
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-700">Replay</h3>
-              <div className="mt-3 space-y-2 text-sm text-slate-600">
-                {activePasses.length === 0 && <div>No passes yet.</div>}
-                {activePasses.map((pass) => (
-                  <div key={pass.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2">
-                    <div>
-                      <div className="font-semibold text-slate-700">
-                        #{pass.fromPlayer} → #{pass.toPlayer}
-                      </div>
-                      <div className="text-xs text-slate-500">Pass {pass.sequence}</div>
-                    </div>
-                    <button
-                      className="text-xs font-semibold text-red-500"
-                      onClick={() => deletePass(pass.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

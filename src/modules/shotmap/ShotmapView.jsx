@@ -55,7 +55,6 @@ const ShotmapView = ({
     time: formatShotTime()
   }));
   const fieldRef = useRef(null);
-  const addShotRef = useRef(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -110,11 +109,6 @@ const ShotmapView = ({
     setCurrentMatchId(currentMatch.info.id);
   }, [currentMatch]);
 
-  useEffect(() => {
-    if (!pendingShot || !addShotRef.current) return;
-    addShotRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [pendingShot]);
-
   const refreshData = async () => {
     const payload = await loadData(teamId);
     const mappedRoster = payload.roster.map((player) => ({
@@ -165,6 +159,11 @@ const ShotmapView = ({
       period: lastShotMeta?.period || '1',
       time: lastShotMeta?.time || formatShotTime()
     });
+  };
+
+  const closeShotEditor = () => {
+    setPendingShot(null);
+    setEditingShotId(null);
   };
 
   const saveShot = async () => {
@@ -616,7 +615,7 @@ const ShotmapView = ({
             </div>
           )}
 
-          <div ref={addShotRef} className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-700">
                 <StatTooltipLabel
@@ -694,206 +693,6 @@ const ShotmapView = ({
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Add shot</h3>
-            {pendingShot ? (
-              <div className="mt-3 space-y-3 text-sm">
-                <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  Zone {pendingShot.zone} · {pendingShot.attackType}
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Player</label>
-                  <select
-                    aria-label="Shot player"
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-                    value={pendingShot.playerCap}
-                    onChange={(event) =>
-                      setPendingShot((prev) => ({ ...prev, playerCap: event.target.value }))
-                    }
-                  >
-                    <option value="">Select player</option>
-                    {roster.map((player) => (
-                      <option key={player.id} value={player.capNumber}>
-                        #{player.capNumber} {player.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <div className="text-xs font-semibold text-slate-500">
-                      <StatTooltipLabel
-                        label="Result"
-                        tooltip={SHOTMAP_TOOLTIPS.result}
-                        enabled={showTooltips}
-                      />
-                    </div>
-                    <select
-                      aria-label="Shot result"
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-                      value={pendingShot.result}
-                      onChange={(event) =>
-                        setPendingShot((prev) => ({ ...prev, result: event.target.value }))
-                      }
-                    >
-                      <option value="raak">Goal</option>
-                      <option value="redding">Saved</option>
-                      <option value="mis">Miss</option>
-                    </select>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-slate-500">
-                      <StatTooltipLabel
-                        label="Attack"
-                        tooltip={SHOTMAP_TOOLTIPS.attackType}
-                        enabled={showTooltips}
-                      />
-                    </div>
-                    <select
-                      aria-label="Shot attack"
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-                      value={pendingShot.attackType}
-                      onChange={(event) =>
-                        setPendingShot((prev) => ({ ...prev, attackType: event.target.value }))
-                      }
-                      disabled={pendingShot.zone === 14}
-                    >
-                      {attackTypes.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <div className="text-xs font-semibold text-slate-500">
-                      <StatTooltipLabel
-                        label="Period"
-                        tooltip={SHOTMAP_TOOLTIPS.period}
-                        enabled={showTooltips}
-                      />
-                    </div>
-                    <select
-                      aria-label="Shot period"
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
-                      value={pendingShot.period}
-                      onChange={(event) =>
-                        setPendingShot((prev) => ({ ...prev, period: event.target.value }))
-                      }
-                    >
-                      {periods.map((period) => (
-                        <option key={period} value={period}>
-                          P{period}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-slate-500">
-                      <StatTooltipLabel
-                        label="Time"
-                        tooltip={SHOTMAP_TOOLTIPS.playClock}
-                        enabled={showTooltips}
-                      />
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          aria-label="Shot minutes"
-                          type="number"
-                          min="0"
-                          max="7"
-                          className="w-20 rounded-lg border border-slate-200 px-3 py-2"
-                          value={splitTimeParts(pendingShot.time).minutes}
-                          onChange={(event) => {
-                            const minutes = Math.min(7, Math.max(0, Number(event.target.value)));
-                            const seconds = splitTimeParts(pendingShot.time).seconds;
-                            setPendingShot((prev) => ({
-                              ...prev,
-                              time: `${minutes}:${String(seconds).padStart(2, '0')}`
-                            }));
-                          }}
-                        />
-                        <span className="text-sm font-semibold text-slate-500">min</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          aria-label="Shot seconds"
-                          type="number"
-                          min="0"
-                          max="59"
-                          className="w-20 rounded-lg border border-slate-200 px-3 py-2"
-                          value={splitTimeParts(pendingShot.time).seconds}
-                          onChange={(event) => {
-                            const minutes = splitTimeParts(pendingShot.time).minutes;
-                            const seconds = Math.min(59, Math.max(0, Number(event.target.value)));
-                            setPendingShot((prev) => ({
-                              ...prev,
-                              time: `${minutes}:${String(seconds).padStart(2, '0')}`
-                            }));
-                          }}
-                        />
-                        <span className="text-sm font-semibold text-slate-500">sec</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-xs">
-                        {['7:00', '6:00', '5:00'].map((preset) => (
-                          <button
-                            key={preset}
-                            className="rounded-full border border-slate-200 px-2 py-1"
-                            onClick={() => setPendingShot((prev) => ({ ...prev, time: preset }))}
-                          >
-                            {preset}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    className="flex-1 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                    onClick={saveShot}
-                  >
-                    {editingShotId ? 'Update' : 'Save'}
-                  </button>
-                  <button
-                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
-                    onClick={() => {
-                      setPendingShot(null);
-                      setEditingShotId(null);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-3">
-                <ModuleEmptyState
-                  compact
-                  title="No shot draft yet"
-                  description={
-                    currentMatch
-                      ? 'Click on the field to add a shot, or use + Penalty for a penalty attempt.'
-                      : 'Select a match first to start tracking shots.'
-                  }
-                  actions={
-                    currentMatch
-                      ? []
-                      : [
-                          {
-                            label: 'Open Matches',
-                            onClick: () => onOpenModule?.('matches')
-                          }
-                        ]
-                  }
-                />
-              </div>
-            )}
-          </div>
-
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-700">Roster</h3>
             <p className="mt-2 text-sm text-slate-500">
@@ -997,6 +796,204 @@ const ShotmapView = ({
           </div>
         </div>
       </div>
+
+      {pendingShot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+          <div className="w-full max-w-xl rounded-3xl bg-white p-5 shadow-2xl shadow-slate-950/20">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">
+                  {editingShotId ? 'Edit shot' : 'New shot'}
+                </p>
+                <h3 className="mt-1 text-xl font-semibold text-slate-900">Shot details</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Zone {pendingShot.zone} · X {pendingShot.x.toFixed(1)}% · Y {pendingShot.y.toFixed(1)}%
+                </p>
+              </div>
+              <button
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600"
+                onClick={closeShotEditor}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4 text-sm">
+              <div>
+                <label className="text-xs font-semibold text-slate-500">Player</label>
+                <select
+                  aria-label="Shot player"
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                  value={pendingShot.playerCap}
+                  onChange={(event) =>
+                    setPendingShot((prev) => ({ ...prev, playerCap: event.target.value }))
+                  }
+                >
+                  <option value="">Select player</option>
+                  {roster.map((player) => (
+                    <option key={player.id} value={player.capNumber}>
+                      #{player.capNumber} {player.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <div className="text-xs font-semibold text-slate-500">
+                    <StatTooltipLabel
+                      label="Result"
+                      tooltip={SHOTMAP_TOOLTIPS.result}
+                      enabled={showTooltips}
+                    />
+                  </div>
+                  <select
+                    aria-label="Shot result"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                    value={pendingShot.result}
+                    onChange={(event) =>
+                      setPendingShot((prev) => ({ ...prev, result: event.target.value }))
+                    }
+                  >
+                    <option value="raak">Goal</option>
+                    <option value="redding">Saved</option>
+                    <option value="mis">Miss</option>
+                  </select>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-slate-500">
+                    <StatTooltipLabel
+                      label="Attack"
+                      tooltip={SHOTMAP_TOOLTIPS.attackType}
+                      enabled={showTooltips}
+                    />
+                  </div>
+                  <select
+                    aria-label="Shot attack"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                    value={pendingShot.attackType}
+                    onChange={(event) =>
+                      setPendingShot((prev) => ({ ...prev, attackType: event.target.value }))
+                    }
+                    disabled={pendingShot.zone === 14}
+                  >
+                    {attackTypes.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <div className="text-xs font-semibold text-slate-500">
+                    <StatTooltipLabel
+                      label="Period"
+                      tooltip={SHOTMAP_TOOLTIPS.period}
+                      enabled={showTooltips}
+                    />
+                  </div>
+                  <select
+                    aria-label="Shot period"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                    value={pendingShot.period}
+                    onChange={(event) =>
+                      setPendingShot((prev) => ({ ...prev, period: event.target.value }))
+                    }
+                  >
+                    {periods.map((period) => (
+                      <option key={period} value={period}>
+                        P{period}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-slate-500">
+                    <StatTooltipLabel
+                      label="Time"
+                      tooltip={SHOTMAP_TOOLTIPS.playClock}
+                      enabled={showTooltips}
+                    />
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        aria-label="Shot minutes"
+                        type="number"
+                        min="0"
+                        max="7"
+                        className="w-20 rounded-lg border border-slate-200 px-3 py-2"
+                        value={splitTimeParts(pendingShot.time).minutes}
+                        onChange={(event) => {
+                          const minutes = Math.min(7, Math.max(0, Number(event.target.value)));
+                          const seconds = splitTimeParts(pendingShot.time).seconds;
+                          setPendingShot((prev) => ({
+                            ...prev,
+                            time: `${minutes}:${String(seconds).padStart(2, '0')}`
+                          }));
+                        }}
+                      />
+                      <span className="text-sm font-semibold text-slate-500">min</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        aria-label="Shot seconds"
+                        type="number"
+                        min="0"
+                        max="59"
+                        className="w-20 rounded-lg border border-slate-200 px-3 py-2"
+                        value={splitTimeParts(pendingShot.time).seconds}
+                        onChange={(event) => {
+                          const minutes = splitTimeParts(pendingShot.time).minutes;
+                          const seconds = Math.min(59, Math.max(0, Number(event.target.value)));
+                          setPendingShot((prev) => ({
+                            ...prev,
+                            time: `${minutes}:${String(seconds).padStart(2, '0')}`
+                          }));
+                        }}
+                      />
+                      <span className="text-sm font-semibold text-slate-500">sec</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs">
+                      {['7:00', '6:00', '5:00'].map((preset) => (
+                        <button
+                          key={preset}
+                          className="rounded-full border border-slate-200 px-2 py-1"
+                          onClick={() => setPendingShot((prev) => ({ ...prev, time: preset }))}
+                          type="button"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+                  onClick={closeShotEditor}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                  onClick={saveShot}
+                  type="button"
+                >
+                  {editingShotId ? 'Update shot' : 'Save shot'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

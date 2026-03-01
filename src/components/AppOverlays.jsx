@@ -95,6 +95,13 @@ const AppOverlays = ({
           <p className="mt-2 text-sm text-slate-600">
             This request will be stored in Supabase together with your current Waterpolo Hub context.
           </p>
+          <div className="mt-3 rounded-lg border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs text-cyan-800">
+            Prefer email? You can also send feedback directly to{' '}
+            <a className="font-semibold underline" href="mailto:info@paulzuiderduin.com">
+              info@paulzuiderduin.com
+            </a>
+            .
+          </div>
           <div className="mt-4 grid gap-3">
             <div>
               <label className="text-xs font-semibold text-slate-500">Subject</label>

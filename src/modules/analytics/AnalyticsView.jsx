@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download } from 'lucide-react';
 import { distanceMeters, penaltyPosition, valueToColor, VIRIDIS } from '../../utils/field';
+import ModuleEmptyState from '../../components/ModuleEmptyState';
+import ModuleHeader from '../../components/ModuleHeader';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
+import ToolbarButton from '../../components/ToolbarButton';
 
 const ANALYTICS_TOOLTIPS = {
   count: 'Total shot attempts in each zone.',
@@ -22,7 +25,8 @@ const AnalyticsView = ({
   heatTypes,
   attackTypes,
   periods,
-  showTooltips = true
+  showTooltips = true,
+  onOpenModule
 }) => {
   const [data, setData] = useState({ roster: [], matches: [] });
   const [loading, setLoading] = useState(true);
@@ -192,26 +196,33 @@ const AnalyticsView = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-cyan-700">Water Polo Analytics</p>
-          <h2 className="text-2xl font-semibold">Heatmaps & Analysis</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-            onClick={downloadPNG}
-          >
+      <ModuleHeader
+        eyebrow="Water Polo Analytics"
+        title="Heatmaps & Analysis"
+        description="Review shot volume, conversion, saves, misses, and distance trends for the selected scope."
+        actions={
+          <ToolbarButton variant="primary" onClick={downloadPNG}>
             <Download size={16} />
             Download PNG
-          </button>
-        </div>
-      </div>
+          </ToolbarButton>
+        }
+      />
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
+      )}
+
+      {matches.length === 0 && (
+        <ModuleEmptyState
+          title="No analytics data yet"
+          description="Create a match and log shots in Shotmap before using analytics."
+          actions={[
+            { label: 'Open Matches', onClick: () => onOpenModule?.('matches') },
+            { label: 'Open Shotmap', onClick: () => onOpenModule?.('shotmap'), variant: 'secondary' }
+          ]}
+        />
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_1fr]">
@@ -236,12 +247,9 @@ const AnalyticsView = ({
                 ))}
               </div>
               {heatType !== 'distance' && (
-                <button
-                  className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
-                  onClick={() => setShowShots((prev) => !prev)}
-                >
+                <ToolbarButton onClick={() => setShowShots((prev) => !prev)}>
                   👁️ {showShots ? 'Hide shots' : 'Show shots'}
-                </button>
+                </ToolbarButton>
               )}
             </div>
           </div>
@@ -249,10 +257,32 @@ const AnalyticsView = ({
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-700">Heatmap field</h3>
             <div className="mt-4 flex justify-center">
-              <div
-                ref={fieldRef}
-                className="relative h-[600px] w-full max-w-[720px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
-              >
+              {matches.length > 0 && analyticsShots.length === 0 ? (
+                <div className="w-full max-w-[720px]">
+                  <ModuleEmptyState
+                    title="No shots in the current scope"
+                    description="Adjust the filters or add new shots to populate the heatmap."
+                    actions={[
+                      {
+                        label: 'Clear filters',
+                        onClick: () =>
+                          setFilters({
+                            matches: [],
+                            players: [],
+                            results: [],
+                            periods: [],
+                            attackTypes: []
+                          })
+                      },
+                      { label: 'Open Shotmap', onClick: () => onOpenModule?.('shotmap'), variant: 'secondary' }
+                    ]}
+                  />
+                </div>
+              ) : (
+                <div
+                  ref={fieldRef}
+                  className="relative h-[600px] w-full max-w-[720px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
+                >
                 <div className="absolute left-0 top-[48%] h-[2px] w-full bg-yellow-300" />
                 <div className="absolute left-[40%] top-0 h-[6%] w-[20%] border-2 border-white bg-white/10" />
 
@@ -345,7 +375,8 @@ const AnalyticsView = ({
                       </div>
                     );
                   })}
-              </div>
+                </div>
+              )}
             </div>
             {heatType !== 'distance' && (
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">

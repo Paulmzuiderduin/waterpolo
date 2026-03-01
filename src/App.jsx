@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
-  Plus,
   Clapperboard,
   BarChart2,
   Users,
@@ -14,10 +13,12 @@ import {
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import AppHeader from './components/AppHeader';
+import AppOverlays from './components/AppOverlays';
+import AuthScreen from './components/AuthScreen';
 import MobileNav from './components/MobileNav';
 import SidebarNav from './components/SidebarNav';
-import PublicSeoContent from './components/PublicSeoContent';
-import VisitCounter from './components/VisitCounter';
+import UtilityDock from './components/UtilityDock';
+import WorkspaceSetupScreen from './components/WorkspaceSetupScreen';
 import ScoringView from './modules/scoring/ScoringView';
 import PossessionView from './modules/possession/PossessionView';
 import MatchesView from './modules/matches/MatchesView';
@@ -31,10 +32,11 @@ import PrivacyView from './modules/privacy/PrivacyView';
 import HubView from './modules/hub/HubView';
 import VideoAnalysisView from './modules/video/VideoAnalysisView';
 import { useAuthSession } from './hooks/useAuthSession';
+import { useFeatureRequestDialog } from './hooks/useFeatureRequestDialog';
+import { usePersistedUiState } from './hooks/usePersistedUiState';
 import { useSeasonsTeams } from './hooks/useSeasonsTeams';
 import { getSeoMetadata } from './seo/metadata';
 import { useSeoMeta } from './seo/useSeoMeta';
-
 import {
   ATTACK_TYPES,
   HEAT_TYPES,
@@ -51,30 +53,18 @@ import {
   loadTeamScoring,
   notifyDataUpdated
 } from './lib/waterpolo/dataLoaders';
+
 const App = () => {
-  const [activeTab, setActiveTab] = useState('hub');
   const { session, authLoading } = useAuthSession();
   const { seasons, setSeasons, loadingSeasons } = useSeasonsTeams(session?.user?.id);
   const [authEmail, setAuthEmail] = useState('');
   const [authMessage, setAuthMessage] = useState('');
-  const [selectedSeasonId, setSelectedSeasonId] = useState('');
-  const [selectedTeamId, setSelectedTeamId] = useState('');
   const [seasonForm, setSeasonForm] = useState('');
   const [teamForm, setTeamForm] = useState('');
-  const [moduleVisibility, setModuleVisibility] = useState({});
-  const [preferences, setPreferences] = useState({
-    rememberLastTab: true,
-    showHubTips: true,
-    showStatTooltips: true
-  });
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [promptDialog, setPromptDialog] = useState(null);
-  const [featureRequestDialog, setFeatureRequestDialog] = useState(null);
   const [toasts, setToasts] = useState([]);
-  const didApplyStartTab = useRef(false);
-  const didApplyWorkspaceSelection = useRef(false);
 
   const toast = useCallback((message, type = 'info') => {
     const id = `${Date.now()}_${Math.random()}`;
@@ -113,126 +103,59 @@ const App = () => {
     []
   );
 
-  useEffect(() => {
-    if (!session?.user) return;
-    const defaults = moduleConfig.reduce((acc, item) => {
-      if (item.alwaysVisible) return acc;
-      acc[item.key] = true;
-      return acc;
-    }, {});
-    try {
-      const raw = localStorage.getItem(`waterpolo_module_visibility_${session.user.id}`);
-      const parsed = raw ? JSON.parse(raw) : {};
-      setModuleVisibility({ ...defaults, ...parsed });
-    } catch {
-      setModuleVisibility(defaults);
-    }
-  }, [session, moduleConfig]);
+  const moduleShellCopy = useMemo(
+    () => ({
+      hub: 'Overview of the current workspace, quick access to modules, and operational guidance.',
+      matches: 'Create, edit, and manage the match list for the selected season and team.',
+      shotmap: 'Log shots on the field and review match or season shot distributions.',
+      analytics: 'Review shot heatmaps, conversion patterns, and distance-based trends.',
+      video: 'Work with local video snippets and drawings without uploading the source video.',
+      scoring: 'Track match events for your team with a fast, live-friendly workflow.',
+      possession: 'Map possessions and pass sequences on the full-pool field view.',
+      players: 'Review report cards and compare players across the selected data scope.',
+      roster: 'Manage the shared team roster used across all waterpolo modules.',
+      help: 'Getting started, legends, and common workflow questions.',
+      settings: 'Adjust visible modules and workspace preferences.'
+    }),
+    []
+  );
 
-  useEffect(() => {
-    if (!session?.user) return;
-    localStorage.setItem(`waterpolo_module_visibility_${session.user.id}`, JSON.stringify(moduleVisibility));
-  }, [moduleVisibility, session]);
+  const {
+    activeTab,
+    setActiveTab,
+    selectedSeasonId,
+    setSelectedSeasonId,
+    selectedTeamId,
+    setSelectedTeamId,
+    moduleVisibility,
+    setModuleVisibility,
+    preferences,
+    setPreferences,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    selectedSeason,
+    selectedTeam,
+    navItems,
+    mobilePrimaryItems,
+    mobileOverflowItems
+  } = usePersistedUiState({
+    sessionUser: session?.user,
+    moduleConfig,
+    seasons,
+    loadingSeasons
+  });
 
-  useEffect(() => {
-    if (!session?.user) return;
-    try {
-      const raw = localStorage.getItem(`waterpolo_preferences_${session.user.id}`);
-      const parsed = raw ? JSON.parse(raw) : {};
-      setPreferences((prev) => ({
-        ...prev,
-        ...parsed,
-        // Backward compatibility with previous key name.
-        showStatTooltips:
-          parsed.showStatTooltips != null ? parsed.showStatTooltips : parsed.showHelpTooltips ?? prev.showStatTooltips
-      }));
-    } catch {
-      setPreferences({ rememberLastTab: true, showHubTips: true, showStatTooltips: true });
-    }
-  }, [session]);
-
-  useEffect(() => {
-    if (!session?.user) return;
-    localStorage.setItem(`waterpolo_preferences_${session.user.id}`, JSON.stringify(preferences));
-  }, [preferences, session]);
-
-  useEffect(() => {
-    if (!session?.user) {
-      didApplyWorkspaceSelection.current = false;
-      return;
-    }
-    if (loadingSeasons || didApplyWorkspaceSelection.current) return;
-
-    try {
-      const raw = localStorage.getItem(`waterpolo_workspace_${session.user.id}`);
-      const parsed = raw ? JSON.parse(raw) : null;
-      const storedSeasonId = parsed?.seasonId || '';
-      const storedTeamId = parsed?.teamId || '';
-      const matchedSeason = seasons.find((season) => season.id === storedSeasonId) || seasons[0];
-      const matchedTeam =
-        matchedSeason?.teams?.find((team) => team.id === storedTeamId) || matchedSeason?.teams?.[0];
-
-      setSelectedSeasonId(matchedSeason?.id || '');
-      setSelectedTeamId(matchedTeam?.id || '');
-    } catch {
-      setSelectedSeasonId(seasons[0]?.id || '');
-      setSelectedTeamId(seasons[0]?.teams?.[0]?.id || '');
-    }
-
-    didApplyWorkspaceSelection.current = true;
-  }, [loadingSeasons, seasons, session]);
-
-  useEffect(() => {
-    if (!session?.user || !didApplyWorkspaceSelection.current) return;
-    localStorage.setItem(
-      `waterpolo_workspace_${session.user.id}`,
-      JSON.stringify({
-        seasonId: selectedSeasonId || '',
-        teamId: selectedTeamId || ''
-      })
-    );
-  }, [selectedSeasonId, selectedTeamId, session]);
-
-  const selectedSeason = seasons.find((season) => season.id === selectedSeasonId);
-  const selectedTeam = selectedSeason?.teams?.find((team) => team.id === selectedTeamId);
-  const sidebarStorageKey = session?.user
-    ? `waterpolo_sidebar_collapsed_${session.user.id}`
-    : 'waterpolo_sidebar_collapsed';
-  const navItems = moduleConfig.filter((item) => item.alwaysVisible || moduleVisibility[item.key] !== false);
-  const mobilePrimaryKeys = ['hub', 'matches', 'shotmap', 'analytics'];
-  const mobilePrimaryItems = navItems.filter((item) => mobilePrimaryKeys.includes(item.key));
-  const mobileOverflowItems = navItems.filter((item) => !mobilePrimaryKeys.includes(item.key));
-
-  useEffect(() => {
-    const visibleKeys = new Set([...navItems.map((item) => item.key), 'privacy']);
-    if (!visibleKeys.has(activeTab)) setActiveTab('hub');
-  }, [activeTab, navItems]);
-
-  useEffect(() => {
-    if (!session?.user || !preferences.rememberLastTab || didApplyStartTab.current) return;
-    if (!selectedSeason || !selectedTeam) return;
-    const last = localStorage.getItem(`waterpolo_last_tab_${session.user.id}`);
-    if (last && navItems.some((item) => item.key === last)) {
-      setActiveTab(last);
-    }
-    didApplyStartTab.current = true;
-  }, [session, preferences.rememberLastTab, selectedSeason, selectedTeam, navItems]);
-
-  useEffect(() => {
-    if (!session?.user || !preferences.rememberLastTab) return;
-    localStorage.setItem(`waterpolo_last_tab_${session.user.id}`, activeTab);
-  }, [activeTab, preferences.rememberLastTab, session]);
-
-  useEffect(() => {
-    if (!selectedSeason && selectedSeasonId) {
-      setSelectedSeasonId('');
-      setSelectedTeamId('');
-      return;
-    }
-    if (selectedSeason && !selectedTeam && selectedTeamId) {
-      setSelectedTeamId(selectedSeason.teams?.[0]?.id || '');
-    }
-  }, [selectedSeason, selectedSeasonId, selectedTeam, selectedTeamId]);
+  const { featureRequestDialog, setFeatureRequestDialog, openFeatureRequestDialog, submitFeatureRequest, featureRequestContext } =
+    useFeatureRequestDialog({
+      sessionUser: session?.user,
+      activeTab,
+      moduleConfig,
+      selectedSeason,
+      selectedTeam,
+      selectedSeasonId,
+      selectedTeamId,
+      toast
+    });
 
   const seoMeta = useMemo(
     () =>
@@ -246,20 +169,7 @@ const App = () => {
   );
   useSeoMeta(seoMeta);
 
-  useEffect(() => {
-    if (!session?.user) return;
-    try {
-      const raw = localStorage.getItem(sidebarStorageKey);
-      setSidebarCollapsed(raw === '1');
-    } catch {
-      setSidebarCollapsed(false);
-    }
-  }, [session, sidebarStorageKey]);
-
-  useEffect(() => {
-    if (!session?.user) return;
-    localStorage.setItem(sidebarStorageKey, sidebarCollapsed ? '1' : '0');
-  }, [session, sidebarStorageKey, sidebarCollapsed]);
+  const activeModule = moduleConfig.find((item) => item.key === activeTab);
 
   const handleMagicLink = async () => {
     if (!authEmail) return;
@@ -274,62 +184,6 @@ const App = () => {
       return;
     }
     setAuthMessage('Check your inbox for the magic link.');
-  };
-
-  const openFeatureRequestDialog = useCallback(() => {
-    if (!session?.user) {
-      toast('Sign in first to send a feature request.', 'info');
-      return;
-    }
-    const tabLabel =
-      moduleConfig.find((item) => item.key === activeTab)?.label || 'Waterpolo Hub';
-    setFeatureRequestDialog({
-      subject: `Waterpolo Feature Request - ${tabLabel}`,
-      message: '',
-      submitting: false,
-      error: ''
-    });
-  }, [activeTab, moduleConfig, session?.user, toast]);
-
-  const submitFeatureRequest = async () => {
-    if (!session?.user || !featureRequestDialog) return;
-    const subject = featureRequestDialog.subject.trim();
-    const message = featureRequestDialog.message.trim();
-    if (!subject || !message) {
-      setFeatureRequestDialog((prev) =>
-        prev ? { ...prev, error: 'Please enter both a subject and a message.' } : prev
-      );
-      return;
-    }
-
-    setFeatureRequestDialog((prev) => (prev ? { ...prev, submitting: true, error: '' } : prev));
-
-    const { error } = await supabase.from('feature_requests').insert({
-      user_id: session.user.id,
-      season_id: selectedSeasonId || null,
-      team_id: selectedTeamId || null,
-      app: 'waterpolo',
-      context_tab: activeTab,
-      email: session.user.email || null,
-      subject,
-      message
-    });
-
-    if (error) {
-      setFeatureRequestDialog((prev) =>
-        prev
-          ? {
-              ...prev,
-              submitting: false,
-              error: error.message || 'Failed to send request.'
-            }
-          : prev
-      );
-      return;
-    }
-
-    setFeatureRequestDialog(null);
-    toast('Feature request sent.', 'success');
   };
 
   const createSeason = async () => {
@@ -381,10 +235,9 @@ const App = () => {
       toast('Failed to rename season.', 'error');
       return;
     }
-    const nextSeasons = seasons.map((season) =>
-      season.id === seasonId ? { ...season, name: trimmed } : season
+    setSeasons((prev) =>
+      prev.map((season) => (season.id === seasonId ? { ...season, name: trimmed } : season))
     );
-    setSeasons(nextSeasons);
     toast('Season renamed.', 'success');
   };
 
@@ -412,14 +265,15 @@ const App = () => {
       toast('Failed to rename team.', 'error');
       return;
     }
-    const nextSeasons = seasons.map((season) => {
-      if (season.id !== seasonId) return season;
-      const teams = (season.teams || []).map((team) =>
-        team.id === teamId ? { ...team, name: trimmed } : team
-      );
-      return { ...season, teams };
-    });
-    setSeasons(nextSeasons);
+    setSeasons((prev) =>
+      prev.map((season) => {
+        if (season.id !== seasonId) return season;
+        const teams = (season.teams || []).map((team) =>
+          team.id === teamId ? { ...team, name: trimmed } : team
+        );
+        return { ...season, teams };
+      })
+    );
     toast('Team renamed.', 'success');
   };
 
@@ -430,184 +284,43 @@ const App = () => {
       toast('Failed to delete team.', 'error');
       return;
     }
-    const nextSeasons = seasons.map((season) => {
-      if (season.id !== seasonId) return season;
-      return { ...season, teams: (season.teams || []).filter((team) => team.id !== teamId) };
-    });
-    setSeasons(nextSeasons);
+    setSeasons((prev) =>
+      prev.map((season) => {
+        if (season.id !== seasonId) return season;
+        return { ...season, teams: (season.teams || []).filter((team) => team.id !== teamId) };
+      })
+    );
     if (selectedTeamId === teamId) {
       setSelectedTeamId('');
     }
     toast('Team deleted.', 'success');
   };
 
-  const renderUiOverlays = () => (
-    <>
-      {confirmDialog && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/35 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
-            <h3 className="text-sm font-semibold text-slate-800">Please confirm</h3>
-            <p className="mt-2 text-sm text-slate-600">{confirmDialog.message}</p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
-                onClick={() => {
-                  const dialog = confirmDialog;
-                  setConfirmDialog(null);
-                  dialog.resolve(false);
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                className="wp-primary-bg rounded-lg px-3 py-2 text-sm font-semibold text-white"
-                onClick={() => {
-                  const dialog = confirmDialog;
-                  setConfirmDialog(null);
-                  dialog.resolve(true);
-                }}
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {promptDialog && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/35 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
-            <h3 className="text-sm font-semibold text-slate-800">{promptDialog.message}</h3>
-            <input
-              autoFocus
-              className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              value={promptDialog.value}
-              onChange={(event) =>
-                setPromptDialog((prev) => (prev ? { ...prev, value: event.target.value } : prev))
-              }
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  const dialog = promptDialog;
-                  setPromptDialog(null);
-                  dialog.resolve(dialog.value);
-                }
-              }}
-            />
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
-                onClick={() => {
-                  const dialog = promptDialog;
-                  setPromptDialog(null);
-                  dialog.resolve(null);
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                className="wp-primary-bg rounded-lg px-3 py-2 text-sm font-semibold text-white"
-                onClick={() => {
-                  const dialog = promptDialog;
-                  setPromptDialog(null);
-                  dialog.resolve(dialog.value);
-                }}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {featureRequestDialog && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/35 px-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
-            <h3 className="text-sm font-semibold text-slate-800">Request a feature</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              This request will be stored in Supabase together with your current Waterpolo Hub context.
-            </p>
-            <div className="mt-4 grid gap-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Subject</label>
-                <input
-                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  value={featureRequestDialog.subject}
-                  onChange={(event) =>
-                    setFeatureRequestDialog((prev) =>
-                      prev ? { ...prev, subject: event.target.value } : prev
-                    )
-                  }
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Message</label>
-                <textarea
-                  className="mt-2 min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  value={featureRequestDialog.message}
-                  onChange={(event) =>
-                    setFeatureRequestDialog((prev) =>
-                      prev ? { ...prev, message: event.target.value } : prev
-                    )
-                  }
-                  placeholder="Describe the feature, workflow, or pain point."
-                />
-              </div>
-              <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                Signed in as {session?.user?.email || 'unknown'} · Context: {activeTab}
-                {selectedSeason?.name ? ` · Season: ${selectedSeason.name}` : ''}
-                {selectedTeam?.name ? ` · Team: ${selectedTeam.name}` : ''}
-              </div>
-              {featureRequestDialog.error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {featureRequestDialog.error}
-                </div>
-              )}
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
-                onClick={() => setFeatureRequestDialog(null)}
-                disabled={featureRequestDialog.submitting}
-              >
-                Cancel
-              </button>
-              <button
-                className="wp-primary-bg rounded-lg px-3 py-2 text-sm font-semibold text-white"
-                onClick={submitFeatureRequest}
-                disabled={featureRequestDialog.submitting}
-              >
-                {featureRequestDialog.submitting ? 'Sending...' : 'Send request'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="fixed right-4 top-4 z-[130] flex w-[min(360px,95vw)] flex-col gap-2">
-        {toasts.map((item) => (
-          <div
-            key={item.id}
-            className={`rounded-lg px-3 py-2 text-sm font-medium shadow-lg ${
-              item.type === 'error'
-                ? 'border border-red-200 bg-red-50 text-red-700'
-                : 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-            }`}
-          >
-            {item.message}
-          </div>
-        ))}
-      </div>
-    </>
+  const overlays = (
+    <AppOverlays
+      confirmDialog={confirmDialog}
+      setConfirmDialog={setConfirmDialog}
+      promptDialog={promptDialog}
+      setPromptDialog={setPromptDialog}
+      featureRequestDialog={featureRequestDialog}
+      setFeatureRequestDialog={setFeatureRequestDialog}
+      featureRequestContext={featureRequestContext}
+      submitFeatureRequest={submitFeatureRequest}
+      toasts={toasts}
+    />
   );
 
-  const renderFeatureRequestButton = () => (
-    <button
-      className="fixed bottom-24 right-4 z-[115] inline-flex items-center gap-2 rounded-full bg-cyan-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/20 transition hover:bg-cyan-500 lg:bottom-6"
-      onClick={openFeatureRequestDialog}
-    >
-      <Plus size={16} />
-      Request feature
-    </button>
+  const openAnalyticsPreferences = useCallback(() => {
+    if (typeof window !== 'undefined' && typeof window.resetAnalyticsPreferences === 'function') {
+      window.resetAnalyticsPreferences();
+    }
+  }, []);
+
+  const renderUtilityDock = () => (
+    <UtilityDock
+      onRequestFeature={openFeatureRequestDialog}
+      onAnalyticsPreferences={openAnalyticsPreferences}
+    />
   );
 
   if (authLoading) {
@@ -616,60 +329,13 @@ const App = () => {
 
   if (!session?.user) {
     return (
-      <div className="min-h-screen px-6 py-8">
-        <div className="mx-auto max-w-4xl space-y-6">
-          <header className="rounded-3xl bg-white p-6 shadow-sm">
-            <p className="text-sm font-semibold text-cyan-700">Water Polo Platform</p>
-            <h1 className="text-3xl font-semibold">Sign in</h1>
-            <p className="mt-2 text-sm text-slate-500">
-              Track water polo shotmaps, scoring events, possessions, and local video snippets.
-            </p>
-          </header>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.15fr]">
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <label className="text-xs font-semibold text-slate-500">Email</label>
-              <input
-                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                placeholder="you@example.com"
-                value={authEmail}
-                onChange={(event) => setAuthEmail(event.target.value)}
-              />
-              <button
-                className="mt-4 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                onClick={handleMagicLink}
-              >
-                Send magic link
-              </button>
-              <button
-                className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
-                onClick={handleMagicLink}
-              >
-                Resend link
-              </button>
-              {authMessage && <div className="mt-3 text-sm text-slate-500">{authMessage}</div>}
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <h2 className="text-sm font-semibold text-slate-900">How the magic link works</h2>
-                <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-slate-600">
-                  <li>Enter your email address and click <span className="font-semibold text-slate-900">Send magic link</span>.</li>
-                  <li>You will receive a Supabase sign-in email.</li>
-                  <li>Open the email and click the confirmation link to sign in to Waterpolo Hub.</li>
-                </ol>
-                <div className="mt-4 space-y-1 text-xs text-slate-500">
-                  <div>
-                    <span className="font-semibold text-slate-700">Sender:</span> usually <span className="font-mono">Supabase Auth</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-slate-700">Subject:</span> usually <span className="font-mono">Confirm Your Signup</span>
-                  </div>
-                  <div>If you do not see the email, check your spam folder first.</div>
-                </div>
-              </div>
-            </div>
-            <PublicSeoContent />
-          </div>
-        </div>
-        {renderUiOverlays()}
-      </div>
+      <AuthScreen
+        authEmail={authEmail}
+        setAuthEmail={setAuthEmail}
+        authMessage={authMessage}
+        onSendMagicLink={handleMagicLink}
+        overlays={overlays}
+      />
     );
   }
 
@@ -679,172 +345,29 @@ const App = () => {
 
   if (!selectedSeason || !selectedTeam) {
     return (
-      <div className="min-h-screen px-6 py-8">
-        <div className="mx-auto max-w-5xl space-y-6">
-          <header className="rounded-3xl bg-white p-6 shadow-sm">
-            <p className="text-sm font-semibold text-cyan-700">Water Polo Platform</p>
-            <h1 className="text-3xl font-semibold">Seasons & Teams</h1>
-            <p className="mt-2 text-sm text-slate-500">
-              Select a season and team, or create new folders.
-            </p>
-          </header>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr]">
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-700">Seasons</h2>
-              <div className="mt-3 space-y-2">
-                {seasons.length === 0 && (
-                  <div className="text-sm text-slate-500">No seasons yet.</div>
-                )}
-                {seasons.map((season) => (
-                  <div
-                    key={season.id}
-                    className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${
-                      selectedSeasonId === season.id
-                        ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
-                        : 'border-slate-100 text-slate-600'
-                    }`}
-                  >
-                    <button
-                      className="flex-1 text-left"
-                      onClick={() => {
-                        setSelectedSeasonId(season.id);
-                        setSelectedTeamId('');
-                      }}
-                    >
-                      <span className="font-medium">{season.name}</span>
-                    </button>
-                    <span className="mr-3 text-xs text-slate-400">
-                      {season.teams?.length || 0} teams
-                    </span>
-                    <button
-                      className="text-xs font-semibold text-slate-500"
-                      onClick={async () => {
-                        const next = await promptAction('New season name', season.name);
-                        if (next != null) renameSeason(season.id, next);
-                      }}
-                    >
-                      Rename
-                    </button>
-                    <button
-                      className="ml-2 text-xs font-semibold text-red-500"
-                      onClick={() => deleteSeason(season.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex gap-2">
-                <input
-                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  placeholder="New season"
-                  value={seasonForm}
-                  onChange={(event) => setSeasonForm(event.target.value)}
-                />
-                <button
-                  className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
-                  onClick={createSeason}
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="rounded-2xl bg-white p-4 shadow-sm">
-                <h2 className="text-sm font-semibold text-slate-700">Teams</h2>
-                {selectedSeason ? (
-                  <div className="mt-3 space-y-2">
-                    {(selectedSeason.teams || []).length === 0 && (
-                      <div className="text-sm text-slate-500">No teams in this season.</div>
-                    )}
-                    {(selectedSeason.teams || []).map((team) => (
-                      <div
-                        key={team.id}
-                        className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${
-                          selectedTeamId === team.id
-                            ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
-                            : 'border-slate-100 text-slate-600'
-                        }`}
-                      >
-                        <button className="flex-1 text-left" onClick={() => setSelectedTeamId(team.id)}>
-                          <span className="font-medium">{team.name}</span>
-                        </button>
-                        <button
-                          className="text-xs font-semibold text-slate-500"
-                          onClick={async () => {
-                            const next = await promptAction('New team name', team.name);
-                            if (next != null) renameTeam(selectedSeason.id, team.id, next);
-                          }}
-                        >
-                          Rename
-                        </button>
-                        <button
-                          className="ml-2 text-xs font-semibold text-red-500"
-                          onClick={() => deleteTeam(selectedSeason.id, team.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-3 text-sm text-slate-500">Select a season first.</div>
-                )}
-                <div className="mt-4 flex gap-2">
-                  <input
-                    className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                    placeholder={selectedSeason ? 'New team' : 'Select season first'}
-                    value={teamForm}
-                    onChange={(event) => setTeamForm(event.target.value)}
-                    disabled={!selectedSeason}
-                  />
-                  <button
-                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                    onClick={createTeam}
-                    disabled={!selectedSeason}
-                  >
-                    <Plus size={16} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-white p-4 shadow-sm">
-                <h2 className="text-sm font-semibold text-slate-700">Getting started</h2>
-                <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-600">
-                  <li>Create a season on the left.</li>
-                  <li>Select the season and create a team.</li>
-                  <li>Open Roster to add players.</li>
-                  <li>Create a match in Matches, then open Shotmap to start tracking shots.</li>
-                </ol>
-              </div>
-            </div>
-          </div>
-        </div>
-        <footer className="mx-auto mt-8 max-w-5xl px-6 pb-8 text-xs text-slate-500">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white/70 px-4 py-3 shadow-sm">
-            <span>© {new Date().getFullYear()} Waterpolo Shotmap & Analytics</span>
-            <div className="flex items-center gap-4">
-              <button
-                className="font-semibold text-cyan-700 underline decoration-transparent transition hover:decoration-current"
-                onClick={openFeatureRequestDialog}
-              >
-                Request Feature
-              </button>
-              <button
-                className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
-                onClick={() => setActiveTab('privacy')}
-              >
-                Privacy
-              </button>
-            </div>
-          </div>
-        </footer>
-        {renderFeatureRequestButton()}
-        <VisitCounter siteKey="waterpolo" />
-        {renderUiOverlays()}
-      </div>
+      <WorkspaceSetupScreen
+        seasons={seasons}
+        selectedSeason={selectedSeason}
+        selectedSeasonId={selectedSeasonId}
+        selectedTeamId={selectedTeamId}
+        setSelectedSeasonId={setSelectedSeasonId}
+        setSelectedTeamId={setSelectedTeamId}
+        seasonForm={seasonForm}
+        setSeasonForm={setSeasonForm}
+        teamForm={teamForm}
+        setTeamForm={setTeamForm}
+        createSeason={createSeason}
+        createTeam={createTeam}
+        promptAction={promptAction}
+        renameSeason={renameSeason}
+        deleteSeason={deleteSeason}
+        renameTeam={renameTeam}
+        deleteTeam={deleteTeam}
+        openFeatureRequestDialog={openFeatureRequestDialog}
+        setActiveTab={setActiveTab}
+        renderUtilityDock={renderUtilityDock}
+        overlays={overlays}
+      />
     );
   }
 
@@ -865,6 +388,8 @@ const App = () => {
       />
 
       <AppHeader
+        activeModuleLabel={activeModule?.label || 'Waterpolo Hub'}
+        activeModuleDescription={moduleShellCopy[activeTab] || 'Waterpolo team workspace.'}
         selectedSeasonName={selectedSeason.name}
         selectedTeamName={selectedTeam.name}
         userEmail={session.user.email}
@@ -910,6 +435,7 @@ const App = () => {
             zones={ZONES}
             resultColors={RESULT_COLORS}
             showTooltips={preferences.showStatTooltips}
+            onOpenModule={setActiveTab}
           />
         )}
         {activeTab === 'analytics' && (
@@ -923,6 +449,7 @@ const App = () => {
             attackTypes={ATTACK_TYPES}
             periods={PERIODS}
             showTooltips={preferences.showStatTooltips}
+            onOpenModule={setActiveTab}
           />
         )}
         {activeTab === 'video' && (
@@ -945,6 +472,7 @@ const App = () => {
             periods={PERIODS}
             periodOrder={PERIOD_ORDER}
             showTooltips={preferences.showStatTooltips}
+            onOpenModule={setActiveTab}
           />
         )}
         {activeTab === 'possession' && (
@@ -958,6 +486,7 @@ const App = () => {
             onDataUpdated={notifyDataUpdated}
             outcomes={POSSESSION_OUTCOMES}
             showTooltips={preferences.showStatTooltips}
+            onOpenModule={setActiveTab}
           />
         )}
         {activeTab === 'players' && (
@@ -970,6 +499,7 @@ const App = () => {
             onSelectTeam={setSelectedTeamId}
             loadData={loadTeamData}
             showTooltips={preferences.showStatTooltips}
+            onOpenModule={setActiveTab}
           />
         )}
         {activeTab === 'roster' && (
@@ -982,6 +512,7 @@ const App = () => {
             loadData={loadTeamData}
             onDataUpdated={notifyDataUpdated}
             showTooltips={preferences.showStatTooltips}
+            onOpenModule={setActiveTab}
           />
         )}
         {activeTab === 'help' && <HelpView showTooltips={preferences.showStatTooltips} />}
@@ -1050,12 +581,10 @@ const App = () => {
           setMobileMenuOpen(false);
         }}
       />
-      {renderFeatureRequestButton()}
-      <VisitCounter siteKey="waterpolo" />
-      {renderUiOverlays()}
+      {renderUtilityDock()}
+      {overlays}
     </div>
   );
 };
-
 
 export default App;

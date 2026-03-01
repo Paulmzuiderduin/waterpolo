@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { computeAge } from '../../utils/time';
+import ModuleEmptyState from '../../components/ModuleEmptyState';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
+import { PLAYER_PHOTO_BUCKET, inferPhotoPath, withSignedRosterPhotos } from '../../lib/waterpolo/photos';
 
 const ROSTER_TOOLTIPS = {
   details: 'Core player profile data used by report cards and filtering in other modules.',
@@ -41,8 +43,9 @@ const RosterView = ({
     const load = async () => {
       try {
         const payload = await loadData(teamId);
+        const rosterWithPhotos = await withSignedRosterPhotos(payload.roster);
         if (!active) return;
-        const mappedRoster = payload.roster.map((player) => ({
+        const mappedRoster = rosterWithPhotos.map((player) => ({
           id: player.id,
           name: player.name,
           capNumber: player.cap_number,
@@ -51,6 +54,7 @@ const RosterView = ({
           dominantHand: player.dominant_hand || '',
           notes: player.notes || '',
           photoUrl: player.photo_url || '',
+          photoPath: player.photo_path || '',
           birthday: player.birthday || ''
         }));
         setRoster(mappedRoster);
@@ -106,15 +110,15 @@ const RosterView = ({
     } else {
       const { data: inserted, error: insertError } = await supabase
         .from('roster')
-        .insert({ ...payload, team_id: teamId, user_id: userId })
-        .select('*')
-        .single();
+      .insert({ ...payload, team_id: teamId, user_id: userId })
+      .select('*')
+      .single();
       if (insertError) return;
       data = inserted;
     }
     const nextRoster = roster
       .map((player) => (player.id === editingId ? { ...player, ...form, id: data.id } : player))
-      .concat(editingId ? [] : [{ ...form, id: data.id, photoUrl: data.photo_url || '' }]);
+      .concat(editingId ? [] : [{ ...form, id: data.id, photoUrl: '', photoPath: data.photo_path || '' }]);
     setRoster(nextRoster);
     resetForm();
     onDataUpdated?.();
@@ -122,10 +126,14 @@ const RosterView = ({
 
   const deletePlayer = async (playerId) => {
     if (!(await confirmAction('Delete this player?'))) return;
+    const currentPlayer = roster.find((player) => player.id === playerId);
     const { error: deleteError } = await supabase.from('roster').delete().eq('id', playerId);
     if (deleteError) {
       toast('Failed to delete player.', 'error');
       return;
+    }
+    if (currentPlayer?.photoPath) {
+      await supabase.storage.from(PLAYER_PHOTO_BUCKET).remove([currentPlayer.photoPath]);
     }
     setRoster(roster.filter((player) => player.id !== playerId));
     onDataUpdated?.();
@@ -140,7 +148,13 @@ const RosterView = ({
     }
     const ext = file.name.split('.').pop();
     const path = `${userId}/${teamId}/${playerId}.${ext}`;
-    const { error: uploadError } = await supabase.storage.from('player-photos').upload(path, file, {
+    const currentPlayer = roster.find((player) => player.id === playerId);
+    const previousPath = currentPlayer?.photoPath;
+    if (previousPath && previousPath !== path) {
+      await supabase.storage.from(PLAYER_PHOTO_BUCKET).remove([previousPath]);
+    }
+
+    const { error: uploadError } = await supabase.storage.from(PLAYER_PHOTO_BUCKET).upload(path, file, {
       upsert: true,
       contentType: file.type
     });
@@ -148,15 +162,29 @@ const RosterView = ({
       setError(`Photo upload failed: ${uploadError.message}`);
       return;
     }
-    const { data } = supabase.storage.from('player-photos').getPublicUrl(path);
+    const { data: signedData, error: signedError } = await supabase.storage
+      .from(PLAYER_PHOTO_BUCKET)
+      .createSignedUrl(path, 60 * 60);
+    if (signedError) {
+      setError(`Photo access failed: ${signedError.message}`);
+      return;
+    }
     const { error: updateError } = await supabase
       .from('roster')
-      .update({ photo_url: data.publicUrl })
+      .update({ photo_path: path, photo_url: null })
       .eq('id', playerId);
-    if (updateError) return;
+    if (updateError) {
+      setError(`Photo save failed: ${updateError.message}`);
+      return;
+    }
     setRoster(
-      roster.map((player) => (player.id === playerId ? { ...player, photoUrl: data.publicUrl } : player))
+      roster.map((player) =>
+        player.id === playerId
+          ? { ...player, photoUrl: signedData?.signedUrl || '', photoPath: path }
+          : player
+      )
     );
+    toast('Photo uploaded.', 'success');
   };
 
   if (loading) {
@@ -265,6 +293,13 @@ const RosterView = ({
             />
           </h3>
           <div className="mt-3 space-y-3">
+            {roster.length === 0 && (
+              <ModuleEmptyState
+                compact
+                title="No players in this roster"
+                description="Add the first player in the form on the left. The roster is shared across all waterpolo modules."
+              />
+            )}
             {roster
               .slice()
               .sort((a, b) => Number(a.capNumber) - Number(b.capNumber))

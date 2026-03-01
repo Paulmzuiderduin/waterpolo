@@ -29,8 +29,7 @@ const PrivacyView = () => (
           <li>Account data: Email address used for magic‑link login.</li>
           <li>Team & match data: Seasons, teams, matches, and shot records you create.</li>
           <li>Player data: Name, cap number, birthday (used only to calculate age), dominant hand, height/weight, notes.</li>
-          <li>Media: Optional player photos.</li>
-          <li>Minimal page counter data: A total page-view count for this website, stored as an aggregate number without cookies, profiles, or advertising identifiers.</li>
+          <li>Media: Optional player photos stored in private Supabase storage and accessed through temporary signed links.</li>
           <li>Website analytics data (optional): Aggregated usage signals (page views, referrer, device, location at coarse level) after consent.</li>
           <li>Technical data: Session tokens, IP address, browser/device metadata necessary for security and service operation.</li>
         </ul>
@@ -42,7 +41,6 @@ const PrivacyView = () => (
           <li>Service delivery: Authentication, storage, and app functionality.</li>
           <li>Security and maintenance: Monitoring, stability, and troubleshooting.</li>
           <li>Reporting: Generating analytics and PDF reports.</li>
-          <li>Website operations: Showing a minimal aggregate page-view counter.</li>
           <li>Website improvement: Measuring site usage trends through optional analytics consent.</li>
         </ul>
         <p className="mt-2">
@@ -54,10 +52,6 @@ const PrivacyView = () => (
       <div>
         <h3 className="text-sm font-semibold text-slate-700">4. Processors and Storage</h3>
         <p>We use Supabase for authentication, database, and file storage. Supabase acts as a data processor on our behalf.</p>
-        <p>
-          We also use Supabase to store the aggregate page-view counter shown in the app. This counter stores totals only and is
-          not linked to your identity.
-        </p>
         <p>
           For website analytics, we use Google Analytics 4 only after consent is provided via the on-site consent prompt.
         </p>

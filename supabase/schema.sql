@@ -26,6 +26,7 @@ create table if not exists roster (
   weight_kg integer,
   dominant_hand text,
   notes text,
+  photo_path text,
   photo_url text,
   created_at timestamptz not null default now()
 );
@@ -35,9 +36,22 @@ alter table roster add column if not exists height_cm integer;
 alter table roster add column if not exists weight_kg integer;
 alter table roster add column if not exists dominant_hand text;
 alter table roster add column if not exists notes text;
+alter table roster add column if not exists photo_path text;
 alter table roster add column if not exists photo_url text;
 alter table roster drop column if exists age;
 alter table roster drop column if exists preferred_position;
+
+alter table roster drop constraint if exists roster_height_cm_check;
+alter table roster add constraint roster_height_cm_check
+  check (height_cm is null or (height_cm >= 50 and height_cm <= 260));
+
+alter table roster drop constraint if exists roster_weight_kg_check;
+alter table roster add constraint roster_weight_kg_check
+  check (weight_kg is null or (weight_kg >= 20 and weight_kg <= 250));
+
+alter table roster drop constraint if exists roster_dominant_hand_check;
+alter table roster add constraint roster_dominant_hand_check
+  check (dominant_hand is null or dominant_hand in ('left', 'right', 'ambidextrous'));
 
 create table if not exists matches (
   id uuid primary key default gen_random_uuid(),
@@ -51,6 +65,10 @@ create table if not exists matches (
 );
 
 alter table matches add column if not exists opponent_name text;
+
+alter table matches drop constraint if exists matches_date_check;
+alter table matches add constraint matches_date_check
+  check (date >= date '2000-01-01' and date <= date '2100-12-31');
 
 create table if not exists shots (
   id uuid primary key default gen_random_uuid(),
@@ -69,6 +87,34 @@ create table if not exists shots (
   created_at timestamptz not null default now()
 );
 
+alter table shots drop constraint if exists shots_x_check;
+alter table shots add constraint shots_x_check
+  check (x >= 0 and x <= 100);
+
+alter table shots drop constraint if exists shots_y_check;
+alter table shots add constraint shots_y_check
+  check (y >= 0 and y <= 100);
+
+alter table shots drop constraint if exists shots_zone_check;
+alter table shots add constraint shots_zone_check
+  check (zone between 1 and 14);
+
+alter table shots drop constraint if exists shots_result_check;
+alter table shots add constraint shots_result_check
+  check (result in ('raak', 'redding', 'mis'));
+
+alter table shots drop constraint if exists shots_attack_type_check;
+alter table shots add constraint shots_attack_type_check
+  check (attack_type in ('6vs6', '6vs5', '6vs4', 'strafworp'));
+
+alter table shots drop constraint if exists shots_period_check;
+alter table shots add constraint shots_period_check
+  check (period in ('1', '2', '3', '4', 'OT'));
+
+alter table shots drop constraint if exists shots_time_check;
+alter table shots add constraint shots_time_check
+  check (time ~ '^[0-7]:[0-5][0-9]$');
+
 create table if not exists scoring_events (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -76,12 +122,26 @@ create table if not exists scoring_events (
   team_id uuid not null references teams(id) on delete cascade,
   match_id uuid not null references matches(id) on delete cascade,
   event_type text not null,
-  team_side text not null,
   player_cap text,
   period text not null,
   time text not null,
   created_at timestamptz not null default now()
 );
+
+alter table scoring_events drop constraint if exists scoring_events_team_side_check;
+alter table scoring_events drop column if exists team_side;
+
+alter table scoring_events drop constraint if exists scoring_events_event_type_check;
+alter table scoring_events add constraint scoring_events_event_type_check
+  check (event_type in ('goal', 'exclusion', 'foul', 'turnover_won', 'turnover_lost', 'penalty', 'timeout'));
+
+alter table scoring_events drop constraint if exists scoring_events_period_check;
+alter table scoring_events add constraint scoring_events_period_check
+  check (period in ('1', '2', '3', '4', 'OT'));
+
+alter table scoring_events drop constraint if exists scoring_events_time_check;
+alter table scoring_events add constraint scoring_events_time_check
+  check (time ~ '^[0-7]:[0-5][0-9]$');
 
 create table if not exists possessions (
   id uuid primary key default gen_random_uuid(),
@@ -92,6 +152,10 @@ create table if not exists possessions (
   outcome text,
   created_at timestamptz not null default now()
 );
+
+alter table possessions drop constraint if exists possessions_outcome_check;
+alter table possessions add constraint possessions_outcome_check
+  check (outcome is null or outcome in ('goal', 'miss', 'exclusion', 'turnover_won', 'turnover_lost'));
 
 create table if not exists passes (
   id uuid primary key default gen_random_uuid(),
@@ -109,6 +173,26 @@ create table if not exists passes (
   sequence integer not null,
   created_at timestamptz not null default now()
 );
+
+alter table passes drop constraint if exists passes_from_x_check;
+alter table passes add constraint passes_from_x_check
+  check (from_x >= 0 and from_x <= 100);
+
+alter table passes drop constraint if exists passes_from_y_check;
+alter table passes add constraint passes_from_y_check
+  check (from_y >= 0 and from_y <= 100);
+
+alter table passes drop constraint if exists passes_to_x_check;
+alter table passes add constraint passes_to_x_check
+  check (to_x >= 0 and to_x <= 100);
+
+alter table passes drop constraint if exists passes_to_y_check;
+alter table passes add constraint passes_to_y_check
+  check (to_y >= 0 and to_y <= 100);
+
+alter table passes drop constraint if exists passes_sequence_check;
+alter table passes add constraint passes_sequence_check
+  check (sequence >= 1 and sequence <= 999);
 
 create table if not exists feature_requests (
   id uuid primary key default gen_random_uuid(),
@@ -217,3 +301,43 @@ end;
 $$;
 
 grant execute on function increment_site_visit_total(text) to anon, authenticated;
+
+insert into storage.buckets (id, name, public)
+values ('player-photos', 'player-photos', false)
+on conflict (id) do update set public = false;
+
+drop policy if exists "Users can read own player photos" on storage.objects;
+create policy "Users can read own player photos" on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'player-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "Users can upload own player photos" on storage.objects;
+create policy "Users can upload own player photos" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'player-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "Users can update own player photos" on storage.objects;
+create policy "Users can update own player photos" on storage.objects
+  for update to authenticated
+  using (
+    bucket_id = 'player-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  )
+  with check (
+    bucket_id = 'player-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "Users can delete own player photos" on storage.objects;
+create policy "Users can delete own player photos" on storage.objects
+  for delete to authenticated
+  using (
+    bucket_id = 'player-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );

@@ -1,45 +1,38 @@
 import { expect, test } from '@playwright/test';
-
-const openWorkspace = async (page) => {
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Seasons & Teams' })).toBeVisible();
-  await page.getByRole('button', { name: '2025-2026' }).click();
-  await page.getByRole('button', { name: 'dwt H1' }).click();
-  await expect(page.getByRole('heading', { name: 'Welcome' })).toBeVisible();
-};
+import { openWorkspace } from './helpers';
 
 test('smoke: modules open from sidebar', async ({ page }) => {
   await openWorkspace(page);
 
-  await page.getByRole('button', { name: 'Matches' }).click();
+  await page.getByRole('button', { name: 'Matches', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Season Team Matches' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Shotmap' }).click();
+  await page.getByRole('button', { name: 'Shotmap', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Shot Tracking & Recording' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Analytics' }).click();
+  await page.getByRole('button', { name: 'Analytics', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Heatmaps & Analysis' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Scoring' }).click();
+  await page.getByRole('button', { name: 'Scoring', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Match Events' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Possession' }).click();
+  await page.getByRole('button', { name: 'Possession', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Possession Mapping' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Players' }).click();
+  await page.getByRole('button', { name: 'Players', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Player Report Card' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Roster' }).click();
+  await page.getByRole('button', { name: 'Roster', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Player Info' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Help' }).click();
+  await page.getByRole('button', { name: 'Help', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Getting Started & FAQ' })).toBeVisible();
 });
 
 test('smoke: settings toggle hides and restores module', async ({ page }) => {
   await openWorkspace(page);
 
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Workspace Preferences' })).toBeVisible();
 
   const shotmapToggle = page.locator('label:has-text("Shotmap") input[type="checkbox"]');
@@ -51,7 +44,8 @@ test('smoke: settings toggle hides and restores module', async ({ page }) => {
 });
 
 test('smoke: app dialogs open for rename and delete', async ({ page }) => {
-  await page.goto('/');
+  await openWorkspace(page);
+  await page.getByRole('button', { name: 'Switch team' }).click();
   await expect(page.getByRole('heading', { name: 'Seasons & Teams' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Rename' }).first().click();

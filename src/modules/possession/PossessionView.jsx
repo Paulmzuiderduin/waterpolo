@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import ModuleHeader from '../../components/ModuleHeader';
+import ModuleEmptyState from '../../components/ModuleEmptyState';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
+import ToolbarButton from '../../components/ToolbarButton';
 
 const POSSESSION_TOOLTIPS = {
   fieldView: 'Shows exact pass origins and receptions on the field map for the active possession.',
@@ -20,7 +23,8 @@ const PossessionView = ({
   loadData,
   onDataUpdated,
   outcomes,
-  showTooltips = true
+  showTooltips = true,
+  onOpenModule
 }) => {
   const [roster, setRoster] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -295,56 +299,36 @@ const PossessionView = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-cyan-700">Passing & Possession</p>
-          <h2 className="text-2xl font-semibold">Possession Mapping</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
-              viewMode === 'field'
-                ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
-                : 'border-slate-900 bg-slate-900/85 text-white hover:bg-slate-900'
-            }`}
-            onClick={() => setViewMode('field')}
-          >
-            <StatTooltipLabel
-              label="Field"
-              tooltip={POSSESSION_TOOLTIPS.fieldView}
-              enabled={showTooltips}
-            />
-          </button>
-          <button
-            className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
-              viewMode === 'network'
-                ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
-                : 'border-slate-900 bg-slate-900/85 text-white hover:bg-slate-900'
-            }`}
-            onClick={() => setViewMode('network')}
-          >
-            <StatTooltipLabel
-              label="Network"
-              tooltip={POSSESSION_TOOLTIPS.networkView}
-              enabled={showTooltips}
-            />
-          </button>
-          <button
-            className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
-              viewMode === 'replay'
-                ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
-                : 'border-slate-900 bg-slate-900/85 text-white hover:bg-slate-900'
-            }`}
-            onClick={() => setViewMode('replay')}
-          >
-            <StatTooltipLabel
-              label="Replay"
-              tooltip={POSSESSION_TOOLTIPS.replayView}
-              enabled={showTooltips}
-            />
-          </button>
-        </div>
-      </div>
+      <ModuleHeader
+        eyebrow="Passing & Possession"
+        title="Possession Mapping"
+        description="Map possessions, pass routes, and outcomes on the full pool for the selected match."
+        actions={
+          <>
+            <ToolbarButton variant={viewMode === 'field' ? 'primary' : 'dark'} onClick={() => setViewMode('field')}>
+              <StatTooltipLabel
+                label="Field"
+                tooltip={POSSESSION_TOOLTIPS.fieldView}
+                enabled={showTooltips}
+              />
+            </ToolbarButton>
+            <ToolbarButton variant={viewMode === 'network' ? 'primary' : 'dark'} onClick={() => setViewMode('network')}>
+              <StatTooltipLabel
+                label="Network"
+                tooltip={POSSESSION_TOOLTIPS.networkView}
+                enabled={showTooltips}
+              />
+            </ToolbarButton>
+            <ToolbarButton variant={viewMode === 'replay' ? 'primary' : 'dark'} onClick={() => setViewMode('replay')}>
+              <StatTooltipLabel
+                label="Replay"
+                tooltip={POSSESSION_TOOLTIPS.replayView}
+                enabled={showTooltips}
+              />
+            </ToolbarButton>
+          </>
+        }
+      />
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -353,124 +337,140 @@ const PossessionView = ({
       )}
 
       <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-slate-700">Possession field</h3>
-              <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:gap-3 sm:text-[11px]">
                 <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">Attacking side: top goal</span>
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">Defending side: bottom goal</span>
               </div>
             </div>
             <div className="mt-4 flex justify-center">
-              <div
-                ref={fieldRef}
-                onClick={handleFieldClick}
-                className="relative aspect-[15/25] w-full max-w-[560px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
-              >
-                <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-emerald-500/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">Attack</div>
-                <div className="absolute left-1/2 bottom-3 -translate-x-1/2 rounded-full bg-slate-900/70 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">Defend</div>
-                <div className="absolute left-0 top-1/2 h-[2px] w-full bg-white/90" />
-                <div className="absolute left-0 top-[24%] h-[2px] w-full bg-yellow-300/90" />
-                <div className="absolute left-0 top-[20%] h-[2px] w-full bg-red-400/90" />
-                <div className="absolute left-0 top-[76%] h-[2px] w-full bg-yellow-300/90" />
-                <div className="absolute left-0 top-[80%] h-[2px] w-full bg-red-400/90" />
+              {matches.length === 0 ? (
+                <div className="w-full max-w-[560px]">
+                  <ModuleEmptyState
+                    title="No matches available"
+                    description="Create a match first. Possessions are stored per match, so the field stays disabled until a match exists."
+                    actions={[
+                      {
+                        label: 'Open Matches',
+                        onClick: () => onOpenModule?.('matches')
+                      }
+                    ]}
+                  />
+                </div>
+              ) : (
+                <div
+                  ref={fieldRef}
+                  onClick={handleFieldClick}
+                  data-testid="possession-field"
+                  className="relative aspect-[15/25] w-full max-w-[520px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a] lg:max-w-[560px]"
+                >
+                  <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-emerald-500/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">Attack</div>
+                  <div className="absolute left-1/2 bottom-3 -translate-x-1/2 rounded-full bg-slate-900/70 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">Defend</div>
+                  <div className="absolute left-0 top-1/2 h-[2px] w-full bg-white/90" />
+                  <div className="absolute left-0 top-[24%] h-[2px] w-full bg-yellow-300/90" />
+                  <div className="absolute left-0 top-[20%] h-[2px] w-full bg-red-400/90" />
+                  <div className="absolute left-0 top-[76%] h-[2px] w-full bg-yellow-300/90" />
+                  <div className="absolute left-0 top-[80%] h-[2px] w-full bg-red-400/90" />
 
-                <div className="absolute left-[26.67%] top-0 h-[8%] w-[46.66%] border-2 border-red-400/90" />
-                <div className="absolute left-[26.67%] bottom-0 h-[8%] w-[46.66%] border-2 border-red-400/90" />
+                  <div className="absolute left-[26.67%] top-0 h-[8%] w-[46.66%] border-2 border-red-400/90" />
+                  <div className="absolute left-[26.67%] bottom-0 h-[8%] w-[46.66%] border-2 border-red-400/90" />
 
-                <div className="absolute left-[40%] top-0 h-[4%] w-[20%] border-2 border-white bg-white/10" />
-                <div className="absolute left-[40%] bottom-0 h-[4%] w-[20%] border-2 border-white bg-white/10" />
+                  <div className="absolute left-[40%] top-0 h-[4%] w-[20%] border-2 border-white bg-white/10" />
+                  <div className="absolute left-[40%] bottom-0 h-[4%] w-[20%] border-2 border-white bg-white/10" />
 
-                {activePasses.map((pass) => (
-                  <svg
-                    key={pass.id}
-                    className="absolute left-0 top-0 h-full w-full"
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                  >
-                    <defs>
-                      <marker
-                        id={`arrow-${pass.id}`}
-                        markerWidth="4"
-                        markerHeight="4"
-                        refX="3.5"
-                        refY="2"
-                        orient="auto"
-                      >
-                        <path d="M0,0 L4,2 L0,4 Z" fill="rgba(255,255,255,0.8)" />
-                      </marker>
-                    </defs>
-                    <line
-                      x1={pass.fromX}
-                      y1={pass.fromY}
-                      x2={pass.toX}
-                      y2={pass.toY}
-                      stroke="rgba(255,255,255,0.75)"
-                      strokeWidth="0.6"
-                      markerEnd={`url(#arrow-${pass.id})`}
+                  {activePasses.map((pass) => (
+                    <svg
+                      key={pass.id}
+                      className="absolute left-0 top-0 h-full w-full"
+                      viewBox="0 0 100 100"
+                      preserveAspectRatio="none"
+                    >
+                      <defs>
+                        <marker
+                          id={`arrow-${pass.id}`}
+                          markerWidth="4"
+                          markerHeight="4"
+                          refX="3.5"
+                          refY="2"
+                          orient="auto"
+                        >
+                          <path d="M0,0 L4,2 L0,4 Z" fill="rgba(255,255,255,0.8)" />
+                        </marker>
+                      </defs>
+                      <line
+                        x1={pass.fromX}
+                        y1={pass.fromY}
+                        x2={pass.toX}
+                        y2={pass.toY}
+                        stroke="rgba(255,255,255,0.75)"
+                        strokeWidth="0.6"
+                        markerEnd={`url(#arrow-${pass.id})`}
+                      />
+                    </svg>
+                  ))}
+
+                  {activePasses.map((pass) => (
+                    <div
+                      key={`${pass.id}-seq`}
+                      className="absolute flex h-4 w-4 items-center justify-center rounded-full bg-white/90 text-[9px] font-semibold text-slate-700"
+                      style={{
+                        left: `calc(${(pass.fromX + pass.toX) / 2}% - 8px)`,
+                        top: `calc(${(pass.fromY + pass.toY) / 2}% - 8px)`
+                      }}
+                    >
+                      {pass.sequence}
+                    </div>
+                  ))}
+
+                  {activePasses.map((pass) => (
+                    <div
+                      key={`${pass.id}-from`}
+                      className="absolute flex h-4 w-4 items-center justify-center rounded-full bg-white/80 text-[9px] font-semibold text-slate-700"
+                      style={{
+                        left: `calc(${pass.fromX}% - 8px)`,
+                        top: `calc(${pass.fromY}% - 8px)`
+                      }}
+                    >
+                      {pass.fromPlayer}
+                    </div>
+                  ))}
+
+                  {activePasses.map((pass) => (
+                    <div
+                      key={`${pass.id}-to`}
+                      className="absolute flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/80 text-[9px] font-semibold text-white"
+                      style={{
+                        left: `calc(${pass.toX}% - 8px)`,
+                        top: `calc(${pass.toY}% - 8px)`
+                      }}
+                    >
+                      {pass.toPlayer}
+                    </div>
+                  ))}
+
+                  {passDraft.fromPos && (
+                    <div
+                      className="absolute h-3 w-3 rounded-full bg-white/90"
+                      style={{
+                        left: `calc(${passDraft.fromPos.x}% - 6px)`,
+                        top: `calc(${passDraft.fromPos.y}% - 6px)`
+                      }}
                     />
-                  </svg>
-                ))}
-
-                {activePasses.map((pass) => (
-                  <div
-                    key={`${pass.id}-seq`}
-                    className="absolute flex h-4 w-4 items-center justify-center rounded-full bg-white/90 text-[9px] font-semibold text-slate-700"
-                    style={{
-                      left: `calc(${(pass.fromX + pass.toX) / 2}% - 8px)`,
-                      top: `calc(${(pass.fromY + pass.toY) / 2}% - 8px)`
-                    }}
-                  >
-                    {pass.sequence}
-                  </div>
-                ))}
-
-                {activePasses.map((pass) => (
-                  <div
-                    key={`${pass.id}-from`}
-                    className="absolute flex h-4 w-4 items-center justify-center rounded-full bg-white/80 text-[9px] font-semibold text-slate-700"
-                    style={{
-                      left: `calc(${pass.fromX}% - 8px)`,
-                      top: `calc(${pass.fromY}% - 8px)`
-                    }}
-                  >
-                    {pass.fromPlayer}
-                  </div>
-                ))}
-
-                {activePasses.map((pass) => (
-                  <div
-                    key={`${pass.id}-to`}
-                    className="absolute flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/80 text-[9px] font-semibold text-white"
-                    style={{
-                      left: `calc(${pass.toX}% - 8px)`,
-                      top: `calc(${pass.toY}% - 8px)`
-                    }}
-                  >
-                    {pass.toPlayer}
-                  </div>
-                ))}
-
-                {passDraft.fromPos && (
-                  <div
-                    className="absolute h-3 w-3 rounded-full bg-white/90"
-                    style={{
-                      left: `calc(${passDraft.fromPos.x}% - 6px)`,
-                      top: `calc(${passDraft.fromPos.y}% - 6px)`
-                    }}
-                  />
-                )}
-                {passDraft.toPos && (
-                  <div
-                    className="absolute h-3 w-3 rounded-full bg-emerald-300/90"
-                    style={{
-                      left: `calc(${passDraft.toPos.x}% - 6px)`,
-                      top: `calc(${passDraft.toPos.y}% - 6px)`
-                    }}
-                  />
-                )}
-              </div>
+                  )}
+                  {passDraft.toPos && (
+                    <div
+                      className="absolute h-3 w-3 rounded-full bg-emerald-300/90"
+                      style={{
+                        left: `calc(${passDraft.toPos.x}% - 6px)`,
+                        top: `calc(${passDraft.toPos.y}% - 6px)`
+                      }}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -493,7 +493,20 @@ const PossessionView = ({
                     ))}
                   </select>
                 </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                {matches.length === 0 && (
+                  <ModuleEmptyState
+                    compact
+                    title="Match required"
+                    description="Use the Matches module to create the game you want to map."
+                    actions={[
+                      {
+                        label: 'Open Matches',
+                        onClick: () => onOpenModule?.('matches')
+                      }
+                    ]}
+                  />
+                )}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
                   <button
                     className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
                     onClick={startPossession}
@@ -606,7 +619,27 @@ const PossessionView = ({
         <div className="rounded-2xl bg-white p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-700">Possessions</h3>
           <div className="mt-3 space-y-2 text-sm text-slate-600">
-            {matchPossessions.length === 0 && <div>No possessions yet.</div>}
+            {matchPossessions.length === 0 && (
+              <ModuleEmptyState
+                compact
+                title="No possessions yet"
+                description={
+                  currentMatchId
+                    ? 'Start the first possession for this match, then click on the field to log passes.'
+                    : 'Select a match first to begin possession tracking.'
+                }
+                actions={
+                  currentMatchId
+                    ? []
+                    : [
+                        {
+                          label: 'Open Matches',
+                          onClick: () => onOpenModule?.('matches')
+                        }
+                      ]
+                }
+              />
+            )}
             {matchPossessions.map((pos) => (
               <div
                 key={pos.id}

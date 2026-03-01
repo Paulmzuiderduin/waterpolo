@@ -27,7 +27,6 @@ const E2E_SAMPLE = {
       id: 'smoke-e1',
       match_id: 'smoke-m1',
       event_type: 'goal',
-      team_side: 'for',
       player_cap: '1',
       period: '1',
       time: '6:21',
@@ -60,6 +59,7 @@ const E2E_SAMPLE = {
 };
 
 export const notifyDataUpdated = () => {
+  if (IS_E2E_SMOKE) return;
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new Event('waterpolo-data-updated'));
 };

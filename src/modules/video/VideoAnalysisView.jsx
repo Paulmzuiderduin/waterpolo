@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, Play, Plus, Scissors, Trash2, Upload } from 'lucide-react';
+import ModuleHeader from '../../components/ModuleHeader';
+import ModuleEmptyState from '../../components/ModuleEmptyState';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
+import ToolbarButton from '../../components/ToolbarButton';
 
 const TOOL_OPTIONS = [
   { key: 'arrow', label: 'Arrow' },
@@ -954,46 +957,39 @@ const VideoAnalysisView = ({ teamId, seasonId, toast, showTooltips = true }) => 
       <div className="wp-card relative overflow-hidden rounded-3xl p-5 md:p-6">
         <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-cyan-200/40 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-20 left-24 h-44 w-44 rounded-full bg-sky-200/30 blur-3xl" />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Video Analysis</p>
-            <h2 className="mt-1 text-2xl font-semibold text-slate-900">Local Snippets & Drawings</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Optional video workflow. Clips and annotations stay local in-browser unless you export.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Space = play/pause</span>
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1">No cloud upload</span>
-              {sourceFile && (
-                <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-cyan-700">
-                  {sourceFile.name}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              className="hidden"
-              onChange={handleVideoChange}
-            />
-            <button
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
-              onClick={openVideoPicker}
-            >
-              <Upload size={14} />
-              {sourceFile ? 'Change video' : 'Select video'}
-            </button>
-            <button
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={exportProjectJson}
-              disabled={snippets.length === 0}
-            >
-              <Download size={14} />
-              Export JSON
-            </button>
+        <div className="relative">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={handleVideoChange}
+          />
+          <ModuleHeader
+            eyebrow="Video Analysis"
+            title="Local Snippets & Drawings"
+            description="Optional video workflow. Clips and annotations stay local in-browser unless you export."
+            actions={
+              <>
+                <ToolbarButton onClick={openVideoPicker}>
+                  <Upload size={14} />
+                  {sourceFile ? 'Change video' : 'Select video'}
+                </ToolbarButton>
+                <ToolbarButton onClick={exportProjectJson} disabled={snippets.length === 0}>
+                  <Download size={14} />
+                  Export JSON
+                </ToolbarButton>
+              </>
+            }
+          />
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1">Space = play/pause</span>
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1">No cloud upload</span>
+            {sourceFile && (
+              <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-cyan-700">
+                {sourceFile.name}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -1003,7 +999,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast, showTooltips = true }) => 
       )}
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="wp-card rounded-3xl p-4 xl:col-start-2 xl:row-start-1">
+        <section className="order-2 wp-card rounded-3xl p-4 xl:order-none xl:col-start-2 xl:row-start-1">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-slate-700">
               <StatTooltipLabel
@@ -1024,11 +1020,23 @@ const VideoAnalysisView = ({ teamId, seasonId, toast, showTooltips = true }) => 
               Unselect
             </button>
           </div>
-          <div className="mt-3 max-h-[690px] space-y-2 overflow-y-auto pr-1">
+          <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto pr-1 sm:max-h-[520px] xl:max-h-[690px]">
             {snippets.length === 0 && (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-6 text-center text-sm text-slate-500">
-                Add your first snippet from the video panel.
-              </div>
+              <ModuleEmptyState
+                compact
+                title="No snippets yet"
+                description="Mark an in-point and out-point, then create the first snippet from the video panel."
+                actions={
+                  sourceFile
+                    ? []
+                    : [
+                        {
+                          label: 'Select video',
+                          onClick: openVideoPicker
+                        }
+                      ]
+                }
+              />
             )}
             {snippets.map((snippet) => {
               const selected = snippet.id === selectedSnippetId;
@@ -1105,12 +1113,19 @@ const VideoAnalysisView = ({ teamId, seasonId, toast, showTooltips = true }) => 
           </div>
         </section>
 
-        <section className="space-y-4 xl:col-start-1 xl:row-start-1 xl:row-span-2">
+        <section className="order-1 space-y-4 xl:order-none xl:col-start-1 xl:row-start-1 xl:row-span-2">
           <div className="wp-card rounded-3xl p-4">
             {!videoUrl ? (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-20 text-center text-sm text-slate-500">
-                Select a local video to start analysis.
-              </div>
+              <ModuleEmptyState
+                title="No source video selected"
+                description="Choose a local MP4 or video file to start clipping, drawing, and exporting snippets."
+                actions={[
+                  {
+                    label: 'Select video',
+                    onClick: openVideoPicker
+                  }
+                ]}
+              />
             ) : (
               <>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -1135,7 +1150,7 @@ const VideoAnalysisView = ({ teamId, seasonId, toast, showTooltips = true }) => 
                 >
                   <video
                     ref={videoRef}
-                    className="h-auto max-h-[560px] w-full object-contain"
+                    className="h-auto max-h-[380px] w-full object-contain sm:max-h-[460px] xl:max-h-[560px]"
                     controls={!drawMode}
                     src={videoUrl}
                   />

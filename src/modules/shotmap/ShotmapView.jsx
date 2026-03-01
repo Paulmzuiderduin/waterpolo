@@ -3,7 +3,10 @@ import { Download } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { detectZone, penaltyPosition } from '../../utils/field';
 import { formatShotTime, normalizeTime, splitTimeParts, timeToSeconds } from '../../utils/time';
+import ModuleEmptyState from '../../components/ModuleEmptyState';
+import ModuleHeader from '../../components/ModuleHeader';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
+import ToolbarButton from '../../components/ToolbarButton';
 
 const SHOTMAP_TOOLTIPS = {
   matchMode: 'Track and edit shots for one selected match.',
@@ -29,7 +32,8 @@ const ShotmapView = ({
   attackTypes,
   zones,
   resultColors,
-  showTooltips = true
+  showTooltips = true,
+  onOpenModule
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -369,27 +373,22 @@ const ShotmapView = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-cyan-700">Water Polo Shotmap</p>
-          <h2 className="text-2xl font-semibold">Shot Tracking & Recording</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-            onClick={downloadPNG}
-          >
-            <Download size={16} />
-            Download PNG
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold"
-            onClick={exportCSV}
-          >
-            Export CSV
-          </button>
-        </div>
-      </div>
+      <ModuleHeader
+        eyebrow="Water Polo Shotmap"
+        title="Shot Tracking & Recording"
+        description="Track match shots on the field or review the selected season scope with filters."
+        actions={
+          <>
+            <ToolbarButton variant="primary" onClick={downloadPNG}>
+              <Download size={16} />
+              Download PNG
+            </ToolbarButton>
+            <ToolbarButton onClick={exportCSV}>
+              Export CSV
+            </ToolbarButton>
+          </>
+        }
+      />
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -401,10 +400,9 @@ const ShotmapView = ({
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex items-center gap-3">
-              <button
-                className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                  seasonMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-900 text-white'
-                }`}
+              <ToolbarButton
+                variant={!seasonMode ? 'primary' : 'secondary'}
+                className={!seasonMode ? '' : 'text-slate-600'}
                 onClick={() => setSeasonMode(false)}
               >
                 <StatTooltipLabel
@@ -412,11 +410,10 @@ const ShotmapView = ({
                   tooltip={SHOTMAP_TOOLTIPS.matchMode}
                   enabled={showTooltips}
                 />
-              </button>
-              <button
-                className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                  seasonMode ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
+              </ToolbarButton>
+              <ToolbarButton
+                variant={seasonMode ? 'primary' : 'secondary'}
+                className={seasonMode ? '' : 'text-slate-600'}
                 onClick={() => setSeasonMode(true)}
               >
                 <StatTooltipLabel
@@ -424,21 +421,30 @@ const ShotmapView = ({
                   tooltip={SHOTMAP_TOOLTIPS.seasonMode}
                   enabled={showTooltips}
                 />
-              </button>
+              </ToolbarButton>
             </div>
             {matches.length === 0 && (
               <div className="text-xs font-semibold text-slate-500">
-                Create matches in the `Matches` tab first.
+                Create matches in the Matches tab first.
               </div>
             )}
           </div>
-
           {!seasonMode && (
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-700">Match selection</h3>
               {matches.length === 0 && (
-                <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                  No matches available. Create a match in the `Matches` tab.
+                <div className="mt-3">
+                  <ModuleEmptyState
+                    compact
+                    title="No matches available"
+                    description="Create a match first, then return here to track shots on the field."
+                    actions={[
+                      {
+                        label: 'Open Matches',
+                        onClick: () => onOpenModule?.('matches')
+                      }
+                    ]}
+                  />
                 </div>
               )}
               <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -624,6 +630,7 @@ const ShotmapView = ({
             <div className="mt-4 flex justify-center">
               <div
                 ref={fieldRef}
+                data-testid="shotmap-field"
                 className="relative h-[600px] w-full max-w-[720px] cursor-crosshair overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
                 onClick={handleFieldClick}
               >
@@ -697,6 +704,7 @@ const ShotmapView = ({
                 <div>
                   <label className="text-xs font-semibold text-slate-500">Player</label>
                   <select
+                    aria-label="Shot player"
                     className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
                     value={pendingShot.playerCap}
                     onChange={(event) =>
@@ -721,6 +729,7 @@ const ShotmapView = ({
                       />
                     </div>
                     <select
+                      aria-label="Shot result"
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
                       value={pendingShot.result}
                       onChange={(event) =>
@@ -741,6 +750,7 @@ const ShotmapView = ({
                       />
                     </div>
                     <select
+                      aria-label="Shot attack"
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
                       value={pendingShot.attackType}
                       onChange={(event) =>
@@ -766,6 +776,7 @@ const ShotmapView = ({
                       />
                     </div>
                     <select
+                      aria-label="Shot period"
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
                       value={pendingShot.period}
                       onChange={(event) =>
@@ -790,6 +801,7 @@ const ShotmapView = ({
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <div className="flex items-center gap-2">
                         <input
+                          aria-label="Shot minutes"
                           type="number"
                           min="0"
                           max="7"
@@ -808,6 +820,7 @@ const ShotmapView = ({
                       </div>
                       <div className="flex items-center gap-2">
                         <input
+                          aria-label="Shot seconds"
                           type="number"
                           min="0"
                           max="59"
@@ -857,7 +870,27 @@ const ShotmapView = ({
                 </div>
               </div>
             ) : (
-              <div className="mt-3 text-sm text-slate-500">Click on the field to add a shot.</div>
+              <div className="mt-3">
+                <ModuleEmptyState
+                  compact
+                  title="No shot draft yet"
+                  description={
+                    currentMatch
+                      ? 'Click on the field to add a shot, or use + Penalty for a penalty attempt.'
+                      : 'Select a match first to start tracking shots.'
+                  }
+                  actions={
+                    currentMatch
+                      ? []
+                      : [
+                          {
+                            label: 'Open Matches',
+                            onClick: () => onOpenModule?.('matches')
+                          }
+                        ]
+                  }
+                />
+              </div>
             )}
           </div>
 
@@ -893,7 +926,31 @@ const ShotmapView = ({
             </h3>
             <div className="mt-3 max-h-[280px] space-y-2 overflow-y-auto text-sm">
               {displayShots.length === 0 && (
-                <div className="text-slate-500">No shots recorded.</div>
+                <ModuleEmptyState
+                  compact
+                  title="No shots recorded"
+                  description={
+                    seasonMode
+                      ? 'Adjust the filters or log shots in Shotmap to populate this list.'
+                      : 'Log the first shot for the selected match to start building the list.'
+                  }
+                  actions={[
+                    {
+                      label: seasonMode ? 'Clear filters' : 'Open Matches',
+                      onClick: seasonMode
+                        ? () =>
+                            setFilters({
+                              players: [],
+                              results: [],
+                              periods: [],
+                              attackTypes: [],
+                              matches: []
+                            })
+                        : () => onOpenModule?.('matches'),
+                      variant: seasonMode ? 'secondary' : undefined
+                    }
+                  ]}
+                />
               )}
               {displayShots.map((shot) => (
                 <div

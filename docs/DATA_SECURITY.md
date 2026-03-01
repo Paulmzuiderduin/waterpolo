@@ -12,12 +12,13 @@ Current state is **reasonable for an MVP** but **not yet robust for disaster rec
 Strong points:
 - Supabase Auth (magic link) is used.
 - Row Level Security (RLS) is enabled for core tables and scoped by `auth.uid() = user_id`.
+- Player photos now use private storage paths plus signed URLs in app code, rather than public URLs.
 - Client secrets are not hardcoded in source; env vars and GitHub Secrets are used.
 
 Main gaps:
-- No documented/automated backup and restore process.
-- Public player photo URLs (privacy exposure risk if links are shared).
-- Schema/data constraints are mostly app-side; DB-level validation is limited.
+- No automated backup and restore process.
+- Private photo storage now depends on bucket privacy and storage policies being applied correctly in Supabase.
+- DB validation is improved for several core fields, but not yet exhaustive across all tables and workflows.
 
 ## 2) What data is collected
 
@@ -32,14 +33,13 @@ From app code and schema.
 ### Domain data
 - `seasons`: season name.
 - `teams`: team name, linked season.
-- `roster`: name, cap number, birthday, height, weight, dominant hand, notes, `photo_url`.
+- `roster`: name, cap number, birthday, height, weight, dominant hand, notes, `photo_path`, temporary signed photo URL in app memory.
 - `matches`: match name, opponent name, date.
 - `shots`: x/y, zone, result, player cap, attack type, period, time.
 - `scoring_events`: event type, team side, player cap, period, time.
 - `possessions`: outcome + links.
 - `passes`: from/to player caps, coordinates, sequence.
 - `feature_requests`: signed-in user email, subject, message, current app tab, optional season/team context, status.
-- `site_visit_totals`: aggregate page-view total per site key, without user profile fields.
 
 ### Browser local storage
 - UI preferences and module visibility per user.
@@ -48,7 +48,8 @@ From app code and schema.
 
 ### Files
 - Player photos uploaded to Supabase Storage bucket `player-photos`.
-- App stores/uses public photo URL in `roster.photo_url`.
+- App stores the storage path in `roster.photo_path`.
+- App resolves temporary signed URLs at runtime for roster/report-card display.
 - Optional scoring-assist video file selected by the user is handled locally in-browser (object URL) and is not uploaded to Supabase.
 - Video Analysis source files, snippet exports, and burned-annotation exports are handled locally on the device (download/File Picker) and are not uploaded to Supabase.
 - Video Analysis annotations/snippet metadata can be stored in browser local storage for the selected season/team and exported as local JSON by the user.
@@ -70,17 +71,21 @@ Waterpolo schema defined in: `/Users/paul/Documents/New project/supabase/schema.
 - RLS is enabled on all main tables.
 - Policies are user-owned (`auth.uid() = user_id`) for `for all`.
 - Waterpolo also stores in-app feature requests in Postgres, scoped to the signed-in user through the same RLS ownership model.
-- Waterpolo also stores an aggregate page-view counter in Postgres. It contains only site key, total count, and timestamp.
+- Core tables now also enforce DB-level checks for key enum-like values and coordinate/time ranges.
 
 Field Hockey:
 - Uses Supabase tables in app code (`seasons`, `teams`, `players`, `matches`, `events`).
 - In this workspace, a versioned SQL schema file was not found in the `fieldhockey` repo.
 
 ### Supabase Storage
-Used in: `/Users/paul/Documents/New project/src/App.jsx` (photo upload).
+Used in:
+- `/Users/paul/Documents/New project/src/modules/roster/RosterView.jsx`
+- `/Users/paul/Documents/New project/src/modules/players/PlayersView.jsx`
+- `/Users/paul/Documents/New project/src/lib/waterpolo/photos.js`
 
 - Photos are uploaded under path structure: `userId/teamId/playerId.ext`.
-- Public URL is generated and saved to DB.
+- Bucket should be private.
+- Storage path is saved to DB and temporary signed URLs are created in the client for display/export.
 
 ### GitHub Actions / deployment
 - Build uses repository secrets for Supabase URL and anon key.
@@ -96,22 +101,22 @@ Used in: `/Users/paul/Documents/New project/src/App.jsx` (photo upload).
 ## 5) Risks and recommendations
 
 ## High priority
-- **No backup/restore runbook**:
-  - If data is deleted/corrupted, recovery path is unclear.
-  - Action: define backup schedule, restore test cadence, and owner.
+- **Free backup strategy needs operational discipline**:
+  - A free-only backup/recovery runbook now exists, but it depends on regular manual execution.
+  - Action: follow `/Users/paul/Documents/New project/docs/BACKUP_AND_RECOVERY_FREE.md` consistently and record when backups are taken.
 
 - **Field Hockey schema is not version-controlled in repo**:
   - Harder to audit, review, and rebuild after incident.
   - Action: add `supabase/schema.sql` (or migrations) to `fieldhockey`.
 
-- **Public player images**:
-  - `photo_url` points to public bucket URLs.
-  - Action: move to private bucket + signed URLs if privacy requirement is strict.
+- **Private photo storage must stay enforced in Supabase**:
+  - The app now expects `player-photos` to be private with authenticated storage policies.
+  - Action: keep bucket privacy and storage policies aligned with the path pattern `userId/teamId/playerId.ext`.
 
 ## Medium priority
-- **DB constraints are light**:
-  - Example: limited checks on enum-like fields and time formats.
-  - Action: add `CHECK` constraints for event/result types and time patterns.
+- **DB constraints are still partial**:
+  - Key event/result/time fields now have `CHECK` constraints, but coverage is not yet exhaustive for every column and relationship.
+  - Action: continue extending DB-level validation where free-text or range-limited values still exist.
 
 - **No explicit security monitoring/audit process**:
   - Action: enable audit/review cadence for auth events and failed requests.
@@ -121,7 +126,7 @@ Used in: `/Users/paul/Documents/New project/src/App.jsx` (photo upload).
 Immediate steps:
 1. Stop writes (temporarily disable app usage / maintenance banner).
 2. Confirm blast radius (which tables affected, time window).
-3. Restore from Supabase backup/PITR if available.
+3. Restore from the latest available SQL dump.
 4. Validate restored data integrity (row counts by table, spot checks).
 5. Re-open app and communicate incident.
 
@@ -129,13 +134,16 @@ If no usable backup exists:
 - Recovery is partial only (manual recreation from any exported CSV/PDF/PNG and user memory).
 - Expect permanent data loss.
 
-## 7) Required backup strategy (to implement)
+## 7) Required backup strategy
+
+Free-only runbook:
+- `/Users/paul/Documents/New project/docs/BACKUP_AND_RECOVERY_FREE.md`
 
 Minimum recommended:
-- Daily automated DB backup (or Supabase PITR on paid plan).
-- Weekly restore drill to non-production project.
-- Keep at least 30 days retention.
-- Store backup run logs and restore test results.
+- Weekly manual DB backup using `pg_dump`.
+- Fresh DB backup before schema changes or major refactors.
+- Local backup folder for original player photos.
+- Periodic restore verification using the checklist in the runbook.
 
 Suggested checks after restore:
 - Row counts per table.

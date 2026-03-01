@@ -3,7 +3,11 @@ import { Download } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { distanceMeters } from '../../utils/field';
 import { computeAge, timeToSeconds } from '../../utils/time';
+import ModuleHeader from '../../components/ModuleHeader';
+import ModuleEmptyState from '../../components/ModuleEmptyState';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
+import ToolbarButton from '../../components/ToolbarButton';
+import { withSignedRosterPhotos } from '../../lib/waterpolo/photos';
 
 const pct = (value, total) => (total ? ((value / total) * 100).toFixed(1) : '0.0');
 
@@ -30,7 +34,8 @@ const PlayersView = ({
   onSelectSeason,
   onSelectTeam,
   loadData,
-  showTooltips = true
+  showTooltips = true,
+  onOpenModule
 }) => {
   const [data, setData] = useState({ roster: [], matches: [] });
   const [scoringEvents, setScoringEvents] = useState([]);
@@ -53,8 +58,9 @@ const PlayersView = ({
           .from('scoring_events')
           .select('*')
           .eq('team_id', teamId);
+        const rosterWithPhotos = await withSignedRosterPhotos(payload.roster);
         if (!active) return;
-        const mappedRoster = payload.roster.map((player) => ({
+        const mappedRoster = rosterWithPhotos.map((player) => ({
           id: player.id,
           name: player.name,
           capNumber: player.cap_number,
@@ -63,7 +69,8 @@ const PlayersView = ({
           weightKg: player.weight_kg,
           dominantHand: player.dominant_hand,
           notes: player.notes,
-          photoUrl: player.photo_url
+          photoUrl: player.photo_url,
+          photoPath: player.photo_path || ''
         }));
         setData({ roster: mappedRoster, matches: payload.matches });
         if (!scoringError) {
@@ -394,22 +401,17 @@ const PlayersView = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-cyan-700">Players</p>
-          <h2 className="text-2xl font-semibold">Player Report Card</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-            onClick={exportPDF}
-            disabled={!selectedPlayer}
-          >
+      <ModuleHeader
+        eyebrow="Players"
+        title="Player Report Card"
+        description="Compare player output across selected matches using shotmap or scoring data."
+        actions={
+          <ToolbarButton variant="primary" onClick={exportPDF} disabled={!selectedPlayer}>
             <Download size={16} />
             Export PDF
-          </button>
-        </div>
-      </div>
+          </ToolbarButton>
+        }
+      />
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -474,7 +476,17 @@ const PlayersView = ({
               <div className="text-xs font-semibold text-slate-500">Matches</div>
               <div className="flex flex-wrap gap-2">
                 {matches.length === 0 && (
-                  <span className="text-xs text-slate-500">No matches yet.</span>
+                  <ModuleEmptyState
+                    compact
+                    title="No matches yet"
+                    description="Create matches first so the report card can be filtered by real games."
+                    actions={[
+                      {
+                        label: 'Open Matches',
+                        onClick: () => onOpenModule?.('matches')
+                      }
+                    ]}
+                  />
                 )}
                 {matches.map((match) => {
                   const selected = selectedMatches.includes(match.info.id);
@@ -797,7 +809,24 @@ const PlayersView = ({
                 )}
               </div>
             ) : (
-              <div className="text-sm text-slate-500">No player selected.</div>
+              <ModuleEmptyState
+                title={data.roster.length ? 'No player selected' : 'No roster yet'}
+                description={
+                  data.roster.length
+                    ? 'Choose a player from the roster to open a report card.'
+                    : 'Add players in the Roster module before using report cards.'
+                }
+                actions={
+                  data.roster.length
+                    ? []
+                    : [
+                        {
+                          label: 'Open Roster',
+                          onClick: () => onOpenModule?.('roster')
+                        }
+                      ]
+                }
+              />
             )}
           </div>
         </div>

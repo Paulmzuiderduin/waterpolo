@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import ModuleHeader from '../../components/ModuleHeader';
+import ModuleEmptyState from '../../components/ModuleEmptyState';
 import { formatShotTime, normalizeTime, splitTimeParts, timeToSeconds } from '../../utils/time';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
+import ToolbarButton from '../../components/ToolbarButton';
 
 const SCORING_EVENTS = [
   { key: 'goal', label: 'Goal', player: true, color: 'bg-emerald-600' },
@@ -34,7 +37,8 @@ const ScoringView = ({
   onDataUpdated,
   periods,
   periodOrder,
-  showTooltips = true
+  showTooltips = true,
+  onOpenModule
 }) => {
   const [roster, setRoster] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -80,7 +84,6 @@ const ScoringView = ({
             id: evt.id,
             matchId: evt.match_id,
             type: evt.event_type,
-            teamSide: evt.team_side,
             playerCap: evt.player_cap || '',
             period: evt.period,
             time: evt.time,
@@ -313,7 +316,6 @@ const ScoringView = ({
       team_id: teamId,
       match_id: currentMatch.id,
       event_type: eventType,
-      team_side: 'for',
       player_cap: requiresPlayer ? form.playerCap : null,
       period: form.period,
       time: normalizeTime(form.time)
@@ -347,7 +349,6 @@ const ScoringView = ({
       id: data.id,
       matchId: data.match_id,
       type: data.event_type,
-      teamSide: data.team_side || 'for',
       playerCap: data.player_cap || '',
       period: data.period,
       time: data.time,
@@ -398,35 +399,30 @@ const ScoringView = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-cyan-700">Scoring & Stats</p>
-          <h2 className="text-2xl font-semibold">Match Events</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            ref={videoInputRef}
-            type="file"
-            accept="video/*"
-            className="hidden"
-            onChange={handleVideoFileChange}
-          />
-          <button
-            className="rounded-full border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
-            onClick={openVideoPicker}
-          >
-            {videoUrl ? 'Change video' : 'Select video (optional)'}
-          </button>
-          {videoUrl && (
-            <button
-              className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600"
-              onClick={clearVideo}
-            >
-              Remove video
-            </button>
-          )}
-        </div>
-      </div>
+      <ModuleHeader
+        eyebrow="Scoring & Stats"
+        title="Match Events"
+        description="Record live match events for the selected team with an optional local video reference."
+        actions={
+          <>
+            <input
+              ref={videoInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={handleVideoFileChange}
+            />
+            <ToolbarButton variant="primary" className="text-xs" onClick={openVideoPicker}>
+              {videoUrl ? 'Change video' : 'Select video (optional)'}
+            </ToolbarButton>
+            {videoUrl && (
+              <ToolbarButton className="text-xs text-slate-600" onClick={clearVideo}>
+                Remove video
+              </ToolbarButton>
+            )}
+          </>
+        }
+      />
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -434,13 +430,14 @@ const ScoringView = ({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.95fr]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.45fr_0.95fr]">
         <div className="space-y-4">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div className="min-w-[260px] flex-1">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="min-w-0 flex-1">
                 <label className="text-xs font-semibold text-slate-500">Selected match</label>
                 <select
+                  aria-label="Scoring selected match"
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   value={currentMatchId}
                   onChange={(event) => setCurrentMatchId(event.target.value)}
@@ -454,23 +451,34 @@ const ScoringView = ({
                   ))}
                 </select>
               </div>
-              <button
-                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
+              <ToolbarButton
+                className="px-3 py-1 text-xs text-slate-600"
                 onClick={undoLastEvent}
                 disabled={!currentMatchId}
               >
                 Undo last
-              </button>
+              </ToolbarButton>
             </div>
             {matches.length === 0 && (
-              <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                No matches found. Create one in the `Matches` tab.
+              <div className="mt-3">
+                <ModuleEmptyState
+                  compact
+                  title="No matches found"
+                  description="Create a match first. Scoring is tied to one selected match."
+                  actions={[
+                    {
+                      label: 'Open Matches',
+                      onClick: () => onOpenModule?.('matches')
+                    }
+                  ]}
+                />
               </div>
             )}
             <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[180px_1fr]">
               <div>
                 <label className="text-xs font-semibold text-slate-500">Period</label>
                 <select
+                  aria-label="Scoring period"
                   className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   value={form.period}
                   onChange={(event) => setForm((prev) => ({ ...prev, period: event.target.value }))}
@@ -484,31 +492,31 @@ const ScoringView = ({
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-500">Time</label>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
+                <div className="mt-2 grid gap-3 sm:grid-cols-[auto_auto_auto_1fr] sm:items-center">
                   <div className="flex items-center gap-2">
                     <div className="flex flex-col gap-1">
                       <button
-                        className="h-9 w-9 rounded-lg border border-slate-200 bg-slate-50 text-base font-bold text-slate-700"
+                        className="h-8 w-8 rounded-lg border border-slate-200 bg-slate-50 text-base font-bold text-slate-700 sm:h-9 sm:w-9"
                         onClick={() => adjustMinutes(1)}
                       >
                         ▲
                       </button>
                       <button
-                        className="h-9 w-9 rounded-lg border border-slate-200 bg-slate-50 text-base font-bold text-slate-700"
+                        className="h-8 w-8 rounded-lg border border-slate-200 bg-slate-50 text-base font-bold text-slate-700 sm:h-9 sm:w-9"
                         onClick={() => adjustMinutes(-1)}
                       >
                         ▼
                       </button>
                     </div>
-                    <div className="w-16 rounded-lg border border-slate-200 bg-white py-2 text-center text-lg font-semibold">
+                    <div className="w-14 rounded-lg border border-slate-200 bg-white py-2 text-center text-base font-semibold sm:w-16 sm:text-lg">
                       {String(splitTimeParts(form.time).minutes).padStart(2, '0')}
                     </div>
                   </div>
-                  <span className="text-sm font-semibold text-slate-500">:</span>
+                  <span className="hidden text-sm font-semibold text-slate-500 sm:block">:</span>
                   <div className="flex items-center gap-2">
                     <div className="flex flex-col gap-1">
                       <button
-                        className="h-9 w-9 rounded-lg border border-slate-200 bg-slate-50 text-base font-bold text-slate-700"
+                        className="h-8 w-8 rounded-lg border border-slate-200 bg-slate-50 text-base font-bold text-slate-700 sm:h-9 sm:w-9"
                         onPointerDown={(event) => startSecondsHold(1, event)}
                         onPointerUp={clearSecondsHold}
                         onPointerLeave={clearSecondsHold}
@@ -523,7 +531,7 @@ const ScoringView = ({
                         ▲
                       </button>
                       <button
-                        className="h-9 w-9 rounded-lg border border-slate-200 bg-slate-50 text-base font-bold text-slate-700"
+                        className="h-8 w-8 rounded-lg border border-slate-200 bg-slate-50 text-base font-bold text-slate-700 sm:h-9 sm:w-9"
                         onPointerDown={(event) => startSecondsHold(-1, event)}
                         onPointerUp={clearSecondsHold}
                         onPointerLeave={clearSecondsHold}
@@ -538,19 +546,19 @@ const ScoringView = ({
                         ▼
                       </button>
                     </div>
-                    <div className="w-16 rounded-lg border border-slate-200 bg-white py-2 text-center text-lg font-semibold">
+                    <div className="w-14 rounded-lg border border-slate-200 bg-white py-2 text-center text-base font-semibold sm:w-16 sm:text-lg">
                       {String(splitTimeParts(form.time).seconds).padStart(2, '0')}
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1">
+                  <div className="grid grid-cols-2 gap-1 sm:flex sm:flex-col">
                     <button
-                      className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700"
+                      className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 sm:h-9"
                       onClick={() => adjustSeconds(10)}
                     >
                       +10s
                     </button>
                     <button
-                      className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700"
+                      className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 sm:h-9"
                       onClick={() => adjustSeconds(-10)}
                     >
                       -10s
@@ -574,9 +582,9 @@ const ScoringView = ({
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div>
                 <h3 className="text-sm font-semibold text-slate-700">Player</h3>
-                <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-4">
+                <div className="mt-2 grid grid-cols-5 gap-2 sm:grid-cols-6 lg:grid-cols-4">
                   <button
-                    className={`rounded-xl border px-3 py-2 text-sm font-semibold ${
+                    className={`rounded-xl border px-2 py-2 text-sm font-semibold ${
                       form.playerCap === '' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-slate-50 text-slate-700'
                     }`}
                     onClick={() => setForm((prev) => ({ ...prev, playerCap: '' }))}
@@ -586,7 +594,7 @@ const ScoringView = ({
                   {roster.map((player) => (
                     <button
                       key={player.id}
-                      className={`rounded-xl border px-3 py-2 text-sm font-semibold ${
+                      className={`rounded-xl border px-2 py-2 text-sm font-semibold ${
                         form.playerCap === player.capNumber
                           ? 'border-slate-900 bg-slate-900 text-white'
                           : 'border-slate-200 bg-slate-50 text-slate-700'
@@ -604,7 +612,7 @@ const ScoringView = ({
                   {SCORING_EVENTS.map((evt) => (
                     <button
                       key={evt.key}
-                      className={`rounded-xl px-3 py-2 text-sm font-semibold text-white ${evt.color}`}
+                      className={`rounded-xl px-3 py-2 text-xs font-semibold text-white sm:text-sm ${evt.color}`}
                       onClick={() => saveEvent(evt.key)}
                     >
                       + {evt.label}
@@ -655,7 +663,27 @@ const ScoringView = ({
                 videoUrl ? 'max-h-[300px]' : 'max-h-[420px]'
               }`}
             >
-              {matchEventsSorted.length === 0 && <div>No events logged yet.</div>}
+              {matchEventsSorted.length === 0 && (
+                <ModuleEmptyState
+                  compact
+                  title="No events logged yet"
+                  description={
+                    currentMatchId
+                      ? 'Choose a player and an action to record the first event for this match.'
+                      : 'Select a match first before logging events.'
+                  }
+                  actions={
+                    currentMatchId
+                      ? []
+                      : [
+                          {
+                            label: 'Open Matches',
+                            onClick: () => onOpenModule?.('matches')
+                          }
+                        ]
+                  }
+                />
+              )}
               {matchEventsSorted.map((evt) => {
                 const matchData = matches.find((match) => match.id === evt.matchId);
                 const matchName = matchData?.name || 'Match';

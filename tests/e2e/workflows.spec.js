@@ -122,14 +122,14 @@ test('workflow: scoring can add and delete an event', async ({ page }) => {
   await page.getByRole('button', { name: '#5' }).click();
   await page.getByLabel('Scoring period').selectOption('2');
   await page.getByRole('button', { name: '5:00' }).click();
-  await page.getByRole('button', { name: '+ Penalty' }).click();
+  await page.getByRole('button', { name: '+ Penalty foul' }).click();
 
-  const eventRow = page.locator('div.rounded-lg').filter({ hasText: 'Penalty · #5' }).first();
+  const eventRow = page.locator('div.rounded-lg').filter({ hasText: 'Penalty foul · #5' }).first();
   await expect(eventRow).toContainText('P2 · 5:00');
 
   await eventRow.getByRole('button', { name: 'Delete' }).click();
   await page.getByRole('button', { name: 'Confirm' }).click();
-  await expect(page.locator('div').filter({ hasText: 'Penalty · #5' })).toHaveCount(0);
+  await expect(page.locator('div').filter({ hasText: 'Penalty foul · #5' })).toHaveCount(0);
 });
 
 test('workflow: possession can create a pass and close possession', async ({ page }) => {
@@ -165,6 +165,8 @@ test('workflow: possession can create a pass and close possession', async ({ pag
   });
 
   await openWorkspace(page);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('checkbox', { name: /show advanced analysis/i }).check();
   await page.getByRole('button', { name: 'Possession', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Possession Mapping' })).toBeVisible();
 

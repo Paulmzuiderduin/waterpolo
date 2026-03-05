@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import { normalizeScoringEventType } from './scoring';
 
 const IS_E2E_SMOKE = import.meta.env.VITE_E2E_SMOKE === '1';
 const E2E_DATE = '2026-01-20';
@@ -26,7 +27,7 @@ const E2E_SAMPLE = {
     {
       id: 'smoke-e1',
       match_id: 'smoke-m1',
-      event_type: 'goal',
+      event_type: 'shot_goal',
       player_cap: '1',
       period: '1',
       time: '6:21',
@@ -260,13 +261,14 @@ export const loadTeamMatchesOverview = async (teamId) => {
   (eventRes.data || []).forEach((evt) => {
     const item = byMatch.get(evt.match_id);
     if (!item) return;
+    const type = normalizeScoringEventType(evt.event_type);
     item.events += 1;
-    if (evt.event_type === 'goal') item.goals += 1;
-    if (evt.event_type === 'exclusion') item.exclusions += 1;
-    if (evt.event_type === 'foul') item.fouls += 1;
-    if (evt.event_type === 'penalty') item.penalties += 1;
-    if (evt.event_type === 'turnover_won') item.turnoversWon += 1;
-    if (evt.event_type === 'turnover_lost') item.turnoversLost += 1;
+    if (type === 'shot_goal') item.goals += 1;
+    if (type === 'exclusion_foul') item.exclusions += 1;
+    if (type === 'ordinary_foul') item.fouls += 1;
+    if (type === 'penalty_foul') item.penalties += 1;
+    if (type === 'turnover_won') item.turnoversWon += 1;
+    if (type === 'turnover_lost') item.turnoversLost += 1;
   });
 
   (possessionRes.data || []).forEach((possession) => {

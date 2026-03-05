@@ -52,8 +52,11 @@ const SidebarNav = ({
         </button>
       </div>
     </div>
-    <nav className="flex flex-col gap-1.5">
-      {navItems.map((item) => (
+    {(() => {
+      const primaryItems = navItems.filter((item) => !item.advanced);
+      const advancedItems = navItems.filter((item) => item.advanced);
+
+      const renderButton = (item) => (
         <button
           key={item.key}
           className={`flex items-center rounded-xl py-2.5 text-left text-sm font-semibold transition-colors ${
@@ -65,8 +68,24 @@ const SidebarNav = ({
           <span className="shrink-0">{item.icon}</span>
           {!isCollapsed && item.label}
         </button>
-      ))}
-    </nav>
+      );
+
+      return (
+        <nav className="flex flex-col gap-1.5">
+          {primaryItems.map(renderButton)}
+          {advancedItems.length > 0 && (
+            <>
+              {!isCollapsed && (
+                <div className="px-4 pt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Advanced Analysis
+                </div>
+              )}
+              <div className="flex flex-col gap-1.5">{advancedItems.map(renderButton)}</div>
+            </>
+          )}
+        </nav>
+      );
+    })()}
     <div className="mt-4 space-y-2 pb-1">
       <button
         className={`w-full rounded-xl border border-slate-200 py-2 text-sm font-semibold ${

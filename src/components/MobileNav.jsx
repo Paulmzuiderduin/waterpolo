@@ -9,7 +9,9 @@ const MobileNav = ({
   onSelectTab,
   onToggleMobileMenu,
   onCloseMobileMenu,
-  onOpenPrivacy
+  onOpenPrivacy,
+  onRequestFeature,
+  onOpenAnalyticsPreferences
 }) => (
   <>
     <div className="wp-surface wp-border fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t p-2 lg:hidden">
@@ -63,6 +65,18 @@ const MobileNav = ({
               onClick={onOpenPrivacy}
             >
               Privacy
+            </button>
+            <button
+              className="flex items-center gap-2 rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white"
+              onClick={onRequestFeature}
+            >
+              Request feature
+            </button>
+            <button
+              className="flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700"
+              onClick={onOpenAnalyticsPreferences}
+            >
+              Analytics prefs
             </button>
           </div>
         </div>

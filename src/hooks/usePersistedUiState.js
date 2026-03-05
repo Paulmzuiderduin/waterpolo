@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 const DEFAULT_PREFERENCES = {
   rememberLastTab: true,
   showHubTips: true,
-  showStatTooltips: true
+  showStatTooltips: true,
+  showAdvancedModules: false
 };
 
 export const usePersistedUiState = ({ sessionUser, moduleConfig, seasons, loadingSeasons }) => {
@@ -110,8 +111,12 @@ export const usePersistedUiState = ({ sessionUser, moduleConfig, seasons, loadin
   );
 
   const navItems = useMemo(
-    () => moduleConfig.filter((item) => item.alwaysVisible || moduleVisibility[item.key] !== false),
-    [moduleConfig, moduleVisibility]
+    () =>
+      moduleConfig.filter((item) => {
+        if (item.advanced && !preferences.showAdvancedModules) return false;
+        return item.alwaysVisible || moduleVisibility[item.key] !== false;
+      }),
+    [moduleConfig, moduleVisibility, preferences.showAdvancedModules]
   );
 
   useEffect(() => {

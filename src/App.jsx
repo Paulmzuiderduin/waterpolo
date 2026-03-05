@@ -7,6 +7,7 @@ import {
   HelpCircle,
   Home,
   ClipboardList,
+  TableProperties,
   Share2,
   CalendarDays,
   Settings2
@@ -31,6 +32,7 @@ import SettingsView from './modules/settings/SettingsView';
 import PrivacyView from './modules/privacy/PrivacyView';
 import HubView from './modules/hub/HubView';
 import VideoAnalysisView from './modules/video/VideoAnalysisView';
+import StatSheetView from './modules/statsheet/StatSheetView';
 import { useAuthSession } from './hooks/useAuthSession';
 import { useFeatureRequestDialog } from './hooks/useFeatureRequestDialog';
 import { usePersistedUiState } from './hooks/usePersistedUiState';
@@ -92,11 +94,12 @@ const App = () => {
       { key: 'matches', label: 'Matches', icon: <CalendarDays size={16} /> },
       { key: 'shotmap', label: 'Shotmap', icon: <Share2 size={16} /> },
       { key: 'analytics', label: 'Analytics', icon: <BarChart2 size={16} /> },
-      { key: 'video', label: 'Video', icon: <Clapperboard size={16} /> },
       { key: 'scoring', label: 'Scoring', icon: <ClipboardList size={16} /> },
-      { key: 'possession', label: 'Possession', icon: <Share2 size={16} /> },
+      { key: 'statsheet', label: 'Stat Sheet', icon: <TableProperties size={16} /> },
       { key: 'players', label: 'Players', icon: <IdCard size={16} /> },
       { key: 'roster', label: 'Roster', icon: <Users size={16} /> },
+      { key: 'video', label: 'Video', icon: <Clapperboard size={16} />, advanced: true },
+      { key: 'possession', label: 'Possession', icon: <Share2 size={16} />, advanced: true },
       { key: 'help', label: 'Help', icon: <HelpCircle size={16} />, alwaysVisible: true },
       { key: 'settings', label: 'Settings', icon: <Settings2 size={16} />, alwaysVisible: true }
     ],
@@ -111,11 +114,12 @@ const App = () => {
       analytics: 'Review shot heatmaps, conversion patterns, and distance-based trends.',
       video: 'Work with local video snippets and drawings without uploading the source video.',
       scoring: 'Track match events for your team with a fast, live-friendly workflow.',
+      statsheet: 'Review match and season stat tables derived from scoring events.',
       possession: 'Map possessions and pass sequences on the full-pool field view.',
       players: 'Review report cards and compare players across the selected data scope.',
       roster: 'Manage the shared team roster used across all waterpolo modules.',
       help: 'Getting started, legends, and common workflow questions.',
-      settings: 'Adjust visible modules and workspace preferences.'
+      settings: 'Adjust visible modules, advanced analysis access, and workspace preferences.'
     }),
     []
   );
@@ -489,6 +493,14 @@ const App = () => {
             onOpenModule={setActiveTab}
           />
         )}
+        {activeTab === 'statsheet' && (
+          <StatSheetView
+            teamId={selectedTeamId}
+            loadData={loadTeamScoring}
+            onOpenModule={setActiveTab}
+            toast={toast}
+          />
+        )}
         {activeTab === 'players' && (
           <PlayersView
             seasonId={selectedSeasonId}
@@ -579,6 +591,14 @@ const App = () => {
         onOpenPrivacy={() => {
           setActiveTab('privacy');
           setMobileMenuOpen(false);
+        }}
+        onRequestFeature={() => {
+          setMobileMenuOpen(false);
+          openFeatureRequestDialog();
+        }}
+        onOpenAnalyticsPreferences={() => {
+          setMobileMenuOpen(false);
+          openAnalyticsPreferences();
         }}
       />
       {renderUtilityDock()}

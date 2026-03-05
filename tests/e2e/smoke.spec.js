@@ -16,6 +16,13 @@ test('smoke: modules open from sidebar', async ({ page }) => {
   await page.getByRole('button', { name: 'Scoring', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Match Events' })).toBeVisible();
 
+  await page.getByRole('button', { name: 'Stat Sheet', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Match & Season Stat Sheet' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const advancedToggle = page.getByRole('checkbox', { name: /show advanced analysis/i });
+  await advancedToggle.check();
+
   await page.getByRole('button', { name: 'Possession', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Possession Mapping' })).toBeVisible();
 
@@ -41,6 +48,11 @@ test('smoke: settings toggle hides and restores module', async ({ page }) => {
 
   await shotmapToggle.check();
   await expect(page.locator('aside button', { hasText: 'Shotmap' })).toHaveCount(1);
+
+  const advancedToggle = page.getByRole('checkbox', { name: /show advanced analysis/i });
+  await expect(page.locator('aside button', { hasText: 'Possession' })).toHaveCount(0);
+  await advancedToggle.check();
+  await expect(page.locator('aside button', { hasText: 'Possession' })).toHaveCount(1);
 });
 
 test('smoke: app dialogs open for rename and delete', async ({ page }) => {

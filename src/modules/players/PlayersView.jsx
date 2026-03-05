@@ -8,6 +8,7 @@ import ModuleEmptyState from '../../components/ModuleEmptyState';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
 import ToolbarButton from '../../components/ToolbarButton';
 import { withSignedRosterPhotos } from '../../lib/waterpolo/photos';
+import { normalizeScoringEventType } from '../../lib/waterpolo/scoring';
 
 const pct = (value, total) => (total ? ((value / total) * 100).toFixed(1) : '0.0');
 
@@ -18,12 +19,12 @@ const sortByPeriodAndTimeDesc = (a, b) => {
 };
 
 const PLAYER_TOOLTIPS = {
-  shotsPerMatch: 'Average shot attempts per selected match.',
+  shotsPerMatch: 'Average scoring actions or shot attempts per selected match, depending on the selected source.',
   onTargetPct: 'Goals + saves divided by total shots.',
   conversionOnTarget: 'Goals divided by on-target shots.',
   turnoverNet: 'Turnovers won minus turnovers lost.',
-  disciplineLoad: 'Exclusions + fouls + penalties.',
-  scoringImpact: 'Goals as percentage of total logged events.'
+  disciplineLoad: 'Personal fouls, ordinary fouls, misconducts, and violent actions combined.',
+  scoringImpact: 'Shot goals as percentage of total logged scoring actions.'
 };
 
 const PlayersView = ({
@@ -78,7 +79,7 @@ const PlayersView = ({
             (scoringData || []).map((evt) => ({
               id: evt.id,
               matchId: evt.match_id,
-              type: evt.event_type,
+              type: normalizeScoringEventType(evt.event_type),
               playerCap: evt.player_cap || '',
               period: evt.period,
               time: evt.time,
@@ -275,33 +276,45 @@ const PlayersView = ({
     playerEvents.forEach((evt) => {
       periodBreakdown[evt.period] = periodBreakdown[evt.period] || {
         total: 0,
-        goals: 0,
-        exclusions: 0,
-        fouls: 0
+        shotGoals: 0,
+        personalFouls: 0,
+        ordinaryFouls: 0
       };
       periodBreakdown[evt.period].total += 1;
-      if (evt.type === 'goal') periodBreakdown[evt.period].goals += 1;
-      if (evt.type === 'exclusion') periodBreakdown[evt.period].exclusions += 1;
-      if (evt.type === 'foul') periodBreakdown[evt.period].fouls += 1;
+      if (evt.type === 'shot_goal') periodBreakdown[evt.period].shotGoals += 1;
+      if (evt.type === 'exclusion_foul' || evt.type === 'penalty_foul') periodBreakdown[evt.period].personalFouls += 1;
+      if (evt.type === 'ordinary_foul') periodBreakdown[evt.period].ordinaryFouls += 1;
     });
-    const goals = countBy('goal');
+    const goals = countBy('shot_goal');
+    const shotSaved = countBy('shot_saved');
+    const shotMissed = countBy('shot_missed');
+    const shots = goals + shotSaved + shotMissed;
     const turnoversWon = countBy('turnover_won');
     const turnoversLost = countBy('turnover_lost');
-    const exclusions = countBy('exclusion');
-    const fouls = countBy('foul');
-    const penalties = countBy('penalty');
+    const exclusionFouls = countBy('exclusion_foul');
+    const penaltyFouls = countBy('penalty_foul');
+    const personalFouls = exclusionFouls + penaltyFouls;
+    const ordinaryFouls = countBy('ordinary_foul');
+    const misconducts = countBy('misconduct');
+    const violentActions = countBy('violent_action');
     const periodRows = Object.entries(periodBreakdown)
       .map(([period, values]) => ({ period, ...values }))
       .sort((a, b) => Number(a.period) - Number(b.period));
     return {
       goals,
-      exclusions,
-      fouls,
+      shotSaved,
+      shotMissed,
+      shots,
+      exclusionFouls,
+      penaltyFouls,
+      personalFouls,
+      ordinaryFouls,
+      misconducts,
+      violentActions,
       turnoversWon,
       turnoversLost,
-      penalties,
       turnoverNet: turnoversWon - turnoversLost,
-      disciplineLoad: exclusions + fouls + penalties,
+      disciplineLoad: personalFouls + ordinaryFouls + misconducts + violentActions,
       total: playerEvents.length,
       scoringImpactPct: pct(goals, playerEvents.length),
       periodRows,
@@ -678,7 +691,7 @@ const PlayersView = ({
                         <div className="text-lg font-semibold">{selectedStats.total}</div>
                       </div>
                       <div className="rounded-xl border border-slate-100 p-3">
-                        <div className="text-xs text-slate-500">Goals</div>
+                        <div className="text-xs text-slate-500">Shot goals</div>
                         <div className="text-lg font-semibold">{selectedStats.goals}</div>
                       </div>
                       <div className="rounded-xl border border-slate-100 p-3">
@@ -696,12 +709,12 @@ const PlayersView = ({
                         <div className="text-lg font-semibold">{selectedEventsPerMatch}</div>
                       </div>
                       <div className="rounded-xl border border-slate-100 p-3">
-                        <div className="text-xs text-slate-500">Exclusions</div>
-                        <div className="text-lg font-semibold">{selectedStats.exclusions}</div>
+                        <div className="text-xs text-slate-500">Shots</div>
+                        <div className="text-lg font-semibold">{selectedStats.shots}</div>
                       </div>
                       <div className="rounded-xl border border-slate-100 p-3">
-                        <div className="text-xs text-slate-500">Fouls</div>
-                        <div className="text-lg font-semibold">{selectedStats.fouls}</div>
+                        <div className="text-xs text-slate-500">Personal fouls</div>
+                        <div className="text-lg font-semibold">{selectedStats.personalFouls}</div>
                       </div>
                       <div className="rounded-xl border border-slate-100 p-3">
                         <div className="text-xs text-slate-500">
@@ -734,9 +747,9 @@ const PlayersView = ({
                           <div key={row.period} className="grid grid-cols-5 gap-2 text-xs">
                             <span className="font-semibold text-slate-700">P{row.period}</span>
                             <span className="text-slate-600">{row.total} events</span>
-                            <span className="text-slate-600">{row.goals} goals</span>
-                            <span className="text-slate-600">{row.exclusions} excl.</span>
-                            <span className="text-slate-600">{row.fouls} fouls</span>
+                            <span className="text-slate-600">{row.shotGoals} goals</span>
+                            <span className="text-slate-600">{row.personalFouls} p.f.</span>
+                            <span className="text-slate-600">{row.ordinaryFouls} ord.</span>
                           </div>
                         ))}
                       </div>

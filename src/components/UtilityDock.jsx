@@ -2,7 +2,7 @@ import React from 'react';
 import { Plus, SlidersHorizontal } from 'lucide-react';
 
 const UtilityDock = ({ onRequestFeature, onAnalyticsPreferences }) => (
-  <div className="fixed bottom-24 right-4 z-[115] flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-xl shadow-slate-900/10 backdrop-blur lg:bottom-6">
+  <div className="fixed bottom-24 right-4 z-[115] hidden flex-col gap-2 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-xl shadow-slate-900/10 backdrop-blur lg:bottom-6 lg:flex">
     <button
       className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-cyan-500"
       onClick={onRequestFeature}

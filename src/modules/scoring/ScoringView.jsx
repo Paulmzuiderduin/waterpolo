@@ -5,26 +5,27 @@ import ModuleEmptyState from '../../components/ModuleEmptyState';
 import { formatShotTime, normalizeTime, splitTimeParts, timeToSeconds } from '../../utils/time';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
 import ToolbarButton from '../../components/ToolbarButton';
-
-const SCORING_EVENTS = [
-  { key: 'goal', label: 'Goal', player: true, color: 'bg-emerald-600' },
-  { key: 'exclusion', label: 'Exclusion', player: true, color: 'bg-amber-500' },
-  { key: 'foul', label: 'Foul', player: true, color: 'bg-orange-500' },
-  { key: 'turnover_won', label: 'Turnover won', player: true, color: 'bg-sky-600' },
-  { key: 'turnover_lost', label: 'Turnover lost', player: true, color: 'bg-rose-500' },
-  { key: 'penalty', label: 'Penalty', player: true, color: 'bg-indigo-600' },
-  { key: 'timeout', label: 'Timeout', player: false, color: 'bg-slate-700' }
-];
+import {
+  createEmptyPlayerScoringStats,
+  createEmptyScoringTotals,
+  getScoringEventMeta,
+  normalizeScoringEventType,
+  SCORING_EVENTS
+} from '../../lib/waterpolo/scoring';
 
 const SCORING_TOOLTIPS = {
-  goals: 'Goal events logged for the selected stats scope.',
-  exclusions: 'Exclusion events drawn by your team.',
-  fouls: 'Ordinary/personal fouls attributed to your team.',
+  shotGoals: 'Goals recorded as shot outcomes in the scoring workflow.',
+  shots: 'Shot goal + shot saved + shot missed events.',
+  personalFouls: 'Personal fouls from exclusion fouls and penalty fouls.',
+  exclusions: 'Exclusion fouls committed by your team.',
+  penaltyFouls: 'Penalty fouls committed by your team.',
+  ordinaryFouls: 'Ordinary fouls recorded for your team.',
+  misconducts: 'Misconduct exclusions from the remainder of the game.',
+  violentActions: 'Violent action exclusions with substitution only after four minutes.',
   turnoversWon: 'Possessions regained by your team.',
   turnoversLost: 'Possessions lost by your team.',
-  penalties: 'Penalty events recorded for your team.',
   timeouts: 'Timeout events logged.',
-  manUp: 'Approximation: goals divided by exclusions, expressed as %.'
+  shotConversion: 'Shot goals divided by total recorded shots.'
 };
 
 const ScoringView = ({
@@ -83,7 +84,7 @@ const ScoringView = ({
           (payload.events || []).map((evt) => ({
             id: evt.id,
             matchId: evt.match_id,
-            type: evt.event_type,
+            type: normalizeScoringEventType(evt.event_type),
             playerCap: evt.player_cap || '',
             period: evt.period,
             time: evt.time,
@@ -149,39 +150,36 @@ const ScoringView = ({
   }, [events, currentMatchId]);
 
   const stats = useMemo(() => {
-    const totals = {
-      goal: 0,
-      exclusion: 0,
-      foul: 0,
-      turnover_won: 0,
-      turnover_lost: 0,
-      penalty: 0,
-      timeout: 0
-    };
+    const totals = createEmptyScoringTotals();
     const playerStats = {};
     filteredEvents.forEach((evt) => {
-      if (evt.type in totals) totals[evt.type] += 1;
+      const normalizedType = normalizeScoringEventType(evt.type);
+      if (normalizedType in totals) totals[normalizedType] += 1;
       if (evt.playerCap) {
         if (!playerStats[evt.playerCap]) {
-          playerStats[evt.playerCap] = {
-            goals: 0,
-            exclusions: 0,
-            fouls: 0,
-            turnoversWon: 0,
-            turnoversLost: 0,
-            penalties: 0
-          };
+          playerStats[evt.playerCap] = createEmptyPlayerScoringStats();
         }
-        if (evt.type === 'goal') playerStats[evt.playerCap].goals += 1;
-        if (evt.type === 'exclusion') playerStats[evt.playerCap].exclusions += 1;
-        if (evt.type === 'foul') playerStats[evt.playerCap].fouls += 1;
-        if (evt.type === 'turnover_won') playerStats[evt.playerCap].turnoversWon += 1;
-        if (evt.type === 'turnover_lost') playerStats[evt.playerCap].turnoversLost += 1;
-        if (evt.type === 'penalty') playerStats[evt.playerCap].penalties += 1;
+        const playerItem = playerStats[evt.playerCap];
+        if (normalizedType === 'shot_goal') playerItem.shotGoals += 1;
+        if (normalizedType === 'shot_saved') playerItem.shotSaved += 1;
+        if (normalizedType === 'shot_missed') playerItem.shotMissed += 1;
+        if (normalizedType === 'shot_goal' || normalizedType === 'shot_saved' || normalizedType === 'shot_missed') {
+          playerItem.shots += 1;
+        }
+        if (normalizedType === 'exclusion_foul') playerItem.exclusionFouls += 1;
+        if (normalizedType === 'penalty_foul') playerItem.penaltyFouls += 1;
+        if (normalizedType === 'ordinary_foul') playerItem.ordinaryFouls += 1;
+        if (normalizedType === 'misconduct') playerItem.misconducts += 1;
+        if (normalizedType === 'violent_action') playerItem.violentActions += 1;
+        if (normalizedType === 'turnover_won') playerItem.turnoversWon += 1;
+        if (normalizedType === 'turnover_lost') playerItem.turnoversLost += 1;
+        playerItem.personalFouls = playerItem.exclusionFouls + playerItem.penaltyFouls;
       }
     });
-    const manUp = totals.exclusion ? ((totals.goal / totals.exclusion) * 100).toFixed(1) : '—';
-    return { totals, playerStats, manUp };
+    const shots = totals.shot_goal + totals.shot_saved + totals.shot_missed;
+    const shotConversion = shots ? ((totals.shot_goal / shots) * 100).toFixed(1) : '—';
+    const personalFouls = totals.exclusion_foul + totals.penalty_foul;
+    return { totals, playerStats, shotConversion, personalFouls, shots };
   }, [filteredEvents]);
 
   const resetForm = (keepTime = true) => {
@@ -315,7 +313,7 @@ const ScoringView = ({
       season_id: seasonId,
       team_id: teamId,
       match_id: currentMatch.id,
-      event_type: eventType,
+      event_type: normalizeScoringEventType(eventType),
       player_cap: requiresPlayer ? form.playerCap : null,
       period: form.period,
       time: normalizeTime(form.time)
@@ -348,7 +346,7 @@ const ScoringView = ({
     const nextEvent = {
       id: data.id,
       matchId: data.match_id,
-      type: data.event_type,
+      type: normalizeScoringEventType(data.event_type),
       playerCap: data.player_cap || '',
       period: data.period,
       time: data.time,
@@ -609,15 +607,28 @@ const ScoringView = ({
               <div>
                 <h3 className="text-sm font-semibold text-slate-700">Action</h3>
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  {SCORING_EVENTS.map((evt) => (
-                    <button
-                      key={evt.key}
-                      className={`rounded-xl px-3 py-2 text-xs font-semibold text-white sm:text-sm ${evt.color}`}
-                      onClick={() => saveEvent(evt.key)}
-                    >
-                      + {evt.label}
-                    </button>
-                  ))}
+                  {['shots', 'discipline', 'possession', 'team'].map((group) => {
+                    const groupItems = SCORING_EVENTS.filter((evt) => evt.group === group);
+                    if (groupItems.length === 0) return null;
+                    return (
+                      <div key={group} className="space-y-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                          {group}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {groupItems.map((evt) => (
+                            <button
+                              key={evt.key}
+                              className={`rounded-xl px-3 py-2 text-xs font-semibold text-white sm:text-sm ${evt.color}`}
+                              onClick={() => saveEvent(evt.key)}
+                            >
+                              + {evt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -689,7 +700,7 @@ const ScoringView = ({
                 const matchName = matchData?.name || 'Match';
                 const matchOpponent = matchData?.opponent_name ? ` vs ${matchData.opponent_name}` : '';
                 const playerLabel = evt.playerCap ? `#${evt.playerCap}` : 'Team';
-                const typeLabel = SCORING_EVENTS.find((item) => item.key === evt.type)?.label || evt.type;
+                const typeLabel = getScoringEventMeta(evt.type).label;
                 return (
                   <div key={evt.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 px-3 py-2">
                     <div>
@@ -748,20 +759,60 @@ const ScoringView = ({
             <h3 className="text-sm font-semibold text-slate-700">Team stats</h3>
             <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-600">
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel label="Goals" tooltip={SCORING_TOOLTIPS.goals} enabled={showTooltips} />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.goal}</span>
+                <StatTooltipLabel label="Shot goals" tooltip={SCORING_TOOLTIPS.shotGoals} enabled={showTooltips} />{' '}
+                <span className="font-semibold text-slate-900">{stats.totals.shot_goal}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                <StatTooltipLabel label="Shots" tooltip={SCORING_TOOLTIPS.shots} enabled={showTooltips} />{' '}
+                <span className="font-semibold text-slate-900">{stats.shots}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
                 <StatTooltipLabel
-                  label="Exclusions"
+                  label="Exclusion fouls"
                   tooltip={SCORING_TOOLTIPS.exclusions}
                   enabled={showTooltips}
                 />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.exclusion}</span>
+                <span className="font-semibold text-slate-900">{stats.totals.exclusion_foul}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel label="Fouls" tooltip={SCORING_TOOLTIPS.fouls} enabled={showTooltips} />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.foul}</span>
+                <StatTooltipLabel
+                  label="Personal fouls"
+                  tooltip={SCORING_TOOLTIPS.personalFouls}
+                  enabled={showTooltips}
+                />{' '}
+                <span className="font-semibold text-slate-900">{stats.personalFouls}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                <StatTooltipLabel
+                  label="Penalty fouls"
+                  tooltip={SCORING_TOOLTIPS.penaltyFouls}
+                  enabled={showTooltips}
+                />{' '}
+                <span className="font-semibold text-slate-900">{stats.totals.penalty_foul}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                <StatTooltipLabel
+                  label="Ordinary fouls"
+                  tooltip={SCORING_TOOLTIPS.ordinaryFouls}
+                  enabled={showTooltips}
+                />{' '}
+                <span className="font-semibold text-slate-900">{stats.totals.ordinary_foul}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                <StatTooltipLabel
+                  label="Misconduct"
+                  tooltip={SCORING_TOOLTIPS.misconducts}
+                  enabled={showTooltips}
+                />{' '}
+                <span className="font-semibold text-slate-900">{stats.totals.misconduct}</span>
+              </div>
+              <div className="rounded-lg border border-slate-100 px-3 py-2">
+                <StatTooltipLabel
+                  label="Violent action"
+                  tooltip={SCORING_TOOLTIPS.violentActions}
+                  enabled={showTooltips}
+                />{' '}
+                <span className="font-semibold text-slate-900">{stats.totals.violent_action}</span>
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
                 <StatTooltipLabel
@@ -781,14 +832,6 @@ const ScoringView = ({
               </div>
               <div className="rounded-lg border border-slate-100 px-3 py-2">
                 <StatTooltipLabel
-                  label="Penalties"
-                  tooltip={SCORING_TOOLTIPS.penalties}
-                  enabled={showTooltips}
-                />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.penalty}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel
                   label="Timeouts"
                   tooltip={SCORING_TOOLTIPS.timeouts}
                   enabled={showTooltips}
@@ -796,13 +839,15 @@ const ScoringView = ({
                 <span className="font-semibold text-slate-900">{stats.totals.timeout}</span>
               </div>
             </div>
-            <div className="mt-3 text-xs text-slate-500">
-              Man-up conversion ≈ goals / exclusions.
-            </div>
+            <div className="mt-3 text-xs text-slate-500">Scoring now treats shots and fouls as separate live stats inputs.</div>
             <div className="mt-2 grid grid-cols-2 gap-3 text-sm text-slate-600">
               <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel label="Man-up %" tooltip={SCORING_TOOLTIPS.manUp} enabled={showTooltips} />{' '}
-                <span className="font-semibold text-emerald-700">{stats.manUp}%</span>
+                <StatTooltipLabel
+                  label="Shot conversion"
+                  tooltip={SCORING_TOOLTIPS.shotConversion}
+                  enabled={showTooltips}
+                />{' '}
+                <span className="font-semibold text-emerald-700">{stats.shotConversion}%</span>
               </div>
             </div>
           </div>
@@ -815,12 +860,14 @@ const ScoringView = ({
                 <div key={cap} className="rounded-lg border border-slate-100 px-3 py-2">
                   <div className="font-semibold text-slate-700">#{cap}</div>
                   <div className="mt-1 grid grid-cols-2 gap-2 text-xs text-slate-500">
-                    <span>Goals: {data.goals}</span>
-                    <span>Exclusions: {data.exclusions}</span>
-                    <span>Fouls: {data.fouls}</span>
+                    <span>Shots: {data.shots}</span>
+                    <span>Shot goals: {data.shotGoals}</span>
+                    <span>Personal fouls: {data.personalFouls}</span>
+                    <span>Ordinary fouls: {data.ordinaryFouls}</span>
                     <span>Won: {data.turnoversWon}</span>
                     <span>Lost: {data.turnoversLost}</span>
-                    <span>Penalties: {data.penalties}</span>
+                    <span>Misconduct: {data.misconducts}</span>
+                    <span>Violent action: {data.violentActions}</span>
                   </div>
                 </div>
               ))}

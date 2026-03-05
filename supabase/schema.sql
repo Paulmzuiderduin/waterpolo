@@ -131,9 +131,33 @@ create table if not exists scoring_events (
 alter table scoring_events drop constraint if exists scoring_events_team_side_check;
 alter table scoring_events drop column if exists team_side;
 
+update scoring_events
+set event_type = case event_type
+  when 'goal' then 'shot_goal'
+  when 'exclusion' then 'exclusion_foul'
+  when 'foul' then 'ordinary_foul'
+  when 'penalty' then 'penalty_foul'
+  else event_type
+end
+where event_type in ('goal', 'exclusion', 'foul', 'penalty');
+
 alter table scoring_events drop constraint if exists scoring_events_event_type_check;
 alter table scoring_events add constraint scoring_events_event_type_check
-  check (event_type in ('goal', 'exclusion', 'foul', 'turnover_won', 'turnover_lost', 'penalty', 'timeout'));
+  check (
+    event_type in (
+      'shot_goal',
+      'shot_saved',
+      'shot_missed',
+      'exclusion_foul',
+      'penalty_foul',
+      'ordinary_foul',
+      'misconduct',
+      'violent_action',
+      'turnover_won',
+      'turnover_lost',
+      'timeout'
+    )
+  );
 
 alter table scoring_events drop constraint if exists scoring_events_period_check;
 alter table scoring_events add constraint scoring_events_period_check

@@ -3,12 +3,13 @@ const SITE_URL = 'https://waterpolo.paulzuiderduin.com';
 const DEFAULT_IMAGE = `${SITE_URL}/favicon.svg`;
 
 const DEFAULT_DESCRIPTION =
-  'Waterpolo Hub helps coaches and players track shotmaps, scoring events, possessions, and video snippets in one platform.';
+  'Waterpolo Hub helps coaches and players track shotmaps, scoring events, stat sheets, and advanced analysis in one platform.';
 
 const DEFAULT_KEYWORDS = [
   'water polo analytics',
   'waterpolo shotmap',
   'water polo stats app',
+  'water polo stat sheet',
   'water polo scoring',
   'water polo video analysis',
   'waterpolo coaching tools'
@@ -37,7 +38,11 @@ const TAB_META = {
   },
   scoring: {
     title: 'Waterpolo Scoring Events',
-    description: 'Log goals, exclusions, fouls, turnovers, and penalties with per-player event summaries.'
+    description: 'Log live shot outcomes, fouls, turnovers, and team events with per-player summaries.'
+  },
+  statsheet: {
+    title: 'Waterpolo Stat Sheet',
+    description: 'Review match and season stat tables derived from scoring events and export CSV summaries.'
   },
   possession: {
     title: 'Waterpolo Possession Mapping',
@@ -132,4 +137,3 @@ export const getSeoMetadata = ({
     jsonLd
   };
 };
-

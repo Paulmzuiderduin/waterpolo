@@ -71,20 +71,26 @@ export const usePersistedUiState = ({ sessionUser, moduleConfig, seasons, loadin
     }
     if (loadingSeasons || didApplyWorkspaceSelection.current) return;
 
+    const getFallbackSeason = () => {
+      if (!seasons.length) return null;
+      return seasons.find((season) => (season.teams || []).length > 0) || seasons[0];
+    };
+
     try {
       const raw = localStorage.getItem(`waterpolo_workspace_${sessionUser.id}`);
       const parsed = raw ? JSON.parse(raw) : null;
       const storedSeasonId = parsed?.seasonId || '';
       const storedTeamId = parsed?.teamId || '';
-      const matchedSeason = seasons.find((season) => season.id === storedSeasonId) || seasons[0];
+      const matchedSeason = seasons.find((season) => season.id === storedSeasonId) || getFallbackSeason();
       const matchedTeam =
         matchedSeason?.teams?.find((team) => team.id === storedTeamId) || matchedSeason?.teams?.[0];
 
       setSelectedSeasonId(matchedSeason?.id || '');
       setSelectedTeamId(matchedTeam?.id || '');
     } catch {
-      setSelectedSeasonId(seasons[0]?.id || '');
-      setSelectedTeamId(seasons[0]?.teams?.[0]?.id || '');
+      const fallbackSeason = getFallbackSeason();
+      setSelectedSeasonId(fallbackSeason?.id || '');
+      setSelectedTeamId(fallbackSeason?.teams?.[0]?.id || '');
     }
 
     didApplyWorkspaceSelection.current = true;
@@ -145,7 +151,7 @@ export const usePersistedUiState = ({ sessionUser, moduleConfig, seasons, loadin
       setSelectedTeamId('');
       return;
     }
-    if (selectedSeason && !selectedTeam && selectedTeamId) {
+    if (selectedSeason && !selectedTeam) {
       setSelectedTeamId(selectedSeason.teams?.[0]?.id || '');
     }
   }, [selectedSeason, selectedSeasonId, selectedTeam, selectedTeamId]);

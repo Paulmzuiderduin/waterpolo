@@ -619,10 +619,19 @@ const ScoringView = ({
                           {groupItems.map((evt) => (
                             <button
                               key={evt.key}
-                              className={`rounded-xl px-3 py-2 text-xs font-semibold text-white sm:text-sm ${evt.color}`}
-                              onClick={() => saveEvent(evt.key)}
+                              className={`rounded-xl px-3 py-2 text-xs font-semibold text-white sm:text-sm ${evt.color} ${
+                                form.type === evt.key ? 'ring-2 ring-slate-900/40 ring-offset-1' : ''
+                              }`}
+                              onClick={() => {
+                                if (editingEventId) {
+                                  setForm((prev) => ({ ...prev, type: evt.key }));
+                                } else {
+                                  setForm((prev) => ({ ...prev, type: evt.key }));
+                                  saveEvent(evt.key);
+                                }
+                              }}
                             >
-                              + {evt.label}
+                              {editingEventId ? evt.label : `+ ${evt.label}`}
                             </button>
                           ))}
                         </div>
@@ -635,6 +644,9 @@ const ScoringView = ({
             {editingEventId && (
               <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
                 Editing event ·
+                <button className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white" onClick={() => saveEvent(form.type)}>
+                  Save changes
+                </button>
                 <button className="font-semibold text-slate-700" onClick={resetForm}>
                   Cancel edit
                 </button>

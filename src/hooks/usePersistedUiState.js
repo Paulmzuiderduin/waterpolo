@@ -98,6 +98,7 @@ export const usePersistedUiState = ({ sessionUser, moduleConfig, seasons, loadin
 
   useEffect(() => {
     if (!sessionUser || !didApplyWorkspaceSelection.current) return;
+    if (!selectedSeasonId || !selectedTeamId) return;
     localStorage.setItem(
       `waterpolo_workspace_${sessionUser.id}`,
       JSON.stringify({
@@ -151,7 +152,7 @@ export const usePersistedUiState = ({ sessionUser, moduleConfig, seasons, loadin
       setSelectedTeamId('');
       return;
     }
-    if (selectedSeason && !selectedTeam) {
+    if (selectedSeason && !selectedTeam && selectedTeamId) {
       setSelectedTeamId(selectedSeason.teams?.[0]?.id || '');
     }
   }, [selectedSeason, selectedSeasonId, selectedTeam, selectedTeamId]);

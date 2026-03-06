@@ -150,10 +150,6 @@ export const usePersistedUiState = ({ sessionUser, moduleConfig, seasons, loadin
     if (!selectedSeason && selectedSeasonId) {
       setSelectedSeasonId('');
       setSelectedTeamId('');
-      return;
-    }
-    if (selectedSeason && !selectedTeam && selectedTeamId) {
-      setSelectedTeamId(selectedSeason.teams?.[0]?.id || '');
     }
   }, [selectedSeason, selectedSeasonId, selectedTeam, selectedTeamId]);
 

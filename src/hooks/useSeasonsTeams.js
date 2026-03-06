@@ -29,6 +29,7 @@ export const useSeasonsTeams = (userId) => {
     }
 
     let active = true;
+    setLoadingSeasons(true);
     const load = async () => {
       try {
         const [seasonsRes, teamsRes] = await Promise.all([

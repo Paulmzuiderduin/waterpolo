@@ -33,8 +33,27 @@ const PublicSeoContent = () => (
         </p>
       </article>
     </div>
+    <div className="mt-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+      <a
+        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-cyan-700"
+        href="/water-polo-scoring-app.html"
+      >
+        Water polo scoring app
+      </a>
+      <a
+        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-cyan-700"
+        href="/water-polo-statistics-app.html"
+      >
+        Water polo statistics app
+      </a>
+      <a
+        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-cyan-700"
+        href="/water-polo-shotmap-app.html"
+      >
+        Water polo shotmap app
+      </a>
+    </div>
   </section>
 );
 
 export default PublicSeoContent;
-

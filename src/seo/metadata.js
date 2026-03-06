@@ -3,14 +3,15 @@ const SITE_URL = 'https://waterpolo.paulzuiderduin.com';
 const DEFAULT_IMAGE = `${SITE_URL}/favicon.svg`;
 
 const DEFAULT_DESCRIPTION =
-  'Waterpolo Hub helps coaches and players track shotmaps, scoring events, stat sheets, and advanced analysis in one platform.';
+  'Waterpolo Hub helps coaches and players track shotmaps, scoring events, and stat sheets in one practical water polo statistics and scoring app.';
 
 const DEFAULT_KEYWORDS = [
   'water polo analytics',
+  'water polo statistics',
+  'water polo statistics app',
+  'water polo scoring app',
   'waterpolo shotmap',
-  'water polo stats app',
   'water polo stat sheet',
-  'water polo scoring',
   'water polo video analysis',
   'waterpolo coaching tools'
 ].join(', ');

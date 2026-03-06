@@ -396,31 +396,296 @@ const ScoringView = ({
   }
 
   return (
-    <div className="space-y-6">
-      <ModuleHeader
-        eyebrow="Scoring & Stats"
-        title="Match Events"
-        description="Record live match events for the selected team with an optional local video reference."
-        actions={
-          <>
-            <input
-              ref={videoInputRef}
-              type="file"
-              accept="video/*"
-              className="hidden"
-              onChange={handleVideoFileChange}
-            />
-            <ToolbarButton variant="primary" className="text-xs" onClick={openVideoPicker}>
-              {videoUrl ? 'Change video' : 'Select video (optional)'}
-            </ToolbarButton>
-            {videoUrl && (
-              <ToolbarButton className="text-xs text-slate-600" onClick={clearVideo}>
-                Remove video
-              </ToolbarButton>
-            )}
-          </>
-        }
+    <div className="space-y-4 md:space-y-6">
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={handleVideoFileChange}
       />
+
+      <div className="hidden md:block">
+        <ModuleHeader
+          eyebrow="Scoring & Stats"
+          title="Match Events"
+          description="Record live match events for the selected team with an optional local video reference."
+          actions={
+            <>
+              <ToolbarButton variant="primary" className="text-xs" onClick={openVideoPicker}>
+                {videoUrl ? 'Change video' : 'Select video (optional)'}
+              </ToolbarButton>
+              {videoUrl && (
+                <ToolbarButton className="text-xs text-slate-600" onClick={clearVideo}>
+                  Remove video
+                </ToolbarButton>
+              )}
+            </>
+          }
+        />
+      </div>
+
+      <div className="rounded-2xl bg-white p-3 shadow-sm md:hidden">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Live scoring</div>
+            <div className="text-sm font-semibold text-slate-900">Match events</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
+              onClick={openVideoPicker}
+            >
+              {videoUrl ? 'Video' : 'Select video'}
+            </button>
+            {videoUrl && (
+              <button
+                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600"
+                onClick={clearVideo}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+          <select
+            aria-label="Live selected match"
+            className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+            value={currentMatchId}
+            onChange={(event) => setCurrentMatchId(event.target.value)}
+          >
+            {matches.length === 0 && <option value="">No matches</option>}
+            {sortedMatches.map((match) => (
+              <option key={match.id} value={match.id}>
+                {match.name}
+                {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
+              </option>
+            ))}
+          </select>
+          <button
+            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
+            onClick={undoLastEvent}
+            disabled={!currentMatchId}
+          >
+            Undo
+          </button>
+        </div>
+
+        {matches.length === 0 && (
+          <div className="mt-3">
+            <ModuleEmptyState
+              compact
+              title="No matches found"
+              description="Create a match first. Scoring is tied to one selected match."
+              actions={[
+                {
+                  label: 'Open Matches',
+                  onClick: () => onOpenModule?.('matches')
+                }
+              ]}
+            />
+          </div>
+        )}
+
+        <div className="mt-3 grid grid-cols-[94px_1fr] gap-2">
+          <select
+            aria-label="Live period"
+            className="rounded-lg border border-slate-200 px-2 py-2 text-sm font-semibold text-slate-700"
+            value={form.period}
+            onChange={(event) => setForm((prev) => ({ ...prev, period: event.target.value }))}
+          >
+            {periods.map((period) => (
+              <option key={period} value={period}>
+                P{period}
+              </option>
+            ))}
+          </select>
+          <div className="grid grid-cols-[1fr_auto] gap-2 rounded-lg border border-slate-200 p-2">
+            <div className="flex items-center justify-center rounded-md bg-slate-50 py-2 text-lg font-bold text-slate-900">
+              {normalizeTime(form.time)}
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              <button
+                className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700"
+                onClick={() => adjustMinutes(1)}
+              >
+                +1m
+              </button>
+              <button
+                className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700"
+                onClick={() => adjustMinutes(-1)}
+              >
+                -1m
+              </button>
+              <button
+                className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700"
+                onPointerDown={(event) => startSecondsHold(1, event)}
+                onPointerUp={clearSecondsHold}
+                onPointerLeave={clearSecondsHold}
+                onPointerCancel={clearSecondsHold}
+              >
+                +1s
+              </button>
+              <button
+                className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700"
+                onPointerDown={(event) => startSecondsHold(-1, event)}
+                onPointerUp={clearSecondsHold}
+                onPointerLeave={clearSecondsHold}
+                onPointerCancel={clearSecondsHold}
+              >
+                -1s
+              </button>
+              <button
+                className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700"
+                onClick={() => adjustSeconds(10)}
+              >
+                +10s
+              </button>
+              <button
+                className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700"
+                onClick={() => adjustSeconds(-10)}
+              >
+                -10s
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {['7:00', '6:00', '5:00', '4:00', '3:00', '2:00', '1:00'].map((preset) => (
+            <button
+              key={preset}
+              className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700"
+              onClick={() => setForm((prev) => ({ ...prev, time: preset }))}
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 grid grid-cols-6 gap-1.5">
+          <button
+            className={`rounded-lg border px-2 py-2 text-xs font-semibold ${
+              form.playerCap === '' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-slate-50 text-slate-700'
+            }`}
+            onClick={() => setForm((prev) => ({ ...prev, playerCap: '' }))}
+          >
+            Team
+          </button>
+          {roster.map((player) => (
+            <button
+              key={player.id}
+              className={`rounded-lg border px-2 py-2 text-xs font-semibold ${
+                form.playerCap === player.capNumber
+                  ? 'border-slate-900 bg-slate-900 text-white'
+                  : 'border-slate-200 bg-slate-50 text-slate-700'
+              }`}
+              onClick={() => setForm((prev) => ({ ...prev, playerCap: player.capNumber }))}
+            >
+              #{player.capNumber}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-1.5">
+          {SCORING_EVENTS.map((evt) => (
+            <button
+              key={`mobile_${evt.key}`}
+              className={`rounded-lg px-2 py-2 text-xs font-semibold text-white ${evt.color} ${
+                form.type === evt.key ? 'ring-2 ring-slate-900/40 ring-offset-1' : ''
+              }`}
+              onClick={() => {
+                if (editingEventId) {
+                  setForm((prev) => ({ ...prev, type: evt.key }));
+                } else {
+                  setForm((prev) => ({ ...prev, type: evt.key }));
+                  saveEvent(evt.key);
+                }
+              }}
+            >
+              {editingEventId ? evt.label : `+ ${evt.label}`}
+            </button>
+          ))}
+        </div>
+
+        {editingEventId && (
+          <div className="mt-3 flex items-center gap-2 text-xs text-slate-600">
+            <span>Editing event</span>
+            <button
+              className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white"
+              onClick={() => saveEvent(form.type)}
+            >
+              Save
+            </button>
+            <button className="font-semibold text-slate-700" onClick={resetForm}>
+              Cancel
+            </button>
+          </div>
+        )}
+
+        <div className="mt-3 rounded-lg border border-slate-200 p-2">
+          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+            Event log ({matchEventsSorted.length})
+          </div>
+          <div className="mt-2 max-h-[22vh] space-y-1.5 overflow-y-auto pr-1">
+            {matchEventsSorted.length === 0 && (
+              <div className="rounded-lg border border-slate-100 px-2 py-2 text-xs text-slate-500">
+                No events logged for the selected match.
+              </div>
+            )}
+            {matchEventsSorted.map((evt) => {
+              const playerLabel = evt.playerCap ? `#${evt.playerCap}` : 'Team';
+              const typeLabel = getScoringEventMeta(evt.type).label;
+              return (
+                <div key={`mobile_event_${evt.id}`} className="rounded-lg border border-slate-100 px-2 py-2 text-xs">
+                  <div className="font-semibold text-slate-700">
+                    {typeLabel} | {playerLabel}
+                  </div>
+                  <div className="text-slate-500">
+                    P{evt.period} · {evt.time}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 font-semibold">
+                    <button
+                      className="text-slate-500"
+                      onClick={() => {
+                        setEditingEventId(evt.id);
+                        setForm({
+                          type: evt.type,
+                          playerCap: evt.playerCap,
+                          period: evt.period,
+                          time: evt.time
+                        });
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button className="text-red-500" onClick={() => deleteEvent(evt.id)}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <details className="mt-3 rounded-lg border border-slate-200 p-2">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+            Advanced
+          </summary>
+          {videoUrl && (
+            <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-black">
+              <video ref={videoElementRef} className="h-auto max-h-[220px] w-full object-contain" controls playsInline src={videoUrl} />
+            </div>
+          )}
+          <div className="mt-2 text-xs text-slate-500">
+            Team stats: goals {stats.totals.shot_goal} · shots {stats.shots} · shot conversion {stats.shotConversion}% · personal fouls{' '}
+            {stats.personalFouls}
+          </div>
+        </details>
+      </div>
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -428,7 +693,7 @@ const ScoringView = ({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.45fr_0.95fr]">
+      <div className="hidden grid-cols-1 gap-4 md:grid xl:grid-cols-[1.45fr_0.95fr]">
         <div className="space-y-4">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

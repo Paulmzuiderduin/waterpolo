@@ -70,6 +70,7 @@ export const usePersistedUiState = ({ sessionUser, moduleConfig, seasons, loadin
       return;
     }
     if (loadingSeasons || didApplyWorkspaceSelection.current) return;
+    if (!seasons.length) return;
 
     const getFallbackSeason = () => {
       if (!seasons.length) return null;

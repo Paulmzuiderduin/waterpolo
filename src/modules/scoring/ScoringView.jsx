@@ -269,15 +269,55 @@ const ScoringView = ({
     };
   }, [liveMode]);
 
+  const getFullscreenElement = () =>
+    document.fullscreenElement || document.webkitFullscreenElement || null;
+
+  const exitFullscreen = async () => {
+    if (document.exitFullscreen) {
+      await document.exitFullscreen();
+      return true;
+    }
+    if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+      return true;
+    }
+    return false;
+  };
+
+  const requestFullscreenOn = async (element) => {
+    if (!element) return false;
+    if (element.requestFullscreen) {
+      await element.requestFullscreen();
+      return true;
+    }
+    if (element.webkitRequestFullscreen) {
+      element.webkitRequestFullscreen();
+      return true;
+    }
+    return false;
+  };
+
   const toggleFullscreen = async () => {
     try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
+      if (getFullscreenElement()) {
+        await exitFullscreen();
         return;
       }
-      await liveModeContainerRef.current?.requestFullscreen?.();
+
+      const requested =
+        (await requestFullscreenOn(liveModeContainerRef.current)) ||
+        (await requestFullscreenOn(document.documentElement));
+      if (requested) return;
+
+      // iOS Safari fallback: only available on HTMLVideoElement.
+      if (videoElementRef.current?.webkitEnterFullscreen) {
+        videoElementRef.current.webkitEnterFullscreen();
+        return;
+      }
+
+      toast('Fullscreen is not supported on this mobile browser.', 'error');
     } catch {
-      // ignore fullscreen errors on unsupported browsers
+      toast('Could not enter fullscreen on this device.', 'error');
     }
   };
 

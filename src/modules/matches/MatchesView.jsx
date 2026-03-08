@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { loadTeamLineups, loadTeamRoster, saveMatchLineup } from '../../lib/waterpolo/dataLoaders';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
 
 const MATCHES_TOOLTIPS = {
@@ -33,6 +34,11 @@ const MatchesView = ({
   });
   const [editingId, setEditingId] = useState('');
   const [editForm, setEditForm] = useState({ name: '', opponentName: '', date: '' });
+  const [roster, setRoster] = useState([]);
+  const [lineupSupported, setLineupSupported] = useState(false);
+  const [lineupsByMatch, setLineupsByMatch] = useState({});
+  const [editingLineupMatchId, setEditingLineupMatchId] = useState('');
+  const [lineupSelection, setLineupSelection] = useState({});
 
   useEffect(() => {
     if (!seasonId || !teamId) return;
@@ -40,9 +46,28 @@ const MatchesView = ({
     const load = async () => {
       try {
         setLoading(true);
-        const rows = await loadOverview(teamId);
+        const [rows, rosterPayload, lineupPayload] = await Promise.all([
+          loadOverview(teamId),
+          loadTeamRoster(teamId),
+          loadTeamLineups(teamId)
+        ]);
         if (!active) return;
         setMatches(rows);
+        setRoster(
+          (rosterPayload.roster || []).map((player) => ({
+            id: player.team_player_id || player.id,
+            playerId: player.player_id || player.id,
+            capNumber: player.cap_number || '',
+            name: player.name || 'Player'
+          }))
+        );
+        setLineupSupported(Boolean(lineupPayload.supported));
+        const byMatch = {};
+        (lineupPayload.lineups || []).forEach((row) => {
+          if (!byMatch[row.match_id]) byMatch[row.match_id] = [];
+          byMatch[row.match_id].push(row);
+        });
+        setLineupsByMatch(byMatch);
         setError('');
       } catch (e) {
         if (!active) return;
@@ -83,6 +108,76 @@ const MatchesView = ({
     [filteredMatches]
   );
 
+  const getPlayingLineupRows = (matchId) =>
+    (lineupsByMatch[matchId] || []).filter((row) => (row.status || 'playing') === 'playing');
+
+  const getPlayingCount = (matchId) => {
+    const rows = getPlayingLineupRows(matchId);
+    if (rows.length) return rows.length;
+    return roster.length;
+  };
+
+  const openLineupEditor = (matchId) => {
+    if (!lineupSupported) {
+      setError('Match lineup requires the latest database update.');
+      return;
+    }
+    const currentRows = getPlayingLineupRows(matchId);
+    const nextSelection = {};
+    if (currentRows.length) {
+      currentRows.forEach((row) => {
+        const key = row.team_player_id || row.player_id;
+        if (key) nextSelection[key] = true;
+      });
+    } else {
+      roster.forEach((player) => {
+        nextSelection[player.id] = true;
+      });
+    }
+    setLineupSelection(nextSelection);
+    setEditingLineupMatchId(matchId);
+    setError('');
+  };
+
+  const saveLineup = async () => {
+    if (!editingLineupMatchId) return;
+    const selectedRows = roster.filter((player) => lineupSelection[player.id]);
+    if (!selectedRows.length) {
+      setError('Select at least one playing player.');
+      return;
+    }
+    try {
+      setSaving(true);
+      await saveMatchLineup({
+        matchId: editingLineupMatchId,
+        seasonId,
+        teamId,
+        userId,
+        lineupRows: selectedRows.map((player) => ({
+          id: player.id,
+          player_id: player.playerId,
+          cap_number: player.capNumber,
+          status: 'playing'
+        }))
+      });
+      const refreshed = await loadTeamLineups(teamId);
+      const byMatch = {};
+      (refreshed.lineups || []).forEach((row) => {
+        if (!byMatch[row.match_id]) byMatch[row.match_id] = [];
+        byMatch[row.match_id].push(row);
+      });
+      setLineupsByMatch(byMatch);
+      setEditingLineupMatchId('');
+      setLineupSelection({});
+      toast('Lineup saved.', 'success');
+      onDataUpdated?.();
+    } catch (e) {
+      setError(e.message || 'Failed to save lineup.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const createMatch = async () => {
     if (!creating.name.trim()) {
       setError('Match name is required.');
@@ -90,6 +185,7 @@ const MatchesView = ({
     }
     try {
       setSaving(true);
+      let defaultLineupSaved = false;
       const { data, error: insertError } = await supabase
         .from('matches')
         .insert({
@@ -103,6 +199,25 @@ const MatchesView = ({
         .select('*')
         .single();
       if (insertError) throw insertError;
+      if (lineupSupported && roster.length) {
+        try {
+          await saveMatchLineup({
+            matchId: data.id,
+            seasonId,
+            teamId,
+            userId,
+            lineupRows: roster.map((player) => ({
+              id: player.id,
+              player_id: player.playerId,
+              cap_number: player.capNumber,
+              status: 'playing'
+            }))
+          });
+          defaultLineupSaved = true;
+        } catch (lineupError) {
+          setError(`Match created, but default lineup could not be saved: ${lineupError.message}`);
+        }
+      }
       setMatches((prev) => [
         {
           id: data.id,
@@ -125,6 +240,18 @@ const MatchesView = ({
         },
         ...prev
       ]);
+      if (lineupSupported && roster.length && defaultLineupSaved) {
+        setLineupsByMatch((prev) => ({
+          ...prev,
+          [data.id]: roster.map((player) => ({
+            match_id: data.id,
+            team_player_id: player.id,
+            player_id: player.playerId,
+            cap_number: player.capNumber,
+            status: 'playing'
+          }))
+        }));
+      }
       setCreating({
         name: 'New match',
         opponentName: '',
@@ -194,7 +321,16 @@ const MatchesView = ({
       const { error: deleteError } = await supabase.from('matches').delete().eq('id', matchId);
       if (deleteError) throw deleteError;
       setMatches((prev) => prev.filter((match) => match.id !== matchId));
+      setLineupsByMatch((prev) => {
+        const next = { ...prev };
+        delete next[matchId];
+        return next;
+      });
       if (editingId === matchId) setEditingId('');
+      if (editingLineupMatchId === matchId) {
+        setEditingLineupMatchId('');
+        setLineupSelection({});
+      }
       setError('');
       toast('Match deleted.', 'success');
       onDataUpdated?.();
@@ -228,6 +364,12 @@ const MatchesView = ({
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      )}
+
+      {!lineupSupported && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Match lineup is unavailable until the latest database schema is applied.
+        </div>
       )}
 
       <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -355,6 +497,7 @@ const MatchesView = ({
                         <div className="text-xs text-slate-500">
                           {match.opponentName ? `vs ${match.opponentName}` : 'No opponent set'}
                         </div>
+                        <div className="text-xs text-cyan-700">Lineup: {getPlayingCount(match.id)} playing</div>
                       </>
                     )}
                   </td>
@@ -410,6 +553,12 @@ const MatchesView = ({
                       ) : (
                         <>
                           <button
+                            className="rounded-md border border-cyan-200 px-2 py-1 font-semibold text-cyan-700"
+                            onClick={() => openLineupEditor(match.id)}
+                          >
+                            Lineup
+                          </button>
+                          <button
                             className="rounded-md border border-slate-200 px-2 py-1 font-semibold text-slate-700"
                             onClick={() => startEdit(match)}
                           >
@@ -431,6 +580,63 @@ const MatchesView = ({
           </table>
         </div>
       </div>
+
+      {editingLineupMatchId && (
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-slate-700">Match lineup</h3>
+            <div className="text-xs text-slate-500">
+              {
+                matches.find((match) => match.id === editingLineupMatchId)?.name
+              }{' '}
+              · {Object.values(lineupSelection).filter(Boolean).length} selected
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Select who is playing this match. Scoring uses this lineup by default.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+            {roster.map((player) => (
+              <label
+                key={player.id}
+                className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(lineupSelection[player.id])}
+                  onChange={(event) =>
+                    setLineupSelection((prev) => ({
+                      ...prev,
+                      [player.id]: event.target.checked
+                    }))
+                  }
+                />
+                <span>
+                  #{player.capNumber} {player.name}
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              onClick={saveLineup}
+              disabled={saving}
+            >
+              Save lineup
+            </button>
+            <button
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
+              onClick={() => {
+                setEditingLineupMatchId('');
+                setLineupSelection({});
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -41,9 +41,10 @@ const ScoringView = ({
   showTooltips = true,
   onOpenModule
 }) => {
-  const [roster, setRoster] = useState([]);
+  const [allRoster, setAllRoster] = useState([]);
   const [matches, setMatches] = useState([]);
   const [events, setEvents] = useState([]);
+  const [lineups, setLineups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentMatchId, setCurrentMatchId] = useState('');
@@ -80,10 +81,12 @@ const ScoringView = ({
         if (!active) return;
         const mappedRoster = payload.roster.map((player) => ({
           id: player.id,
+          teamPlayerId: player.team_player_id || player.id,
+          playerId: player.player_id || player.id,
           name: player.name,
           capNumber: player.cap_number
         }));
-        setRoster(mappedRoster);
+        setAllRoster(mappedRoster);
         setMatches(payload.matches || []);
         setEvents(
           (payload.events || []).map((evt) => ({
@@ -103,6 +106,7 @@ const ScoringView = ({
         });
         setCurrentMatchId(sortedPayloadMatches[0]?.id || '');
         setStatsMatchId('');
+        setLineups(payload.lineups || []);
         setError('');
       } catch (e) {
         if (active) setError('Could not load scoring data.');
@@ -126,6 +130,42 @@ const ScoringView = ({
   }, [matches]);
 
   const currentMatch = matches.find((match) => match.id === currentMatchId);
+
+  const activeRoster = useMemo(() => {
+    if (!currentMatchId) return allRoster;
+    const rows = (lineups || []).filter(
+      (row) => row.match_id === currentMatchId && (row.status || 'playing') === 'playing'
+    );
+    if (!rows.length) return allRoster;
+
+    const byTeamPlayerId = new Map(allRoster.map((player) => [player.teamPlayerId || player.id, player]));
+    const byPlayerId = new Map(allRoster.map((player) => [player.playerId || player.id, player]));
+    const next = [];
+    rows.forEach((row) => {
+      const linked =
+        byTeamPlayerId.get(row.team_player_id) ||
+        byPlayerId.get(row.player_id) ||
+        allRoster.find((player) => player.capNumber === row.cap_number);
+      if (!linked) return;
+      next.push({
+        ...linked,
+        capNumber: row.cap_number || linked.capNumber
+      });
+    });
+    const unique = new Map();
+    next.forEach((player) => {
+      const key = `${player.capNumber}__${player.playerId || player.teamPlayerId || player.id}`;
+      if (!unique.has(key)) unique.set(key, player);
+    });
+    return Array.from(unique.values());
+  }, [allRoster, currentMatchId, lineups]);
+
+  const isUsingMatchLineup = useMemo(() => {
+    if (!currentMatchId) return false;
+    return (lineups || []).some(
+      (row) => row.match_id === currentMatchId && (row.status || 'playing') === 'playing'
+    );
+  }, [currentMatchId, lineups]);
 
   const filteredEvents = useMemo(() => {
     if (!statsMatchId) return events;
@@ -192,14 +232,27 @@ const ScoringView = ({
       ...prev,
       period: keepTime ? prev.period : lastEventMeta.period,
       time: keepTime ? prev.time : lastEventMeta.time,
-      playerCap: prev.playerCap || roster[0]?.capNumber || ''
+      playerCap: prev.playerCap || activeRoster[0]?.capNumber || ''
     }));
     setEditingEventId(null);
   };
 
   useEffect(() => {
     resetForm(true);
-  }, [roster]);
+  }, [activeRoster]);
+
+  useEffect(() => {
+    if (!activeRoster.length) {
+      setForm((prev) => ({ ...prev, playerCap: '' }));
+      return;
+    }
+    setForm((prev) => {
+      if (prev.playerCap && activeRoster.some((player) => player.capNumber === prev.playerCap)) {
+        return prev;
+      }
+      return { ...prev, playerCap: activeRoster[0]?.capNumber || '' };
+    });
+  }, [activeRoster]);
 
   useEffect(() => {
     return () => {
@@ -635,6 +688,12 @@ const ScoringView = ({
           </button>
         </div>
 
+        <div className="mt-2 text-[11px] font-semibold text-slate-500">
+          {isUsingMatchLineup
+            ? `Using match lineup (${activeRoster.length} selected).`
+            : 'No lineup selected for this match. Using full team roster.'}
+        </div>
+
         {matches.length === 0 && (
           <div className="mt-3">
             <ModuleEmptyState
@@ -736,7 +795,7 @@ const ScoringView = ({
           >
             Team
           </button>
-          {roster.map((player) => (
+          {activeRoster.map((player) => (
             <button
               key={player.id}
               className={`rounded-lg border px-2 py-2 text-xs font-semibold ${
@@ -1021,6 +1080,12 @@ const ScoringView = ({
               </div>
             </div>
 
+            <div className="mt-3 text-xs font-semibold text-slate-500">
+              {isUsingMatchLineup
+                ? `Using match lineup (${activeRoster.length} selected).`
+                : 'No lineup selected for this match. Using full team roster.'}
+            </div>
+
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div>
                 <h3 className="text-sm font-semibold text-slate-700">Player</h3>
@@ -1033,7 +1098,7 @@ const ScoringView = ({
                   >
                     Team
                   </button>
-                  {roster.map((player) => (
+                  {activeRoster.map((player) => (
                     <button
                       key={player.id}
                       className={`rounded-xl border px-2 py-2 text-sm font-semibold ${

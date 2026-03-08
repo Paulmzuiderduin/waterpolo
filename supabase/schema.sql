@@ -15,6 +15,31 @@ create table if not exists teams (
   created_at timestamptz not null default now()
 );
 
+create table if not exists players (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  birthday date,
+  height_cm integer,
+  weight_kg integer,
+  dominant_hand text,
+  notes text,
+  photo_path text,
+  photo_url text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists team_players (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  team_id uuid not null references teams(id) on delete cascade,
+  player_id uuid not null references players(id) on delete cascade,
+  cap_number text not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  unique(team_id, player_id)
+);
+
 create table if not exists roster (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -53,6 +78,18 @@ alter table roster drop constraint if exists roster_dominant_hand_check;
 alter table roster add constraint roster_dominant_hand_check
   check (dominant_hand is null or dominant_hand in ('left', 'right', 'ambidextrous'));
 
+alter table players drop constraint if exists players_height_cm_check;
+alter table players add constraint players_height_cm_check
+  check (height_cm is null or (height_cm >= 50 and height_cm <= 260));
+
+alter table players drop constraint if exists players_weight_kg_check;
+alter table players add constraint players_weight_kg_check
+  check (weight_kg is null or (weight_kg >= 20 and weight_kg <= 250));
+
+alter table players drop constraint if exists players_dominant_hand_check;
+alter table players add constraint players_dominant_hand_check
+  check (dominant_hand is null or dominant_hand in ('left', 'right', 'ambidextrous'));
+
 create table if not exists matches (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -69,6 +106,23 @@ alter table matches add column if not exists opponent_name text;
 alter table matches drop constraint if exists matches_date_check;
 alter table matches add constraint matches_date_check
   check (date >= date '2000-01-01' and date <= date '2100-12-31');
+
+create table if not exists match_lineups (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  season_id uuid not null references seasons(id) on delete cascade,
+  team_id uuid not null references teams(id) on delete cascade,
+  match_id uuid not null references matches(id) on delete cascade,
+  team_player_id uuid not null references team_players(id) on delete cascade,
+  player_id uuid not null references players(id) on delete cascade,
+  cap_number text not null,
+  status text not null default 'playing',
+  created_at timestamptz not null default now()
+);
+
+alter table match_lineups drop constraint if exists match_lineups_status_check;
+alter table match_lineups add constraint match_lineups_status_check
+  check (status in ('playing', 'bench', 'absent'));
 
 create table if not exists shots (
   id uuid primary key default gen_random_uuid(),
@@ -238,10 +292,74 @@ create table if not exists site_visit_totals (
   updated_at timestamptz not null default now()
 );
 
+insert into players (id, user_id, name, birthday, height_cm, weight_kg, dominant_hand, notes, photo_path, photo_url, created_at)
+select
+  r.id,
+  r.user_id,
+  r.name,
+  r.birthday,
+  r.height_cm,
+  r.weight_kg,
+  r.dominant_hand,
+  r.notes,
+  r.photo_path,
+  r.photo_url,
+  r.created_at
+from roster r
+on conflict (id) do update
+set
+  name = excluded.name,
+  birthday = excluded.birthday,
+  height_cm = excluded.height_cm,
+  weight_kg = excluded.weight_kg,
+  dominant_hand = excluded.dominant_hand,
+  notes = excluded.notes,
+  photo_path = excluded.photo_path,
+  photo_url = excluded.photo_url;
+
+insert into team_players (user_id, team_id, player_id, cap_number, is_active, created_at)
+select
+  r.user_id,
+  r.team_id,
+  r.id,
+  r.cap_number,
+  true,
+  r.created_at
+from roster r
+on conflict (team_id, player_id) do update
+set
+  cap_number = excluded.cap_number,
+  is_active = true;
+
+insert into match_lineups (user_id, season_id, team_id, match_id, team_player_id, player_id, cap_number, status)
+select
+  m.user_id,
+  m.season_id,
+  m.team_id,
+  m.id,
+  tp.id,
+  tp.player_id,
+  tp.cap_number,
+  'playing'
+from matches m
+join team_players tp on tp.team_id = m.team_id and tp.is_active = true
+where not exists (
+  select 1
+  from match_lineups ml
+  where ml.match_id = m.id
+    and ml.team_player_id = tp.id
+);
+
 create index if not exists seasons_user_id_idx on seasons(user_id);
 create index if not exists teams_user_id_idx on teams(user_id);
+create index if not exists players_user_id_idx on players(user_id);
+create index if not exists team_players_team_id_idx on team_players(team_id);
+create index if not exists team_players_player_id_idx on team_players(player_id);
 create index if not exists roster_team_id_idx on roster(team_id);
 create index if not exists matches_team_id_idx on matches(team_id);
+create index if not exists match_lineups_team_id_idx on match_lineups(team_id);
+create index if not exists match_lineups_match_id_idx on match_lineups(match_id);
+create index if not exists match_lineups_team_player_id_idx on match_lineups(team_player_id);
 create index if not exists shots_team_id_idx on shots(team_id);
 create index if not exists shots_match_id_idx on shots(match_id);
 create index if not exists scoring_events_team_id_idx on scoring_events(team_id);
@@ -254,8 +372,11 @@ create index if not exists feature_requests_user_id_idx on feature_requests(user
 
 alter table seasons enable row level security;
 alter table teams enable row level security;
+alter table players enable row level security;
+alter table team_players enable row level security;
 alter table roster enable row level security;
 alter table matches enable row level security;
+alter table match_lineups enable row level security;
 alter table shots enable row level security;
 alter table scoring_events enable row level security;
 alter table possessions enable row level security;
@@ -271,12 +392,24 @@ drop policy if exists "Teams are user-owned" on teams;
 create policy "Teams are user-owned" on teams
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "Players are user-owned" on players;
+create policy "Players are user-owned" on players
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "Team players are user-owned" on team_players;
+create policy "Team players are user-owned" on team_players
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 drop policy if exists "Roster is user-owned" on roster;
 create policy "Roster is user-owned" on roster
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 drop policy if exists "Matches are user-owned" on matches;
 create policy "Matches are user-owned" on matches
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "Match lineups are user-owned" on match_lineups;
+create policy "Match lineups are user-owned" on match_lineups
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 drop policy if exists "Shots are user-owned" on shots;

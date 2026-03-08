@@ -59,6 +59,149 @@ const E2E_SAMPLE = {
   ]
 };
 
+const isMissingRelationError = (error) =>
+  error?.code === '42P01' ||
+  /relation .* does not exist/i.test(error?.message || '') ||
+  /could not find .* in the schema cache/i.test(error?.message || '');
+
+const mapTeamPlayerRowsToRoster = (rows) =>
+  (rows || []).map((row) => {
+    const player = row.players || {};
+    return {
+      id: row.id,
+      team_player_id: row.id,
+      player_id: row.player_id,
+      team_id: row.team_id,
+      user_id: row.user_id || player.user_id || '',
+      name: player.name || '',
+      cap_number: row.cap_number || '',
+      birthday: player.birthday || null,
+      height_cm: player.height_cm ?? null,
+      weight_kg: player.weight_kg ?? null,
+      dominant_hand: player.dominant_hand || null,
+      notes: player.notes || '',
+      photo_path: player.photo_path || '',
+      photo_url: player.photo_url || '',
+      created_at: row.created_at
+    };
+  });
+
+export const loadTeamRoster = async (teamId) => {
+  if (IS_E2E_SMOKE) {
+    return { roster: E2E_SAMPLE.roster, usesTeamPlayers: false };
+  }
+  if (!teamId) return { roster: [], usesTeamPlayers: false };
+
+  const teamPlayersRes = await supabase
+    .from('team_players')
+    .select(
+      'id,user_id,team_id,player_id,cap_number,created_at,players(id,user_id,name,birthday,height_cm,weight_kg,dominant_hand,notes,photo_path,photo_url)'
+    )
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: true });
+
+  if (!teamPlayersRes.error) {
+    return {
+      roster: mapTeamPlayerRowsToRoster(teamPlayersRes.data),
+      usesTeamPlayers: true
+    };
+  }
+
+  if (!isMissingRelationError(teamPlayersRes.error)) {
+    throw new Error(`Failed to load team roster: ${teamPlayersRes.error.message || 'unknown error'}`);
+  }
+
+  const rosterRes = await supabase
+    .from('roster')
+    .select('*')
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: true });
+  if (rosterRes.error) {
+    throw new Error(`Failed to load team roster: ${rosterRes.error.message || 'unknown error'}`);
+  }
+  const legacy = (rosterRes.data || []).map((row) => ({
+    ...row,
+    team_player_id: row.id,
+    player_id: row.player_id || row.id
+  }));
+  return { roster: legacy, usesTeamPlayers: false };
+};
+
+export const loadTeamLineups = async (teamId) => {
+  if (IS_E2E_SMOKE) {
+    return {
+      lineups: [
+        {
+          id: 'smoke-lineup-1',
+          match_id: 'smoke-m1',
+          team_player_id: 'smoke-r1',
+          player_id: 'smoke-r1',
+          cap_number: '1',
+          status: 'playing'
+        },
+        {
+          id: 'smoke-lineup-2',
+          match_id: 'smoke-m1',
+          team_player_id: 'smoke-r2',
+          player_id: 'smoke-r2',
+          cap_number: '5',
+          status: 'playing'
+        }
+      ],
+      supported: true
+    };
+  }
+  if (!teamId) return { lineups: [], supported: false };
+
+  const lineupRes = await supabase
+    .from('match_lineups')
+    .select('*')
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: true });
+
+  if (lineupRes.error) {
+    if (isMissingRelationError(lineupRes.error)) return { lineups: [], supported: false };
+    throw new Error(`Failed to load lineups: ${lineupRes.error.message || 'unknown error'}`);
+  }
+  return { lineups: lineupRes.data || [], supported: true };
+};
+
+export const saveMatchLineup = async ({ matchId, seasonId, teamId, userId, lineupRows = [] }) => {
+  if (IS_E2E_SMOKE) return;
+  if (!matchId || !seasonId || !teamId || !userId) {
+    throw new Error('Missing required lineup context.');
+  }
+
+  const { error: deleteError } = await supabase
+    .from('match_lineups')
+    .delete()
+    .eq('match_id', matchId)
+    .eq('team_id', teamId);
+  if (deleteError) {
+    if (isMissingRelationError(deleteError)) {
+      throw new Error('match_lineups table is not available yet. Run the DB update first.');
+    }
+    throw new Error(deleteError.message || 'Failed to reset lineup');
+  }
+
+  if (!lineupRows.length) return;
+
+  const payload = lineupRows.map((row) => ({
+    user_id: userId,
+    season_id: seasonId,
+    team_id: teamId,
+    match_id: matchId,
+    team_player_id: row.team_player_id || row.id,
+    player_id: row.player_id || row.id,
+    cap_number: row.cap_number || '',
+    status: row.status || 'playing'
+  }));
+  const { error: insertError } = await supabase.from('match_lineups').insert(payload);
+  if (insertError) {
+    throw new Error(insertError.message || 'Failed to save lineup');
+  }
+};
+
 export const notifyDataUpdated = () => {
   if (IS_E2E_SMOKE) return;
   if (typeof window === 'undefined') return;
@@ -69,6 +212,7 @@ export const loadTeamData = async (teamId) => {
   if (IS_E2E_SMOKE) {
     return {
       roster: E2E_SAMPLE.roster,
+      usesTeamPlayers: false,
       matches: E2E_SAMPLE.matches.map((match) => ({
         info: {
           id: match.id,
@@ -93,13 +237,13 @@ export const loadTeamData = async (teamId) => {
       }))
     };
   }
-  if (!teamId) return { roster: [], matches: [] };
-  const [rosterRes, matchRes, shotRes] = await Promise.all([
-    supabase.from('roster').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
+  if (!teamId) return { roster: [], usesTeamPlayers: false, matches: [] };
+  const [rosterPayload, matchRes, shotRes] = await Promise.all([
+    loadTeamRoster(teamId),
     supabase.from('matches').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
     supabase.from('shots').select('*').eq('team_id', teamId)
   ]);
-  if (rosterRes.error || matchRes.error || shotRes.error) {
+  if (matchRes.error || shotRes.error) {
     throw new Error('Failed to load team data');
   }
   const matchMap = new Map();
@@ -130,33 +274,60 @@ export const loadTeamData = async (teamId) => {
       period: shot.period
     });
   });
-  return { roster: rosterRes.data || [], matches: Array.from(matchMap.values()) };
+  return {
+    roster: rosterPayload.roster || [],
+    usesTeamPlayers: rosterPayload.usesTeamPlayers,
+    matches: Array.from(matchMap.values())
+  };
 };
 
 export const loadTeamScoring = async (teamId) => {
   if (IS_E2E_SMOKE) {
     return {
       roster: E2E_SAMPLE.roster,
+      usesTeamPlayers: false,
       matches: E2E_SAMPLE.matches,
       events: E2E_SAMPLE.events,
-      shots: E2E_SAMPLE.shots
+      shots: E2E_SAMPLE.shots,
+      lineups: [
+        {
+          id: 'smoke-lineup-1',
+          match_id: 'smoke-m1',
+          team_player_id: 'smoke-r1',
+          player_id: 'smoke-r1',
+          cap_number: '1',
+          status: 'playing'
+        },
+        {
+          id: 'smoke-lineup-2',
+          match_id: 'smoke-m1',
+          team_player_id: 'smoke-r2',
+          player_id: 'smoke-r2',
+          cap_number: '5',
+          status: 'playing'
+        }
+      ]
     };
   }
-  if (!teamId) return { roster: [], matches: [], events: [], shots: [] };
-  const [rosterRes, matchRes, eventRes, shotRes] = await Promise.all([
-    supabase.from('roster').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
+  if (!teamId) return { roster: [], usesTeamPlayers: false, matches: [], events: [], shots: [], lineups: [] };
+  const [rosterPayload, lineupPayload, matchRes, eventRes, shotRes] = await Promise.all([
+    loadTeamRoster(teamId),
+    loadTeamLineups(teamId),
     supabase.from('matches').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
     supabase.from('scoring_events').select('*').eq('team_id', teamId),
     supabase.from('shots').select('*').eq('team_id', teamId)
   ]);
-  if (rosterRes.error || matchRes.error || eventRes.error || shotRes.error) {
+  if (matchRes.error || eventRes.error || shotRes.error) {
     throw new Error('Failed to load scoring data');
   }
   return {
-    roster: rosterRes.data || [],
+    roster: rosterPayload.roster || [],
+    usesTeamPlayers: rosterPayload.usesTeamPlayers,
     matches: matchRes.data || [],
     events: eventRes.data || [],
-    shots: shotRes.data || []
+    shots: shotRes.data || [],
+    lineups: lineupPayload.lineups || [],
+    lineupsSupported: lineupPayload.supported
   };
 };
 
@@ -164,23 +335,25 @@ export const loadTeamPossessions = async (teamId) => {
   if (IS_E2E_SMOKE) {
     return {
       roster: E2E_SAMPLE.roster,
+      usesTeamPlayers: false,
       matches: E2E_SAMPLE.matches,
       possessions: E2E_SAMPLE.possessions,
       passes: E2E_SAMPLE.passes
     };
   }
-  if (!teamId) return { roster: [], matches: [], possessions: [], passes: [] };
-  const [rosterRes, matchRes, possessionRes, passRes] = await Promise.all([
-    supabase.from('roster').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
+  if (!teamId) return { roster: [], usesTeamPlayers: false, matches: [], possessions: [], passes: [] };
+  const [rosterPayload, matchRes, possessionRes, passRes] = await Promise.all([
+    loadTeamRoster(teamId),
     supabase.from('matches').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
     supabase.from('possessions').select('*').eq('team_id', teamId),
     supabase.from('passes').select('*').eq('team_id', teamId)
   ]);
-  if (rosterRes.error || matchRes.error || possessionRes.error || passRes.error) {
+  if (matchRes.error || possessionRes.error || passRes.error) {
     throw new Error('Failed to load possession data');
   }
   return {
-    roster: rosterRes.data || [],
+    roster: rosterPayload.roster || [],
+    usesTeamPlayers: rosterPayload.usesTeamPlayers,
     matches: matchRes.data || [],
     possessions: possessionRes.data || [],
     passes: passRes.data || []

@@ -58,6 +58,7 @@ const ScoringView = ({
   const [videoUrl, setVideoUrl] = useState('');
   const [videoName, setVideoName] = useState('');
   const [liveMode, setLiveMode] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const [liveGuard, setLiveGuard] = useState(true);
   const [lastEventMeta, setLastEventMeta] = useState(() => ({
     period: '1',
@@ -269,6 +270,26 @@ const ScoringView = ({
     };
   }, [liveMode]);
 
+  useEffect(() => {
+    if (!focusMode) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [focusMode]);
+
+  useEffect(() => {
+    if (!focusMode) return;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setFocusMode(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [focusMode]);
+
   const getFullscreenElement = () =>
     document.fullscreenElement || document.webkitFullscreenElement || null;
 
@@ -319,6 +340,12 @@ const ScoringView = ({
     } catch {
       toast('Could not enter fullscreen on this device.', 'error');
     }
+  };
+
+  const confirmWithinCurrentView = async (message) => {
+    if (focusMode || getFullscreenElement()) return window.confirm(message);
+    if (typeof confirmAction === 'function') return confirmAction(message);
+    return window.confirm(message);
   };
 
   const toClampedTime = (nextTotal) => {
@@ -441,8 +468,8 @@ const ScoringView = ({
     onDataUpdated?.();
   };
 
-  const deleteEvent = async (eventId) => {
-    if (!(await confirmAction('Delete event?'))) return;
+  const deleteEvent = async (eventId, { skipConfirm = false } = {}) => {
+    if (!skipConfirm && !(await confirmWithinCurrentView('Delete event?'))) return;
     const { error: deleteError } = await supabase.from('scoring_events').delete().eq('id', eventId);
     if (deleteError) {
       setError('Failed to delete event.');
@@ -464,19 +491,31 @@ const ScoringView = ({
       return timeB - timeA;
     })[0];
     if (!last) return;
-    if (!(await confirmAction('Undo last event?'))) return;
-    await deleteEvent(last.id);
+    if (!(await confirmWithinCurrentView('Undo last event?'))) return;
+    await deleteEvent(last.id, { skipConfirm: true });
   };
 
   if (loading) {
     return <div className="p-10 text-slate-700">Loading...</div>;
   }
 
+  const containerClasses = [
+    'space-y-4 md:space-y-6',
+    focusMode ? 'fixed inset-0 z-[90] overflow-y-auto bg-slate-100 p-3' : '',
+    liveMode && !focusMode ? 'rounded-2xl border border-cyan-200 bg-cyan-50/40 p-3' : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const containerStyle = focusMode
+    ? {
+        paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
+        paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))'
+      }
+    : undefined;
+
   return (
-    <div
-      ref={liveModeContainerRef}
-      className={`space-y-4 md:space-y-6 ${liveMode ? 'rounded-2xl border border-cyan-200 bg-cyan-50/40 p-3' : ''}`}
-    >
+    <div ref={liveModeContainerRef} className={containerClasses} style={containerStyle}>
       <input
         ref={videoInputRef}
         type="file"
@@ -484,6 +523,18 @@ const ScoringView = ({
         className="hidden"
         onChange={handleVideoFileChange}
       />
+
+      {focusMode && (
+        <div className="sticky top-0 z-20 -mx-1 mb-1 flex items-center justify-between rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
+          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Focus scoring mode</div>
+          <button
+            className="rounded-md bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white"
+            onClick={() => setFocusMode(false)}
+          >
+            Exit focus
+          </button>
+        </div>
+      )}
 
       <div className="hidden md:block">
         <ModuleHeader
@@ -497,6 +548,9 @@ const ScoringView = ({
               </ToolbarButton>
               <ToolbarButton className="text-xs" onClick={toggleFullscreen}>
                 Fullscreen
+              </ToolbarButton>
+              <ToolbarButton className="text-xs" onClick={() => setFocusMode((prev) => !prev)}>
+                {focusMode ? 'Exit focus mode' : 'Focus mode'}
               </ToolbarButton>
               <ToolbarButton variant="primary" className="text-xs" onClick={openVideoPicker}>
                 {videoUrl ? 'Change video' : 'Select video (optional)'}
@@ -531,6 +585,14 @@ const ScoringView = ({
               onClick={toggleFullscreen}
             >
               Full
+            </button>
+            <button
+              className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
+                focusMode ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-700'
+              }`}
+              onClick={() => setFocusMode((prev) => !prev)}
+            >
+              Focus
             </button>
             <button
               className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"

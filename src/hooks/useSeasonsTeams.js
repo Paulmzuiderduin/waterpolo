@@ -33,10 +33,14 @@ export const useSeasonsTeams = (userId) => {
     const load = async () => {
       try {
         const [seasonsRes, teamsRes] = await Promise.all([
-          supabase.from('seasons').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
-          supabase.from('teams').select('*').eq('user_id', userId).order('created_at', { ascending: true })
+          supabase.from('seasons').select('*').order('created_at', { ascending: true }),
+          supabase.from('teams').select('*').order('created_at', { ascending: true })
         ]);
-        if (seasonsRes.error || teamsRes.error) throw new Error('Failed to load seasons');
+        if (seasonsRes.error || teamsRes.error) {
+          throw new Error(
+            seasonsRes.error?.message || teamsRes.error?.message || 'Failed to load seasons'
+          );
+        }
         if (!active) return;
         const seasonsWithTeams = (seasonsRes.data || []).map((season) => ({
           id: season.id,
@@ -44,8 +48,10 @@ export const useSeasonsTeams = (userId) => {
           teams: (teamsRes.data || []).filter((team) => team.season_id === season.id)
         }));
         setSeasons(seasonsWithTeams);
-      } catch (e) {
+      } catch (error) {
         if (!active) return;
+        console.error('[useSeasonsTeams] load failed:', error);
+        setSeasons([]);
       } finally {
         if (active) setLoadingSeasons(false);
       }

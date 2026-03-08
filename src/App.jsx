@@ -202,7 +202,7 @@ const App = () => {
       .select('*')
       .single();
     if (error) {
-      toast('Failed to create season.', 'error');
+      toast(`Failed to create season: ${error.message}`, 'error');
       return;
     }
     const nextSeasons = [...seasons, { id: data.id, name: data.name, teams: [] }];
@@ -221,7 +221,7 @@ const App = () => {
       .select('*')
       .single();
     if (error) {
-      toast('Failed to create team.', 'error');
+      toast(`Failed to create team: ${error.message}`, 'error');
       return;
     }
     const nextSeasons = seasons.map((season) =>

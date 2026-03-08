@@ -22,6 +22,7 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
   const [scope, setScope] = useState('season');
   const [matchId, setMatchId] = useState('');
   const [importing, setImporting] = useState(false);
+  const [importReport, setImportReport] = useState(null);
   const importInputRef = useRef(null);
 
   const reloadData = useCallback(async () => {
@@ -121,17 +122,32 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
     if (!file || !teamId || !seasonId || !userId) return;
     setImporting(true);
     setError('');
+    setImportReport(null);
     try {
       const text = await file.text();
       const { events: parsedEvents, warnings } = parseStatSheetImportCsv(text);
       if (!parsedEvents.length) {
         setError('No importable events found in CSV.');
+        setImportReport({
+          status: 'error',
+          fileName: file.name,
+          importedEvents: 0,
+          createdMatches: 0,
+          warnings
+        });
         toast?.('No importable events found.', 'error');
         if (warnings.length) toast?.(warnings[0], 'error');
         return;
       }
       if (parsedEvents.length > 6000) {
         setError('CSV too large. Maximum 6000 expanded events per import.');
+        setImportReport({
+          status: 'error',
+          fileName: file.name,
+          importedEvents: 0,
+          createdMatches: 0,
+          warnings: ['CSV too large. Maximum 6000 expanded events per import.']
+        });
         toast?.('Import too large. Max 6000 events.', 'error');
         return;
       }
@@ -142,6 +158,7 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
         if (!matchesByKey.has(key)) matchesByKey.set(key, getMatchId(match));
       });
 
+      let createdMatches = 0;
       const ensureMatchId = async ({ matchName, matchDate, opponentName }) => {
         const key = `${matchName.toLowerCase()}|${matchDate}|${opponentName.toLowerCase()}`;
         if (matchesByKey.has(key)) return matchesByKey.get(key);
@@ -159,6 +176,7 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
           .single();
         if (insertError) throw insertError;
         matchesByKey.set(key, data.id);
+        createdMatches += 1;
         return data.id;
       };
 
@@ -188,10 +206,24 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
       }
 
       await reloadData();
+      setImportReport({
+        status: 'success',
+        fileName: file.name,
+        importedEvents: eventPayloads.length,
+        createdMatches,
+        warnings
+      });
       toast?.(`Imported ${eventPayloads.length} events.`, 'success');
       if (warnings.length) toast?.(`Imported with warnings: ${warnings[0]}`, 'info');
     } catch {
       setError('Failed to import stat sheet CSV.');
+      setImportReport({
+        status: 'error',
+        fileName: file.name,
+        importedEvents: 0,
+        createdMatches: 0,
+        warnings: ['Unexpected import error. Check CSV format and try again.']
+      });
       toast?.('Failed to import stat sheet CSV.', 'error');
     } finally {
       setImporting(false);
@@ -236,6 +268,33 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
       />
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+      {importReport && (
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            importReport.status === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : 'border-amber-200 bg-amber-50 text-amber-800'
+          }`}
+        >
+          <div className="font-semibold">
+            Import report: {importReport.fileName}
+          </div>
+          <div className="mt-1">
+            Events imported: {importReport.importedEvents} · Matches created: {importReport.createdMatches}
+          </div>
+          {importReport.warnings?.length > 0 && (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+              {importReport.warnings.slice(0, 6).map((warning, index) => (
+                <li key={`${warning}_${index}`}>{warning}</li>
+              ))}
+              {importReport.warnings.length > 6 && (
+                <li>...and {importReport.warnings.length - 6} more warnings</li>
+              )}
+            </ul>
+          )}
+        </div>
+      )}
 
       {matches.length === 0 ? (
         <div className="rounded-2xl bg-white p-6 shadow-sm">

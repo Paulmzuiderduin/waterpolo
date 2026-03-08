@@ -496,6 +496,8 @@ const App = () => {
         {activeTab === 'statsheet' && (
           <StatSheetView
             teamId={selectedTeamId}
+            seasonId={selectedSeasonId}
+            userId={session.user.id}
             loadData={loadTeamScoring}
             onOpenModule={setActiveTab}
             toast={toast}

@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Download } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Download, Upload } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 import ModuleHeader from '../../components/ModuleHeader';
 import ModuleEmptyState from '../../components/ModuleEmptyState';
 import ToolbarButton from '../../components/ToolbarButton';
 import { buildStatSheet, exportStatSheetCsv } from '../../lib/waterpolo/statSheet';
+import { getStatSheetImportTemplateCsv, parseStatSheetImportCsv } from '../../lib/waterpolo/statSheetImport';
 import { normalizeScoringEventType } from '../../lib/waterpolo/scoring';
 
 const getMatchId = (match) => match.id || match.info?.id || '';
@@ -11,7 +13,7 @@ const getMatchName = (match) => match.name || match.info?.name || 'Match';
 const getMatchOpponent = (match) => match.opponent_name || match.info?.opponent_name || match.info?.opponent || '';
 const getMatchDate = (match) => match.date || match.info?.date || '';
 
-const StatSheetView = ({ teamId, loadData, onOpenModule, toast }) => {
+const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast }) => {
   const [roster, setRoster] = useState([]);
   const [matches, setMatches] = useState([]);
   const [events, setEvents] = useState([]);
@@ -19,40 +21,40 @@ const StatSheetView = ({ teamId, loadData, onOpenModule, toast }) => {
   const [error, setError] = useState('');
   const [scope, setScope] = useState('season');
   const [matchId, setMatchId] = useState('');
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef(null);
+
+  const reloadData = useCallback(async () => {
+    if (!teamId) return;
+    try {
+      const payload = await loadData(teamId);
+      setRoster(payload.roster || []);
+      setMatches(payload.matches || []);
+      setEvents(
+        (payload.events || []).map((evt) => ({
+          ...evt,
+          event_type: normalizeScoringEventType(evt.event_type)
+        }))
+      );
+      const sorted = [...(payload.matches || [])].sort((a, b) => {
+        const ad = getMatchDate(a) ? new Date(getMatchDate(a)).getTime() : 0;
+        const bd = getMatchDate(b) ? new Date(getMatchDate(b)).getTime() : 0;
+        return bd - ad;
+      });
+      setMatchId((prev) => prev || getMatchId(sorted[0]) || '');
+      setError('');
+    } catch (e) {
+      setError('Could not load stat sheet data.');
+    } finally {
+      setLoading(false);
+    }
+  }, [loadData, teamId]);
 
   useEffect(() => {
     if (!teamId) return;
-    let active = true;
-    const load = async () => {
-      try {
-        const payload = await loadData(teamId);
-        if (!active) return;
-        setRoster(payload.roster || []);
-        setMatches(payload.matches || []);
-        setEvents(
-          (payload.events || []).map((evt) => ({
-            ...evt,
-            event_type: normalizeScoringEventType(evt.event_type)
-          }))
-        );
-        const sorted = [...(payload.matches || [])].sort((a, b) => {
-          const ad = getMatchDate(a) ? new Date(getMatchDate(a)).getTime() : 0;
-          const bd = getMatchDate(b) ? new Date(getMatchDate(b)).getTime() : 0;
-          return bd - ad;
-        });
-        setMatchId(getMatchId(sorted[0]) || '');
-        setError('');
-      } catch (e) {
-        if (active) setError('Could not load stat sheet data.');
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    load();
-    return () => {
-      active = false;
-    };
-  }, [teamId, loadData]);
+    setLoading(true);
+    reloadData();
+  }, [teamId, reloadData]);
 
   const sortedMatches = useMemo(
     () =>
@@ -101,6 +103,102 @@ const StatSheetView = ({ teamId, loadData, onOpenModule, toast }) => {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadTemplate = () => {
+    const csv = getStatSheetImportTemplateCsv();
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'waterpolo-stat-sheet-import-template.csv';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !teamId || !seasonId || !userId) return;
+    setImporting(true);
+    setError('');
+    try {
+      const text = await file.text();
+      const { events: parsedEvents, warnings } = parseStatSheetImportCsv(text);
+      if (!parsedEvents.length) {
+        setError('No importable events found in CSV.');
+        toast?.('No importable events found.', 'error');
+        if (warnings.length) toast?.(warnings[0], 'error');
+        return;
+      }
+      if (parsedEvents.length > 6000) {
+        setError('CSV too large. Maximum 6000 expanded events per import.');
+        toast?.('Import too large. Max 6000 events.', 'error');
+        return;
+      }
+
+      const matchesByKey = new Map();
+      matches.forEach((match) => {
+        const key = `${(getMatchName(match) || '').toLowerCase()}|${getMatchDate(match) || ''}|${(getMatchOpponent(match) || '').toLowerCase()}`;
+        if (!matchesByKey.has(key)) matchesByKey.set(key, getMatchId(match));
+      });
+
+      const ensureMatchId = async ({ matchName, matchDate, opponentName }) => {
+        const key = `${matchName.toLowerCase()}|${matchDate}|${opponentName.toLowerCase()}`;
+        if (matchesByKey.has(key)) return matchesByKey.get(key);
+        const { data, error: insertError } = await supabase
+          .from('matches')
+          .insert({
+            name: matchName,
+            date: matchDate,
+            opponent_name: opponentName || '',
+            season_id: seasonId,
+            team_id: teamId,
+            user_id: userId
+          })
+          .select('*')
+          .single();
+        if (insertError) throw insertError;
+        matchesByKey.set(key, data.id);
+        return data.id;
+      };
+
+      const eventPayloads = [];
+      // eslint-disable-next-line no-restricted-syntax
+      for (const imported of parsedEvents) {
+        // eslint-disable-next-line no-await-in-loop
+        const matchForEvent = await ensureMatchId(imported);
+        eventPayloads.push({
+          user_id: userId,
+          season_id: seasonId,
+          team_id: teamId,
+          match_id: matchForEvent,
+          event_type: imported.eventType,
+          player_cap: imported.playerCap || null,
+          period: imported.period,
+          time: imported.time
+        });
+      }
+
+      const chunkSize = 500;
+      for (let i = 0; i < eventPayloads.length; i += chunkSize) {
+        const chunk = eventPayloads.slice(i, i + chunkSize);
+        // eslint-disable-next-line no-await-in-loop
+        const { error: insertError } = await supabase.from('scoring_events').insert(chunk);
+        if (insertError) throw insertError;
+      }
+
+      await reloadData();
+      toast?.(`Imported ${eventPayloads.length} events.`, 'success');
+      if (warnings.length) toast?.(`Imported with warnings: ${warnings[0]}`, 'info');
+    } catch {
+      setError('Failed to import stat sheet CSV.');
+      toast?.('Failed to import stat sheet CSV.', 'error');
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  };
+
   if (loading) return <div className="p-10 text-slate-700">Loading...</div>;
 
   return (
@@ -110,10 +208,30 @@ const StatSheetView = ({ teamId, loadData, onOpenModule, toast }) => {
         title="Match & Season Stat Sheet"
         description="Summary table built from scoring events for match review and season-level player reporting."
         actions={
-          <ToolbarButton variant="primary" onClick={handleExport} disabled={!sheet.rows.length}>
-            <Download size={16} />
-            Export CSV
-          </ToolbarButton>
+          <>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={handleImportFileChange}
+            />
+            <ToolbarButton
+              onClick={() => importInputRef.current?.click()}
+              disabled={importing}
+              className="text-xs sm:text-sm"
+            >
+              <Upload size={16} />
+              {importing ? 'Importing...' : 'Import CSV'}
+            </ToolbarButton>
+            <ToolbarButton onClick={handleDownloadTemplate} className="text-xs sm:text-sm">
+              Download template
+            </ToolbarButton>
+            <ToolbarButton variant="primary" onClick={handleExport} disabled={!sheet.rows.length}>
+              <Download size={16} />
+              Export CSV
+            </ToolbarButton>
+          </>
         }
       />
 
@@ -154,6 +272,10 @@ const StatSheetView = ({ teamId, loadData, onOpenModule, toast }) => {
                 <span>Personal fouls: {sheet.summary.personalFouls}</span>
                 <span>Timeouts: {sheet.summary.timeouts}</span>
               </div>
+            </div>
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Import format: <span className="font-semibold">match_name, match_date, opponent_name, event_type, player_cap, period, time, count</span>.
+              Missing period/time default to <span className="font-semibold">P1 · 7:00</span>.
             </div>
 
             {scope === 'match' && (

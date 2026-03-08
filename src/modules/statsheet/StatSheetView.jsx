@@ -17,12 +17,14 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
   const [roster, setRoster] = useState([]);
   const [matches, setMatches] = useState([]);
   const [events, setEvents] = useState([]);
+  const [shots, setShots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [scope, setScope] = useState('season');
   const [matchId, setMatchId] = useState('');
   const [importing, setImporting] = useState(false);
   const [importReport, setImportReport] = useState(null);
+  const [importPreview, setImportPreview] = useState(null);
   const importInputRef = useRef(null);
 
   const reloadData = useCallback(async () => {
@@ -37,6 +39,7 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
           event_type: normalizeScoringEventType(evt.event_type)
         }))
       );
+      setShots(payload.shots || []);
       const sorted = [...(payload.matches || [])].sort((a, b) => {
         const ad = getMatchDate(a) ? new Date(getMatchDate(a)).getTime() : 0;
         const bd = getMatchDate(b) ? new Date(getMatchDate(b)).getTime() : 0;
@@ -73,10 +76,11 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
         roster,
         matches,
         events,
+        shots,
         scope,
         matchId: scope === 'match' ? matchId : ''
       }),
-    [events, matchId, matches, roster, scope]
+    [events, matchId, matches, roster, scope, shots]
   );
 
   const handleExport = () => {
@@ -137,6 +141,7 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
         });
         toast?.('No importable events found.', 'error');
         if (warnings.length) toast?.(warnings[0], 'error');
+        setImportPreview(null);
         return;
       }
       if (parsedEvents.length > 6000) {
@@ -149,12 +154,54 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
           warnings: ['CSV too large. Maximum 6000 expanded events per import.']
         });
         toast?.('Import too large. Max 6000 events.', 'error');
+        setImportPreview(null);
         return;
       }
+      const uniqueMatchKeys = new Set(
+        parsedEvents.map(
+          (item) =>
+            `${String(item.matchName || '').toLowerCase()}|${item.matchDate || ''}|${String(
+              item.opponentName || ''
+            ).toLowerCase()}`
+        )
+      );
+      setImportPreview({
+        fileName: file.name,
+        parsedEvents,
+        warnings,
+        uniqueMatches: uniqueMatchKeys.size
+      });
+      toast?.(`Preview ready: ${parsedEvents.length} events`, 'info');
+    } catch {
+      setError('Failed to import stat sheet CSV.');
+      setImportReport({
+        status: 'error',
+        fileName: file.name,
+        importedEvents: 0,
+        createdMatches: 0,
+        warnings: ['Unexpected import error. Check CSV format and try again.']
+      });
+      setImportPreview(null);
+      toast?.('Failed to import stat sheet CSV.', 'error');
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  };
 
+  const handleConfirmImport = async () => {
+    if (!importPreview || !teamId || !seasonId || !userId) return;
+    setImporting(true);
+    setError('');
+    setImportReport(null);
+    const createdMatchIds = [];
+    const insertedEventIds = [];
+    try {
       const matchesByKey = new Map();
       matches.forEach((match) => {
-        const key = `${(getMatchName(match) || '').toLowerCase()}|${getMatchDate(match) || ''}|${(getMatchOpponent(match) || '').toLowerCase()}`;
+        const key = `${(getMatchName(match) || '').toLowerCase()}|${getMatchDate(match) || ''}|${(
+          getMatchOpponent(match) || ''
+        ).toLowerCase()}`;
         if (!matchesByKey.has(key)) matchesByKey.set(key, getMatchId(match));
       });
 
@@ -176,13 +223,14 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
           .single();
         if (insertError) throw insertError;
         matchesByKey.set(key, data.id);
+        createdMatchIds.push(data.id);
         createdMatches += 1;
         return data.id;
       };
 
       const eventPayloads = [];
       // eslint-disable-next-line no-restricted-syntax
-      for (const imported of parsedEvents) {
+      for (const imported of importPreview.parsedEvents) {
         // eslint-disable-next-line no-await-in-loop
         const matchForEvent = await ensureMatchId(imported);
         eventPayloads.push({
@@ -201,33 +249,44 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
       for (let i = 0; i < eventPayloads.length; i += chunkSize) {
         const chunk = eventPayloads.slice(i, i + chunkSize);
         // eslint-disable-next-line no-await-in-loop
-        const { error: insertError } = await supabase.from('scoring_events').insert(chunk);
+        const { data: insertedRows, error: insertError } = await supabase
+          .from('scoring_events')
+          .insert(chunk)
+          .select('id');
         if (insertError) throw insertError;
+        (insertedRows || []).forEach((item) => insertedEventIds.push(item.id));
       }
 
       await reloadData();
       setImportReport({
         status: 'success',
-        fileName: file.name,
+        fileName: importPreview.fileName,
         importedEvents: eventPayloads.length,
         createdMatches,
-        warnings
+        warnings: importPreview.warnings
       });
+      setImportPreview(null);
       toast?.(`Imported ${eventPayloads.length} events.`, 'success');
-      if (warnings.length) toast?.(`Imported with warnings: ${warnings[0]}`, 'info');
+      if (importPreview.warnings.length) toast?.(`Imported with warnings: ${importPreview.warnings[0]}`, 'info');
     } catch {
-      setError('Failed to import stat sheet CSV.');
+      // best-effort rollback to avoid partial imports
+      if (insertedEventIds.length) {
+        await supabase.from('scoring_events').delete().in('id', insertedEventIds);
+      }
+      if (createdMatchIds.length) {
+        await supabase.from('matches').delete().in('id', createdMatchIds);
+      }
+      setError('Failed to import stat sheet CSV. Rolled back partial data.');
       setImportReport({
         status: 'error',
-        fileName: file.name,
+        fileName: importPreview.fileName,
         importedEvents: 0,
         createdMatches: 0,
-        warnings: ['Unexpected import error. Check CSV format and try again.']
+        warnings: ['Import failed and partial inserted data was rolled back.']
       });
-      toast?.('Failed to import stat sheet CSV.', 'error');
+      toast?.('Failed to import CSV. Partial writes rolled back.', 'error');
     } finally {
       setImporting(false);
-      if (importInputRef.current) importInputRef.current.value = '';
     }
   };
 
@@ -296,6 +355,42 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
         </div>
       )}
 
+      {importPreview && (
+        <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+          <div className="font-semibold">Import preview: {importPreview.fileName}</div>
+          <div className="mt-1">
+            Events to import: {importPreview.parsedEvents.length} · Distinct matches in file:{' '}
+            {importPreview.uniqueMatches}
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              className="rounded-lg bg-cyan-700 px-3 py-1.5 text-xs font-semibold text-white"
+              onClick={handleConfirmImport}
+              disabled={importing}
+            >
+              {importing ? 'Importing...' : 'Confirm import'}
+            </button>
+            <button
+              className="rounded-lg border border-cyan-300 px-3 py-1.5 text-xs font-semibold text-cyan-800"
+              onClick={() => setImportPreview(null)}
+              disabled={importing}
+            >
+              Cancel
+            </button>
+          </div>
+          {importPreview.warnings?.length > 0 && (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+              {importPreview.warnings.slice(0, 6).map((warning, index) => (
+                <li key={`${warning}_${index}`}>{warning}</li>
+              ))}
+              {importPreview.warnings.length > 6 && (
+                <li>...and {importPreview.warnings.length - 6} more warnings</li>
+              )}
+            </ul>
+          )}
+        </div>
+      )}
+
       {matches.length === 0 ? (
         <div className="rounded-2xl bg-white p-6 shadow-sm">
           <ModuleEmptyState
@@ -330,6 +425,9 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
                 <span>Shots: {sheet.summary.shots}</span>
                 <span>Personal fouls: {sheet.summary.personalFouls}</span>
                 <span>Timeouts: {sheet.summary.timeouts}</span>
+                <span>6v6 shots: {sheet.total.sixVsSixShots}</span>
+                <span>6v5/6v4 shots: {sheet.total.manUpShots}</span>
+                <span>Penalty shots: {sheet.total.penaltyShots}</span>
               </div>
             </div>
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -380,6 +478,14 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
                       <th className="px-3 py-2 text-right">Saved</th>
                       <th className="px-3 py-2 text-right">Missed</th>
                       <th className="px-3 py-2 text-right">Shot %</th>
+                      <th className="px-3 py-2 text-right">G P1</th>
+                      <th className="px-3 py-2 text-right">G P2</th>
+                      <th className="px-3 py-2 text-right">G P3</th>
+                      <th className="px-3 py-2 text-right">G P4</th>
+                      <th className="px-3 py-2 text-right">G OT</th>
+                      <th className="px-3 py-2 text-right">Shots 6v6</th>
+                      <th className="px-3 py-2 text-right">Shots 6v5/6v4</th>
+                      <th className="px-3 py-2 text-right">Shots Pen</th>
                       <th className="px-3 py-2 text-right">Excl F</th>
                       <th className="px-3 py-2 text-right">Pen F</th>
                       <th className="px-3 py-2 text-right">Pers F</th>
@@ -401,6 +507,14 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
                         <td className="px-3 py-2 text-right">{row.shotSaved}</td>
                         <td className="px-3 py-2 text-right">{row.shotMissed}</td>
                         <td className="px-3 py-2 text-right">{row.shotPct}%</td>
+                        <td className="px-3 py-2 text-right">{row.goalP1}</td>
+                        <td className="px-3 py-2 text-right">{row.goalP2}</td>
+                        <td className="px-3 py-2 text-right">{row.goalP3}</td>
+                        <td className="px-3 py-2 text-right">{row.goalP4}</td>
+                        <td className="px-3 py-2 text-right">{row.goalOT}</td>
+                        <td className="px-3 py-2 text-right">{row.sixVsSixShots}</td>
+                        <td className="px-3 py-2 text-right">{row.manUpShots}</td>
+                        <td className="px-3 py-2 text-right">{row.penaltyShots}</td>
                         <td className="px-3 py-2 text-right">{row.exclusionFouls}</td>
                         <td className="px-3 py-2 text-right">{row.penaltyFouls}</td>
                         <td className="px-3 py-2 text-right">{row.personalFouls}</td>
@@ -420,6 +534,14 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
                       <td className="px-3 py-2 text-right">{sheet.total.shotSaved}</td>
                       <td className="px-3 py-2 text-right">{sheet.total.shotMissed}</td>
                       <td className="px-3 py-2 text-right">{sheet.total.shotPct}%</td>
+                      <td className="px-3 py-2 text-right">{sheet.total.goalP1}</td>
+                      <td className="px-3 py-2 text-right">{sheet.total.goalP2}</td>
+                      <td className="px-3 py-2 text-right">{sheet.total.goalP3}</td>
+                      <td className="px-3 py-2 text-right">{sheet.total.goalP4}</td>
+                      <td className="px-3 py-2 text-right">{sheet.total.goalOT}</td>
+                      <td className="px-3 py-2 text-right">{sheet.total.sixVsSixShots}</td>
+                      <td className="px-3 py-2 text-right">{sheet.total.manUpShots}</td>
+                      <td className="px-3 py-2 text-right">{sheet.total.penaltyShots}</td>
                       <td className="px-3 py-2 text-right">{sheet.total.exclusionFouls}</td>
                       <td className="px-3 py-2 text-right">{sheet.total.penaltyFouls}</td>
                       <td className="px-3 py-2 text-right">{sheet.total.personalFouls}</td>

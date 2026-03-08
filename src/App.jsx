@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useMemo, useState } from 'react';
 import {
   Clapperboard,
   BarChart2,
@@ -20,19 +20,6 @@ import MobileNav from './components/MobileNav';
 import SidebarNav from './components/SidebarNav';
 import UtilityDock from './components/UtilityDock';
 import WorkspaceSetupScreen from './components/WorkspaceSetupScreen';
-import ScoringView from './modules/scoring/ScoringView';
-import PossessionView from './modules/possession/PossessionView';
-import MatchesView from './modules/matches/MatchesView';
-import ShotmapView from './modules/shotmap/ShotmapView';
-import AnalyticsView from './modules/analytics/AnalyticsView';
-import RosterView from './modules/roster/RosterView';
-import PlayersView from './modules/players/PlayersView';
-import HelpView from './modules/help/HelpView';
-import SettingsView from './modules/settings/SettingsView';
-import PrivacyView from './modules/privacy/PrivacyView';
-import HubView from './modules/hub/HubView';
-import VideoAnalysisView from './modules/video/VideoAnalysisView';
-import StatSheetView from './modules/statsheet/StatSheetView';
 import { useAuthSession } from './hooks/useAuthSession';
 import { useFeatureRequestDialog } from './hooks/useFeatureRequestDialog';
 import { usePersistedUiState } from './hooks/usePersistedUiState';
@@ -55,6 +42,21 @@ import {
   loadTeamScoring,
   notifyDataUpdated
 } from './lib/waterpolo/dataLoaders';
+
+const ScoringView = lazy(() => import('./modules/scoring/ScoringView'));
+const PossessionView = lazy(() => import('./modules/possession/PossessionView'));
+const MatchesView = lazy(() => import('./modules/matches/MatchesView'));
+const ShotmapView = lazy(() => import('./modules/shotmap/ShotmapView'));
+const AnalyticsView = lazy(() => import('./modules/analytics/AnalyticsView'));
+const RosterView = lazy(() => import('./modules/roster/RosterView'));
+const PlayersView = lazy(() => import('./modules/players/PlayersView'));
+const HelpView = lazy(() => import('./modules/help/HelpView'));
+const SettingsView = lazy(() => import('./modules/settings/SettingsView'));
+const PrivacyView = lazy(() => import('./modules/privacy/PrivacyView'));
+const HubView = lazy(() => import('./modules/hub/HubView'));
+const VideoAnalysisView = lazy(() => import('./modules/video/VideoAnalysisView'));
+const StatSheetView = lazy(() => import('./modules/statsheet/StatSheetView'));
+const ChangelogView = lazy(() => import('./modules/changelog/ChangelogView'));
 
 const App = () => {
   const { session, authLoading } = useAuthSession();
@@ -101,6 +103,7 @@ const App = () => {
       { key: 'video', label: 'Video', icon: <Clapperboard size={16} />, advanced: true },
       { key: 'possession', label: 'Possession', icon: <Share2 size={16} />, advanced: true },
       { key: 'help', label: 'Help', icon: <HelpCircle size={16} />, alwaysVisible: true },
+      { key: 'changelog', label: 'Changelog', icon: <ClipboardList size={16} />, alwaysVisible: true },
       { key: 'settings', label: 'Settings', icon: <Settings2 size={16} />, alwaysVisible: true }
     ],
     []
@@ -119,6 +122,7 @@ const App = () => {
       players: 'Review report cards and compare players across the selected data scope.',
       roster: 'Manage the shared team roster used across all waterpolo modules.',
       help: 'Getting started, legends, and common workflow questions.',
+      changelog: 'Recent product updates, fixes, and module-level improvements.',
       settings: 'Adjust visible modules, advanced analysis access, and workspace preferences.'
     }),
     []
@@ -410,153 +414,169 @@ const App = () => {
       />
 
       <main className="mx-auto max-w-7xl space-y-6 p-6">
-        {activeTab === 'hub' && (
-          <HubView showTips={preferences.showHubTips} showTooltips={preferences.showStatTooltips} />
-        )}
-        {activeTab === 'matches' && (
-          <MatchesView
-            seasonId={selectedSeasonId}
-            teamId={selectedTeamId}
-            userId={session.user.id}
-            confirmAction={confirmAction}
-            toast={toast}
-            loadOverview={loadTeamMatchesOverview}
-            onDataUpdated={notifyDataUpdated}
-            showTooltips={preferences.showStatTooltips}
-          />
-        )}
-        {activeTab === 'shotmap' && (
-          <ShotmapView
-            seasonId={selectedSeasonId}
-            teamId={selectedTeamId}
-            userId={session.user.id}
-            confirmAction={confirmAction}
-            toast={toast}
-            loadData={loadTeamData}
-            onDataUpdated={notifyDataUpdated}
-            periods={PERIODS}
-            attackTypes={ATTACK_TYPES}
-            zones={ZONES}
-            resultColors={RESULT_COLORS}
-            showTooltips={preferences.showStatTooltips}
-            onOpenModule={setActiveTab}
-          />
-        )}
-        {activeTab === 'analytics' && (
-          <AnalyticsView
-            seasonId={selectedSeasonId}
-            teamId={selectedTeamId}
-            userId={session.user.id}
-            loadData={loadTeamData}
-            zones={ZONES}
-            heatTypes={HEAT_TYPES}
-            attackTypes={ATTACK_TYPES}
-            periods={PERIODS}
-            showTooltips={preferences.showStatTooltips}
-            onOpenModule={setActiveTab}
-          />
-        )}
-        {activeTab === 'video' && (
-          <VideoAnalysisView
-            teamId={selectedTeamId}
-            seasonId={selectedSeasonId}
-            toast={toast}
-            showTooltips={preferences.showStatTooltips}
-          />
-        )}
-        {activeTab === 'scoring' && (
-          <ScoringView
-            seasonId={selectedSeasonId}
-            teamId={selectedTeamId}
-            userId={session.user.id}
-            confirmAction={confirmAction}
-            toast={toast}
-            loadData={loadTeamScoring}
-            onDataUpdated={notifyDataUpdated}
-            periods={PERIODS}
-            periodOrder={PERIOD_ORDER}
-            showTooltips={preferences.showStatTooltips}
-            onOpenModule={setActiveTab}
-          />
-        )}
-        {activeTab === 'possession' && (
-          <PossessionView
-            seasonId={selectedSeasonId}
-            teamId={selectedTeamId}
-            userId={session.user.id}
-            confirmAction={confirmAction}
-            toast={toast}
-            loadData={loadTeamPossessions}
-            onDataUpdated={notifyDataUpdated}
-            outcomes={POSSESSION_OUTCOMES}
-            showTooltips={preferences.showStatTooltips}
-            onOpenModule={setActiveTab}
-          />
-        )}
-        {activeTab === 'statsheet' && (
-          <StatSheetView
-            teamId={selectedTeamId}
-            seasonId={selectedSeasonId}
-            userId={session.user.id}
-            loadData={loadTeamScoring}
-            onOpenModule={setActiveTab}
-            toast={toast}
-          />
-        )}
-        {activeTab === 'players' && (
-          <PlayersView
-            seasonId={selectedSeasonId}
-            teamId={selectedTeamId}
-            userId={session.user.id}
-            seasons={seasons}
-            onSelectSeason={setSelectedSeasonId}
-            onSelectTeam={setSelectedTeamId}
-            loadData={loadTeamData}
-            showTooltips={preferences.showStatTooltips}
-            onOpenModule={setActiveTab}
-          />
-        )}
-        {activeTab === 'roster' && (
-          <RosterView
-            seasonId={selectedSeasonId}
-            teamId={selectedTeamId}
-            userId={session.user.id}
-            confirmAction={confirmAction}
-            toast={toast}
-            loadData={loadTeamData}
-            onDataUpdated={notifyDataUpdated}
-            showTooltips={preferences.showStatTooltips}
-            onOpenModule={setActiveTab}
-          />
-        )}
-        {activeTab === 'help' && <HelpView showTooltips={preferences.showStatTooltips} />}
-        {activeTab === 'settings' && (
-          <SettingsView
-            moduleConfig={moduleConfig}
-            moduleVisibility={moduleVisibility}
-            onToggle={(key) =>
-              setModuleVisibility((prev) => ({
-                ...prev,
-                [key]: !prev[key]
-              }))
-            }
-            onReset={() => {
-              const defaults = moduleConfig.reduce((acc, item) => {
-                if (!item.alwaysVisible) acc[item.key] = true;
-                return acc;
-              }, {});
-              setModuleVisibility(defaults);
-            }}
-            preferences={preferences}
-            onSetPreference={(key, value) =>
-              setPreferences((prev) => ({
-                ...prev,
-                [key]: value
-              }))
-            }
-          />
-        )}
-        {activeTab === 'privacy' && <PrivacyView />}
+        <Suspense fallback={<div className="p-10 text-slate-700">Loading module...</div>}>
+          {activeTab === 'hub' && (
+            <HubView
+              showTips={preferences.showHubTips}
+              showTooltips={preferences.showStatTooltips}
+              showBackupReminder={preferences.showBackupReminder}
+              lastBackupAt={preferences.lastBackupAt}
+            />
+          )}
+          {activeTab === 'matches' && (
+            <MatchesView
+              seasonId={selectedSeasonId}
+              teamId={selectedTeamId}
+              userId={session.user.id}
+              confirmAction={confirmAction}
+              toast={toast}
+              loadOverview={loadTeamMatchesOverview}
+              onDataUpdated={notifyDataUpdated}
+              showTooltips={preferences.showStatTooltips}
+            />
+          )}
+          {activeTab === 'shotmap' && (
+            <ShotmapView
+              seasonId={selectedSeasonId}
+              teamId={selectedTeamId}
+              userId={session.user.id}
+              confirmAction={confirmAction}
+              toast={toast}
+              loadData={loadTeamData}
+              onDataUpdated={notifyDataUpdated}
+              periods={PERIODS}
+              attackTypes={ATTACK_TYPES}
+              zones={ZONES}
+              resultColors={RESULT_COLORS}
+              showTooltips={preferences.showStatTooltips}
+              onOpenModule={setActiveTab}
+            />
+          )}
+          {activeTab === 'analytics' && (
+            <AnalyticsView
+              seasonId={selectedSeasonId}
+              teamId={selectedTeamId}
+              userId={session.user.id}
+              loadData={loadTeamData}
+              zones={ZONES}
+              heatTypes={HEAT_TYPES}
+              attackTypes={ATTACK_TYPES}
+              periods={PERIODS}
+              showTooltips={preferences.showStatTooltips}
+              onOpenModule={setActiveTab}
+            />
+          )}
+          {activeTab === 'video' && (
+            <VideoAnalysisView
+              teamId={selectedTeamId}
+              seasonId={selectedSeasonId}
+              toast={toast}
+              showTooltips={preferences.showStatTooltips}
+            />
+          )}
+          {activeTab === 'scoring' && (
+            <ScoringView
+              seasonId={selectedSeasonId}
+              teamId={selectedTeamId}
+              userId={session.user.id}
+              confirmAction={confirmAction}
+              toast={toast}
+              loadData={loadTeamScoring}
+              onDataUpdated={notifyDataUpdated}
+              periods={PERIODS}
+              periodOrder={PERIOD_ORDER}
+              showTooltips={preferences.showStatTooltips}
+              onOpenModule={setActiveTab}
+            />
+          )}
+          {activeTab === 'possession' && (
+            <PossessionView
+              seasonId={selectedSeasonId}
+              teamId={selectedTeamId}
+              userId={session.user.id}
+              confirmAction={confirmAction}
+              toast={toast}
+              loadData={loadTeamPossessions}
+              onDataUpdated={notifyDataUpdated}
+              outcomes={POSSESSION_OUTCOMES}
+              showTooltips={preferences.showStatTooltips}
+              onOpenModule={setActiveTab}
+            />
+          )}
+          {activeTab === 'statsheet' && (
+            <StatSheetView
+              teamId={selectedTeamId}
+              seasonId={selectedSeasonId}
+              userId={session.user.id}
+              loadData={loadTeamScoring}
+              onOpenModule={setActiveTab}
+              toast={toast}
+            />
+          )}
+          {activeTab === 'players' && (
+            <PlayersView
+              seasonId={selectedSeasonId}
+              teamId={selectedTeamId}
+              userId={session.user.id}
+              seasons={seasons}
+              onSelectSeason={setSelectedSeasonId}
+              onSelectTeam={setSelectedTeamId}
+              loadData={loadTeamData}
+              showTooltips={preferences.showStatTooltips}
+              onOpenModule={setActiveTab}
+            />
+          )}
+          {activeTab === 'roster' && (
+            <RosterView
+              seasonId={selectedSeasonId}
+              teamId={selectedTeamId}
+              userId={session.user.id}
+              confirmAction={confirmAction}
+              toast={toast}
+              loadData={loadTeamData}
+              onDataUpdated={notifyDataUpdated}
+              showTooltips={preferences.showStatTooltips}
+              onOpenModule={setActiveTab}
+            />
+          )}
+          {activeTab === 'help' && <HelpView showTooltips={preferences.showStatTooltips} />}
+          {activeTab === 'changelog' && <ChangelogView />}
+          {activeTab === 'settings' && (
+            <SettingsView
+              moduleConfig={moduleConfig}
+              moduleVisibility={moduleVisibility}
+              onToggle={(key) =>
+                setModuleVisibility((prev) => ({
+                  ...prev,
+                  [key]: !prev[key]
+                }))
+              }
+              onReset={() => {
+                const defaults = moduleConfig.reduce((acc, item) => {
+                  if (!item.alwaysVisible) acc[item.key] = true;
+                  return acc;
+                }, {});
+                setModuleVisibility(defaults);
+              }}
+              preferences={preferences}
+              onSetPreference={(key, value) =>
+                setPreferences((prev) => ({
+                  ...prev,
+                  [key]: value
+                }))
+              }
+              teamId={selectedTeamId}
+              seasonName={selectedSeason.name}
+              teamName={selectedTeam.name}
+              userId={session.user.id}
+              loadTeamData={loadTeamData}
+              loadTeamScoring={loadTeamScoring}
+              loadTeamPossessions={loadTeamPossessions}
+              toast={toast}
+            />
+          )}
+          {activeTab === 'privacy' && <PrivacyView />}
+        </Suspense>
       </main>
 
       <footer className="mx-auto mb-14 max-w-7xl px-6 text-xs text-slate-500 lg:mb-6">

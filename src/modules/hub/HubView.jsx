@@ -6,7 +6,16 @@ const HUB_TOOLTIPS = {
     'Recommended order: set season/team, add roster, create matches, then track in operational modules before reviewing analytics.'
 };
 
-const HubView = ({ showTips, showTooltips = true }) => (
+const HubView = ({ showTips, showTooltips = true, showBackupReminder = true, lastBackupAt = '' }) => {
+  const backupAgeDays = (() => {
+    if (!lastBackupAt) return null;
+    const stamp = new Date(lastBackupAt);
+    if (Number.isNaN(stamp.getTime())) return null;
+    return Math.floor((Date.now() - stamp.getTime()) / (1000 * 60 * 60 * 24));
+  })();
+  const showBackupCard = showBackupReminder && (backupAgeDays == null || backupAgeDays >= 7);
+
+  return (
   <div className="space-y-6">
     <div className="rounded-2xl bg-white p-6 shadow-sm">
       <p className="text-sm font-semibold text-cyan-700">Waterpolo Hub</p>
@@ -51,10 +60,17 @@ const HubView = ({ showTips, showTooltips = true }) => (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
             Need definitions for zones, event types, and color legends? Open `Help` in the sidebar.
           </div>
+          {showBackupCard && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+              Backup reminder: export a backup bundle from `Settings`.
+              {backupAgeDays == null ? ' No backup exported yet.' : ` Last backup was ${backupAgeDays} day(s) ago.`}
+            </div>
+          )}
         </div>
       )}
     </div>
   </div>
-);
+  );
+};
 
 export default HubView;

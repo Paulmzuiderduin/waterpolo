@@ -138,22 +138,25 @@ export const loadTeamScoring = async (teamId) => {
     return {
       roster: E2E_SAMPLE.roster,
       matches: E2E_SAMPLE.matches,
-      events: E2E_SAMPLE.events
+      events: E2E_SAMPLE.events,
+      shots: E2E_SAMPLE.shots
     };
   }
-  if (!teamId) return { roster: [], matches: [], events: [] };
-  const [rosterRes, matchRes, eventRes] = await Promise.all([
+  if (!teamId) return { roster: [], matches: [], events: [], shots: [] };
+  const [rosterRes, matchRes, eventRes, shotRes] = await Promise.all([
     supabase.from('roster').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
     supabase.from('matches').select('*').eq('team_id', teamId).order('created_at', { ascending: true }),
-    supabase.from('scoring_events').select('*').eq('team_id', teamId)
+    supabase.from('scoring_events').select('*').eq('team_id', teamId),
+    supabase.from('shots').select('*').eq('team_id', teamId)
   ]);
-  if (rosterRes.error || matchRes.error || eventRes.error) {
+  if (rosterRes.error || matchRes.error || eventRes.error || shotRes.error) {
     throw new Error('Failed to load scoring data');
   }
   return {
     roster: rosterRes.data || [],
     matches: matchRes.data || [],
-    events: eventRes.data || []
+    events: eventRes.data || [],
+    shots: shotRes.data || []
   };
 };
 

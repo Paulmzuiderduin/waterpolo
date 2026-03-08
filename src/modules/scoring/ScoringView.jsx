@@ -57,6 +57,8 @@ const ScoringView = ({
   });
   const [videoUrl, setVideoUrl] = useState('');
   const [videoName, setVideoName] = useState('');
+  const [liveMode, setLiveMode] = useState(false);
+  const [liveGuard, setLiveGuard] = useState(true);
   const [lastEventMeta, setLastEventMeta] = useState(() => ({
     period: '1',
     time: formatShotTime()
@@ -65,6 +67,8 @@ const ScoringView = ({
   const videoElementRef = useRef(null);
   const secondsHoldTimeoutRef = useRef(null);
   const secondsHoldIntervalRef = useRef(null);
+  const wakeLockRef = useRef(null);
+  const liveModeContainerRef = useRef(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -248,6 +252,35 @@ const ScoringView = ({
     };
   }, [videoUrl]);
 
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      if (!liveMode || !('wakeLock' in navigator)) return;
+      try {
+        // keep device awake during live scoring
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+      } catch {
+        wakeLockRef.current = null;
+      }
+    };
+    requestWakeLock();
+    return () => {
+      wakeLockRef.current?.release?.();
+      wakeLockRef.current = null;
+    };
+  }, [liveMode]);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+      await liveModeContainerRef.current?.requestFullscreen?.();
+    } catch {
+      // ignore fullscreen errors on unsupported browsers
+    }
+  };
+
   const toClampedTime = (nextTotal) => {
     const clamped = Math.max(0, Math.min(7 * 60, nextTotal));
     const minutes = Math.floor(clamped / 60);
@@ -297,6 +330,10 @@ const ScoringView = ({
       clearSecondsHold();
     };
   }, []);
+
+  useEffect(() => {
+    if (!liveMode) setLiveGuard(true);
+  }, [liveMode]);
 
   const saveEvent = async (eventType = form.type) => {
     if (!currentMatch) {
@@ -396,7 +433,10 @@ const ScoringView = ({
   }
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div
+      ref={liveModeContainerRef}
+      className={`space-y-4 md:space-y-6 ${liveMode ? 'rounded-2xl border border-cyan-200 bg-cyan-50/40 p-3' : ''}`}
+    >
       <input
         ref={videoInputRef}
         type="file"
@@ -412,6 +452,12 @@ const ScoringView = ({
           description="Record live match events for the selected team with an optional local video reference."
           actions={
             <>
+              <ToolbarButton className="text-xs" onClick={() => setLiveMode((prev) => !prev)}>
+                {liveMode ? 'Exit live mode' : 'Live mode'}
+              </ToolbarButton>
+              <ToolbarButton className="text-xs" onClick={toggleFullscreen}>
+                Fullscreen
+              </ToolbarButton>
               <ToolbarButton variant="primary" className="text-xs" onClick={openVideoPicker}>
                 {videoUrl ? 'Change video' : 'Select video (optional)'}
               </ToolbarButton>
@@ -432,6 +478,20 @@ const ScoringView = ({
             <div className="text-sm font-semibold text-slate-900">Match events</div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
+                liveMode ? 'border-cyan-600 bg-cyan-600 text-white' : 'border-slate-200 text-slate-700'
+              }`}
+              onClick={() => setLiveMode((prev) => !prev)}
+            >
+              Live
+            </button>
+            <button
+              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
+              onClick={toggleFullscreen}
+            >
+              Full
+            </button>
             <button
               className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
               onClick={openVideoPicker}
@@ -626,8 +686,20 @@ const ScoringView = ({
         )}
 
         <div className="mt-3 rounded-lg border border-slate-200 p-2">
-          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-            Event log ({matchEventsSorted.length})
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Event log ({matchEventsSorted.length})
+            </div>
+            {liveMode && (
+              <button
+                className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
+                  liveGuard ? 'bg-amber-100 text-amber-800' : 'bg-slate-800 text-white'
+                }`}
+                onClick={() => setLiveGuard((prev) => !prev)}
+              >
+                {liveGuard ? 'Unlock edits' : 'Lock edits'}
+              </button>
+            )}
           </div>
           <div className="mt-2 max-h-[22vh] space-y-1.5 overflow-y-auto pr-1">
             {matchEventsSorted.length === 0 && (
@@ -649,6 +721,7 @@ const ScoringView = ({
                   <div className="mt-1 flex items-center gap-2 font-semibold">
                     <button
                       className="text-slate-500"
+                      disabled={liveMode && liveGuard}
                       onClick={() => {
                         setEditingEventId(evt.id);
                         setForm({
@@ -661,7 +734,11 @@ const ScoringView = ({
                     >
                       Edit
                     </button>
-                    <button className="text-red-500" onClick={() => deleteEvent(evt.id)}>
+                    <button
+                      className="text-red-500 disabled:opacity-40"
+                      disabled={liveMode && liveGuard}
+                      onClick={() => deleteEvent(evt.id)}
+                    >
                       Delete
                     </button>
                   </div>
@@ -945,6 +1022,16 @@ const ScoringView = ({
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-slate-700">Event log (selected match)</h3>
+              {liveMode && (
+                <button
+                  className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
+                    liveGuard ? 'bg-amber-100 text-amber-800' : 'bg-slate-800 text-white'
+                  }`}
+                  onClick={() => setLiveGuard((prev) => !prev)}
+                >
+                  {liveGuard ? 'Unlock edits' : 'Lock edits'}
+                </button>
+              )}
             </div>
             <div
               className={`mt-3 space-y-2 overflow-y-auto pr-1 text-sm text-slate-600 ${
@@ -991,7 +1078,8 @@ const ScoringView = ({
                     </div>
                     <div className="flex items-center gap-2 text-xs font-semibold">
                       <button
-                        className="text-slate-500"
+                        className="text-slate-500 disabled:opacity-40"
+                        disabled={liveMode && liveGuard}
                         onClick={() => {
                           setEditingEventId(evt.id);
                           setForm({
@@ -1004,7 +1092,11 @@ const ScoringView = ({
                       >
                         Edit
                       </button>
-                      <button className="text-red-500" onClick={() => deleteEvent(evt.id)}>
+                      <button
+                        className="text-red-500 disabled:opacity-40"
+                        disabled={liveMode && liveGuard}
+                        onClick={() => deleteEvent(evt.id)}
+                      >
                         Delete
                       </button>
                     </div>
@@ -1014,25 +1106,28 @@ const ScoringView = ({
             </div>
           </div>
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Stats scope</h3>
-            <label className="mt-3 block text-xs font-semibold text-slate-500">Match selection</label>
-            <select
-              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              value={statsMatchId}
-              onChange={(event) => setStatsMatchId(event.target.value)}
-            >
-              <option value="">All matches</option>
-              {sortedMatches.map((match) => (
-                <option key={match.id} value={match.id}>
-                  {match.name}
-                  {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!liveMode && (
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-700">Stats scope</h3>
+              <label className="mt-3 block text-xs font-semibold text-slate-500">Match selection</label>
+              <select
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={statsMatchId}
+                onChange={(event) => setStatsMatchId(event.target.value)}
+              >
+                <option value="">All matches</option>
+                {sortedMatches.map((match) => (
+                  <option key={match.id} value={match.id}>
+                    {match.name}
+                    {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
+          {!liveMode && (
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-700">Team stats</h3>
             <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-600">
               <div className="rounded-lg border border-slate-100 px-3 py-2">
@@ -1127,9 +1222,11 @@ const ScoringView = ({
                 <span className="font-semibold text-emerald-700">{stats.shotConversion}%</span>
               </div>
             </div>
-          </div>
+            </div>
+          )}
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
+          {!liveMode && (
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-700">Player stats</h3>
             <div className="mt-3 space-y-2 text-sm text-slate-600">
               {Object.keys(stats.playerStats).length === 0 && <div>No player events logged.</div>}
@@ -1149,7 +1246,8 @@ const ScoringView = ({
                 </div>
               ))}
             </div>
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

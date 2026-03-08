@@ -1,5 +1,5 @@
-import { normalizeTime } from '../../utils/time';
-import { normalizeScoringEventType } from './scoring';
+import { normalizeTime } from '../../utils/time.js';
+import { normalizeScoringEventType } from './scoring.js';
 
 const HEADER_ALIASES = {
   match_name: ['match_name', 'match', 'game', 'wedstrijd'],

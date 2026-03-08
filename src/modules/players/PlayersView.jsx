@@ -246,6 +246,24 @@ const PlayersView = ({
       }))
       .sort((a, b) => b.attempts - a.attempts);
     const recentShots = playerShots.slice(0, 8);
+    const byMatch = {};
+    playerShots.forEach((shot) => {
+      const key = `${shot.matchName}|${shot.matchDate}`;
+      byMatch[key] = byMatch[key] || { match: key, shots: 0, goals: 0, date: shot.matchDate || '' };
+      byMatch[key].shots += 1;
+      if (shot.result === 'raak') byMatch[key].goals += 1;
+    });
+    const matchSeries = Object.values(byMatch).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const lastFive = matchSeries.slice(-5);
+    const avgShotsAll = matchSeries.length
+      ? matchSeries.reduce((sum, item) => sum + item.shots, 0) / matchSeries.length
+      : 0;
+    const avgShotsLastFive = lastFive.length ? lastFive.reduce((sum, item) => sum + item.shots, 0) / lastFive.length : 0;
+    const shotStdDev = matchSeries.length
+      ? Math.sqrt(
+          matchSeries.reduce((sum, item) => sum + (item.shots - avgShotsAll) ** 2, 0) / matchSeries.length
+        )
+      : 0;
     return {
       total: playerShots.length,
       goals: goals.length,
@@ -262,7 +280,12 @@ const PlayersView = ({
       topZones,
       periodRows,
       attackRows,
-      recentShots
+      recentShots,
+      trend: {
+        avgShotsAll: avgShotsAll.toFixed(1),
+        avgShotsLastFive: avgShotsLastFive.toFixed(1),
+        shotStdDev: shotStdDev.toFixed(1)
+      }
     };
   };
 
@@ -300,6 +323,24 @@ const PlayersView = ({
     const periodRows = Object.entries(periodBreakdown)
       .map(([period, values]) => ({ period, ...values }))
       .sort((a, b) => Number(a.period) - Number(b.period));
+    const byMatch = {};
+    playerEvents.forEach((evt) => {
+      const key = `${evt.matchName}|${evt.matchDate}`;
+      byMatch[key] = byMatch[key] || { match: key, events: 0, goals: 0, date: evt.matchDate || '' };
+      byMatch[key].events += 1;
+      if (evt.type === 'shot_goal') byMatch[key].goals += 1;
+    });
+    const matchSeries = Object.values(byMatch).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const lastFive = matchSeries.slice(-5);
+    const avgEventsAll = matchSeries.length
+      ? matchSeries.reduce((sum, item) => sum + item.events, 0) / matchSeries.length
+      : 0;
+    const avgEventsLastFive = lastFive.length ? lastFive.reduce((sum, item) => sum + item.events, 0) / lastFive.length : 0;
+    const eventStdDev = matchSeries.length
+      ? Math.sqrt(
+          matchSeries.reduce((sum, item) => sum + (item.events - avgEventsAll) ** 2, 0) / matchSeries.length
+        )
+      : 0;
     return {
       goals,
       shotSaved,
@@ -318,7 +359,12 @@ const PlayersView = ({
       total: playerEvents.length,
       scoringImpactPct: pct(goals, playerEvents.length),
       periodRows,
-      recentEvents: playerEvents.slice(0, 8)
+      recentEvents: playerEvents.slice(0, 8),
+      trend: {
+        avgEventsAll: avgEventsAll.toFixed(1),
+        avgEventsLastFive: avgEventsLastFive.toFixed(1),
+        eventStdDev: eventStdDev.toFixed(1)
+      }
     };
   };
 
@@ -637,6 +683,18 @@ const PlayersView = ({
                         <div className="text-xs text-slate-500">Avg goal distance</div>
                         <div className="text-lg font-semibold">{selectedStats.avgDistance}m</div>
                       </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Last 5 avg shots</div>
+                        <div className="text-lg font-semibold">{selectedStats.trend.avgShotsLastFive}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Season avg shots</div>
+                        <div className="text-lg font-semibold">{selectedStats.trend.avgShotsAll}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Consistency (σ shots)</div>
+                        <div className="text-lg font-semibold">{selectedStats.trend.shotStdDev}</div>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -737,6 +795,18 @@ const PlayersView = ({
                           />
                         </div>
                         <div className="text-lg font-semibold">{selectedStats.disciplineLoad}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Last 5 avg events</div>
+                        <div className="text-lg font-semibold">{selectedStats.trend.avgEventsLastFive}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Season avg events</div>
+                        <div className="text-lg font-semibold">{selectedStats.trend.avgEventsAll}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 p-3">
+                        <div className="text-xs text-slate-500">Consistency (σ events)</div>
+                        <div className="text-lg font-semibold">{selectedStats.trend.eventStdDev}</div>
                       </div>
                     </div>
 

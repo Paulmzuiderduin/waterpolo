@@ -1,4 +1,4 @@
-import { normalizeScoringEventType } from './scoring';
+import { normalizeScoringEventType } from './scoring.js';
 
 const toDisplayName = (player) => `#${player.cap_number} ${player.name}`;
 
@@ -19,16 +19,29 @@ const createRow = ({ capNumber = '', playerId = '', name = '' }) => ({
   turnoversWon: 0,
   turnoversLost: 0,
   misconducts: 0,
-  violentActions: 0
+  violentActions: 0,
+  goalP1: 0,
+  goalP2: 0,
+  goalP3: 0,
+  goalP4: 0,
+  goalOT: 0,
+  sixVsSixShots: 0,
+  manUpShots: 0,
+  penaltyShots: 0
 });
 
-const attachEvent = (bucket, eventType, matchId) => {
+const attachEvent = (bucket, eventType, matchId, period = '') => {
   bucket.totalEvents += 1;
   if (matchId) bucket.matches.add(matchId);
 
   if (eventType === 'shot_goal') {
     bucket.shotGoals += 1;
     bucket.shots += 1;
+    if (period === '1') bucket.goalP1 += 1;
+    if (period === '2') bucket.goalP2 += 1;
+    if (period === '3') bucket.goalP3 += 1;
+    if (period === '4') bucket.goalP4 += 1;
+    if (period === 'OT') bucket.goalOT += 1;
   }
   if (eventType === 'shot_saved') {
     bucket.shotSaved += 1;
@@ -48,6 +61,20 @@ const attachEvent = (bucket, eventType, matchId) => {
   bucket.personalFouls = bucket.exclusionFouls + bucket.penaltyFouls;
 };
 
+const attachShotSplit = (bucket, attackType) => {
+  if (attackType === '6vs6') {
+    bucket.sixVsSixShots += 1;
+    return;
+  }
+  if (attackType === '6vs5' || attackType === '6vs4') {
+    bucket.manUpShots += 1;
+    return;
+  }
+  if (attackType === 'strafworp') {
+    bucket.penaltyShots += 1;
+  }
+};
+
 const finalizeRow = (row) => ({
   ...row,
   matches: row.matches.size,
@@ -61,7 +88,14 @@ const compareByCap = (a, b) => {
   return String(a.capNumber).localeCompare(String(b.capNumber));
 };
 
-export const buildStatSheet = ({ roster = [], matches = [], events = [], scope = 'season', matchId = '' }) => {
+export const buildStatSheet = ({
+  roster = [],
+  matches = [],
+  events = [],
+  shots = [],
+  scope = 'season',
+  matchId = ''
+}) => {
   const matchSet =
     scope === 'match' && matchId
       ? new Set([matchId])
@@ -109,9 +143,32 @@ export const buildStatSheet = ({ roster = [], matches = [], events = [], scope =
         })
       );
     }
-    attachEvent(rowsByCap.get(cap), evt.type, evt.matchId);
-    attachEvent(teamTotals, evt.type, evt.matchId);
+    attachEvent(rowsByCap.get(cap), evt.type, evt.matchId, evt.period);
+    attachEvent(teamTotals, evt.type, evt.matchId, evt.period);
   });
+
+  shots
+    .map((shot) => ({
+      ...shot,
+      matchId: shot.match_id || shot.matchId || '',
+      playerCap: shot.player_cap || shot.playerCap || '',
+      attackType: shot.attack_type || shot.attackType || ''
+    }))
+    .filter((shot) => !matchSet.size || matchSet.has(shot.matchId))
+    .forEach((shot) => {
+      if (!shot.playerCap) return;
+      if (!rowsByCap.has(shot.playerCap)) {
+        rowsByCap.set(
+          shot.playerCap,
+          createRow({
+            capNumber: shot.playerCap,
+            name: `#${shot.playerCap} (not in roster)`
+          })
+        );
+      }
+      attachShotSplit(rowsByCap.get(shot.playerCap), shot.attackType);
+      attachShotSplit(teamTotals, shot.attackType);
+    });
 
   const rows = Array.from(rowsByCap.values())
     .map((row) => finalizeRow(row))
@@ -150,7 +207,15 @@ export const exportStatSheetCsv = ({ rows = [], total, scopeLabel = 'Season' }) 
     'Turnovers won',
     'Turnovers lost',
     'Misconduct',
-    'Violent action'
+    'Violent action',
+    'Goal P1',
+    'Goal P2',
+    'Goal P3',
+    'Goal P4',
+    'Goal OT',
+    'Shots 6v6',
+    'Shots 6v5/6v4',
+    'Shots penalty'
   ];
 
   const lines = [header.join(',')];
@@ -174,7 +239,15 @@ export const exportStatSheetCsv = ({ rows = [], total, scopeLabel = 'Season' }) 
         row.turnoversWon,
         row.turnoversLost,
         row.misconducts,
-        row.violentActions
+        row.violentActions,
+        row.goalP1,
+        row.goalP2,
+        row.goalP3,
+        row.goalP4,
+        row.goalOT,
+        row.sixVsSixShots,
+        row.manUpShots,
+        row.penaltyShots
       ].join(',')
     );
   });
@@ -199,7 +272,15 @@ export const exportStatSheetCsv = ({ rows = [], total, scopeLabel = 'Season' }) 
         total.turnoversWon,
         total.turnoversLost,
         total.misconducts,
-        total.violentActions
+        total.violentActions,
+        total.goalP1,
+        total.goalP2,
+        total.goalP3,
+        total.goalP4,
+        total.goalOT,
+        total.sixVsSixShots,
+        total.manUpShots,
+        total.penaltyShots
       ].join(',')
     );
   }

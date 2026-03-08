@@ -4,7 +4,9 @@ const DEFAULT_PREFERENCES = {
   rememberLastTab: true,
   showHubTips: true,
   showStatTooltips: true,
-  showAdvancedModules: false
+  showAdvancedModules: false,
+  showBackupReminder: true,
+  lastBackupAt: ''
 };
 
 export const usePersistedUiState = ({ sessionUser, moduleConfig, seasons, loadingSeasons }) => {

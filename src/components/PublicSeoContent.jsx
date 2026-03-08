@@ -53,6 +53,14 @@ const PublicSeoContent = () => (
         Water polo shotmap app
       </a>
     </div>
+    <a
+      className="mt-3 inline-block text-xs font-semibold text-cyan-700 underline"
+      href="/docs/waterpolo-quickstart.html"
+      target="_blank"
+      rel="noreferrer"
+    >
+      Read quickstart guide (3 minutes)
+    </a>
   </section>
 );
 

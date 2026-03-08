@@ -61,6 +61,10 @@ const TAB_META = {
     title: 'Waterpolo Hub Help Center',
     description: 'Getting started guide, legends, and FAQs for using Waterpolo Hub modules.'
   },
+  changelog: {
+    title: 'Waterpolo Hub Changelog',
+    description: 'Track recent feature releases, fixes, and updates across Waterpolo Hub modules.'
+  },
   settings: {
     title: 'Waterpolo Hub Settings',
     description: 'Configure module visibility and user preferences in Waterpolo Hub.'

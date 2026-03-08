@@ -32,6 +32,14 @@ const HelpView = ({ showTooltips = true }) => (
             <li>Use Analytics for heatmaps and filters.</li>
             <li>Open Players for report cards and comparisons.</li>
           </ol>
+          <a
+            href="/docs/waterpolo-quickstart.html"
+            className="mt-4 inline-block text-xs font-semibold text-cyan-700 underline"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open quickstart guide (3 minutes)
+          </a>
         </div>
 
         <div className="rounded-2xl bg-white p-5 shadow-sm">

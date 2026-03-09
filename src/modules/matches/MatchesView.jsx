@@ -108,6 +108,16 @@ const MatchesView = ({
     [filteredMatches]
   );
 
+  const editingLineupMatch = useMemo(
+    () => matches.find((match) => match.id === editingLineupMatchId) || null,
+    [editingLineupMatchId, matches]
+  );
+
+  const closeLineupEditor = () => {
+    setEditingLineupMatchId('');
+    setLineupSelection({});
+  };
+
   const getPlayingLineupRows = (matchId) =>
     (lineupsByMatch[matchId] || []).filter((row) => (row.status || 'playing') === 'playing');
 
@@ -167,8 +177,7 @@ const MatchesView = ({
         byMatch[row.match_id].push(row);
       });
       setLineupsByMatch(byMatch);
-      setEditingLineupMatchId('');
-      setLineupSelection({});
+      closeLineupEditor();
       toast('Lineup saved.', 'success');
       onDataUpdated?.();
     } catch (e) {
@@ -177,6 +186,17 @@ const MatchesView = ({
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (!editingLineupMatchId) return undefined;
+    const onEscape = (event) => {
+      if (event.key === 'Escape') {
+        closeLineupEditor();
+      }
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [editingLineupMatchId]);
 
   const createMatch = async () => {
     if (!creating.name.trim()) {
@@ -582,58 +602,73 @@ const MatchesView = ({
       </div>
 
       {editingLineupMatchId && (
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-slate-700">Match lineup</h3>
-            <div className="text-xs text-slate-500">
-              {
-                matches.find((match) => match.id === editingLineupMatchId)?.name
-              }{' '}
-              · {Object.values(lineupSelection).filter(Boolean).length} selected
-            </div>
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Select who is playing this match. Scoring uses this lineup by default.
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
-            {roster.map((player) => (
-              <label
-                key={player.id}
-                className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={closeLineupEditor}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">Match lineup</h3>
+                <div className="text-xs text-slate-500">
+                  {editingLineupMatch?.name || 'Match'} ·{' '}
+                  {Object.values(lineupSelection).filter(Boolean).length} selected
+                </div>
+              </div>
+              <button
+                className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700"
+                onClick={closeLineupEditor}
               >
-                <input
-                  type="checkbox"
-                  checked={Boolean(lineupSelection[player.id])}
-                  onChange={(event) =>
-                    setLineupSelection((prev) => ({
-                      ...prev,
-                      [player.id]: event.target.checked
-                    }))
-                  }
-                />
-                <span>
-                  #{player.capNumber} {player.name}
-                </span>
-              </label>
-            ))}
-          </div>
-          <div className="mt-4 flex items-center gap-2">
-            <button
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              onClick={saveLineup}
-              disabled={saving}
-            >
-              Save lineup
-            </button>
-            <button
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
-              onClick={() => {
-                setEditingLineupMatchId('');
-                setLineupSelection({});
-              }}
-            >
-              Cancel
-            </button>
+                Close
+              </button>
+            </div>
+
+            <div className="max-h-[calc(90vh-120px)] overflow-y-auto p-4">
+              <p className="text-xs text-slate-500">
+                Select who is playing this match. Scoring uses this lineup by default.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+                {roster.map((player) => (
+                  <label
+                    key={player.id}
+                    className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(lineupSelection[player.id])}
+                      onChange={(event) =>
+                        setLineupSelection((prev) => ({
+                          ...prev,
+                          [player.id]: event.target.checked
+                        }))
+                      }
+                    />
+                    <span>
+                      #{player.capNumber} {player.name}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3">
+              <button
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm"
+                onClick={closeLineupEditor}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                onClick={saveLineup}
+                disabled={saving}
+              >
+                Save lineup
+              </button>
+            </div>
           </div>
         </div>
       )}

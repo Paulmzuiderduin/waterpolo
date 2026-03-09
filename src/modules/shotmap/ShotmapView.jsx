@@ -121,6 +121,10 @@ const ShotmapView = ({
   };
 
   const handleFieldClick = (event) => {
+    if (seasonMode) {
+      setError('Adding shots is disabled in Season mode. Switch to Match mode.');
+      return;
+    }
     if (!fieldRef.current) return;
     if (!currentMatch) {
       setError('Create a match first.');
@@ -145,6 +149,10 @@ const ShotmapView = ({
   };
 
   const handlePenaltyClick = () => {
+    if (seasonMode) {
+      setError('Adding shots is disabled in Season mode. Switch to Match mode.');
+      return;
+    }
     if (!currentMatch) {
       setError('Create a match first.');
       return;
@@ -168,6 +176,10 @@ const ShotmapView = ({
 
   const saveShot = async () => {
     if (!pendingShot || !currentMatch) return;
+    if (seasonMode && !editingShotId) {
+      setError('Adding shots is disabled in Season mode. Switch to Match mode.');
+      return;
+    }
     if (!pendingShot.playerCap) {
       setError('Select a player.');
       return;
@@ -365,6 +377,13 @@ const ShotmapView = ({
   };
 
   const penaltyShots = filteredShots.filter((shot) => shot.attackType === 'strafworp');
+
+  useEffect(() => {
+    if (seasonMode && pendingShot && !editingShotId) {
+      setPendingShot(null);
+      setEditingShotId(null);
+    }
+  }, [seasonMode, pendingShot, editingShotId]);
 
   if (loading) {
     return <div className="p-10 text-slate-700">Loading...</div>;
@@ -624,13 +643,17 @@ const ShotmapView = ({
                   enabled={showTooltips}
                 />
               </h3>
-              <div className="text-xs text-slate-500">Click to add a shot</div>
+              <div className="text-xs text-slate-500">
+                {seasonMode ? 'Season mode: field is view-only' : 'Click to add a shot'}
+              </div>
             </div>
             <div className="mt-4 flex justify-center">
               <div
                 ref={fieldRef}
                 data-testid="shotmap-field"
-                className="relative h-[600px] w-full max-w-[720px] cursor-crosshair overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a]"
+                className={`relative h-[600px] w-full max-w-[720px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a] ${
+                  seasonMode ? 'cursor-default' : 'cursor-crosshair'
+                }`}
                 onClick={handleFieldClick}
               >
                 <div className="absolute left-0 top-[48%] h-[2px] w-full bg-yellow-300" />
@@ -653,7 +676,12 @@ const ShotmapView = ({
                     {zone.id === 14 && (
                       <div className="absolute inset-0 grid grid-cols-3 place-items-center gap-1 p-2">
                         <button
-                          className="col-span-3 rounded-lg bg-yellow-400 px-2 py-1 text-xs font-semibold text-slate-900"
+                          className={`col-span-3 rounded-lg px-2 py-1 text-xs font-semibold ${
+                            seasonMode
+                              ? 'cursor-not-allowed bg-slate-300 text-slate-600'
+                              : 'bg-yellow-400 text-slate-900'
+                          }`}
+                          disabled={seasonMode}
                           onClick={(event) => {
                             event.stopPropagation();
                             handlePenaltyClick();

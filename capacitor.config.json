@@ -1,9 +1,0 @@
-{
-  "appId": "com.paulzuiderduin.waterpolohub",
-  "appName": "Waterpolo Hub",
-  "webDir": "dist",
-  "bundledWebRuntime": false,
-  "server": {
-    "androidScheme": "https"
-  }
-}

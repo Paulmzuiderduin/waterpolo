@@ -5,6 +5,7 @@ import ModuleEmptyState from '../../components/ModuleEmptyState';
 import { formatShotTime, normalizeTime, splitTimeParts, timeToSeconds } from '../../utils/time';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
 import ToolbarButton from '../../components/ToolbarButton';
+import { loadTeamLineups, saveMatchLineup } from '../../lib/waterpolo/dataLoaders';
 import {
   createEmptyPlayerScoringStats,
   createEmptyScoringTotals,
@@ -39,16 +40,30 @@ const ScoringView = ({
   periods,
   periodOrder,
   showTooltips = true,
-  onOpenModule
+  onOpenModule,
+  isAppMode = false
 }) => {
   const [allRoster, setAllRoster] = useState([]);
   const [matches, setMatches] = useState([]);
   const [events, setEvents] = useState([]);
   const [lineups, setLineups] = useState([]);
+  const [lineupSupported, setLineupSupported] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentMatchId, setCurrentMatchId] = useState('');
   const [statsMatchId, setStatsMatchId] = useState('');
+  const [creatingMatch, setCreatingMatch] = useState({
+    name: '',
+    opponentName: ''
+  });
+  const [savingMatch, setSavingMatch] = useState(false);
+  const [editingLineup, setEditingLineup] = useState(false);
+  const [lineupSelection, setLineupSelection] = useState({});
+  const [savingLineup, setSavingLineup] = useState(false);
+  const [isFullscreenActive, setIsFullscreenActive] = useState(false);
+  const [isLandscape, setIsLandscape] = useState(
+    typeof window !== 'undefined' ? window.innerWidth > window.innerHeight : false
+  );
   const [editingEventId, setEditingEventId] = useState(null);
   const [form, setForm] = useState({
     type: 'goal',
@@ -107,6 +122,7 @@ const ScoringView = ({
         setCurrentMatchId(sortedPayloadMatches[0]?.id || '');
         setStatsMatchId('');
         setLineups(payload.lineups || []);
+        setLineupSupported(Boolean(payload.lineupsSupported));
         setError('');
       } catch (e) {
         if (active) setError('Could not load scoring data.');
@@ -343,6 +359,29 @@ const ScoringView = ({
     };
   }, [focusMode]);
 
+  useEffect(() => {
+    const onResize = () => {
+      setIsLandscape(window.innerWidth > window.innerHeight);
+    };
+    const onFullscreenChange = () => {
+      const active =
+        Boolean(document.fullscreenElement) || Boolean(document.webkitFullscreenElement);
+      setIsFullscreenActive(active);
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    onResize();
+    onFullscreenChange();
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
+    };
+  }, []);
+
   const getFullscreenElement = () =>
     document.fullscreenElement || document.webkitFullscreenElement || null;
 
@@ -548,6 +587,127 @@ const ScoringView = ({
     await deleteEvent(last.id, { skipConfirm: true });
   };
 
+  const getLineupSelectionKey = (player) => player.teamPlayerId || player.playerId || player.id;
+
+  const refreshLineups = async () => {
+    const refreshed = await loadTeamLineups(teamId);
+    setLineups(refreshed.lineups || []);
+    setLineupSupported(Boolean(refreshed.supported));
+  };
+
+  const openLineupEditor = () => {
+    if (!currentMatchId) {
+      setError('Select a match first.');
+      return;
+    }
+    if (!lineupSupported) {
+      setError('Match lineup requires the latest database update.');
+      return;
+    }
+    const rows = (lineups || []).filter(
+      (row) => row.match_id === currentMatchId && (row.status || 'playing') === 'playing'
+    );
+    const nextSelection = {};
+    if (rows.length) {
+      rows.forEach((row) => {
+        const key = row.team_player_id || row.player_id;
+        if (key) nextSelection[key] = true;
+      });
+    } else {
+      allRoster.forEach((player) => {
+        nextSelection[getLineupSelectionKey(player)] = true;
+      });
+    }
+    setLineupSelection(nextSelection);
+    setEditingLineup(true);
+    setError('');
+  };
+
+  const saveLineup = async () => {
+    if (!currentMatchId) return;
+    const selectedRows = allRoster.filter((player) => lineupSelection[getLineupSelectionKey(player)]);
+    if (!selectedRows.length) {
+      setError('Select at least one playing player.');
+      return;
+    }
+    try {
+      setSavingLineup(true);
+      await saveMatchLineup({
+        matchId: currentMatchId,
+        seasonId,
+        teamId,
+        userId,
+        lineupRows: selectedRows.map((player) => ({
+          id: player.teamPlayerId || player.id,
+          player_id: player.playerId || player.id,
+          cap_number: player.capNumber,
+          status: 'playing'
+        }))
+      });
+      await refreshLineups();
+      setEditingLineup(false);
+      toast('Lineup saved.', 'success');
+      onDataUpdated?.();
+    } catch (e) {
+      setError(e.message || 'Failed to save lineup.');
+    } finally {
+      setSavingLineup(false);
+    }
+  };
+
+  const createMatch = async () => {
+    if (!creatingMatch.name.trim()) {
+      setError('Match name is required.');
+      return;
+    }
+    try {
+      setSavingMatch(true);
+      const { data, error: insertError } = await supabase
+        .from('matches')
+        .insert({
+          name: creatingMatch.name.trim(),
+          date: new Date().toISOString().slice(0, 10),
+          opponent_name: creatingMatch.opponentName.trim(),
+          season_id: seasonId,
+          team_id: teamId,
+          user_id: userId
+        })
+        .select('*')
+        .single();
+      if (insertError) throw insertError;
+
+      setMatches((prev) => [data, ...prev]);
+      setCurrentMatchId(data.id);
+      setStatsMatchId('');
+      setCreatingMatch({ name: '', opponentName: '' });
+
+      if (lineupSupported && allRoster.length) {
+        await saveMatchLineup({
+          matchId: data.id,
+          seasonId,
+          teamId,
+          userId,
+          lineupRows: allRoster.map((player) => ({
+            id: player.teamPlayerId || player.id,
+            player_id: player.playerId || player.id,
+            cap_number: player.capNumber,
+            status: 'playing'
+          }))
+        });
+        await refreshLineups();
+      }
+
+      setError('');
+      toast('Match created.', 'success');
+      onDataUpdated?.();
+    } catch (e) {
+      setError(e.message || 'Failed to create match.');
+      toast('Failed to create match.', 'error');
+    } finally {
+      setSavingMatch(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-10 text-slate-700">Loading...</div>;
   }
@@ -566,6 +726,10 @@ const ScoringView = ({
         paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))'
       }
     : undefined;
+
+  const compactAppFullscreen = isAppMode && (focusMode || isFullscreenActive || (liveMode && isLandscape));
+  const showDesktopLayout = !isAppMode;
+  const mobileLayoutClass = isAppMode ? 'rounded-2xl bg-white p-3 shadow-sm' : 'rounded-2xl bg-white p-3 shadow-sm md:hidden';
 
   return (
     <div ref={liveModeContainerRef} className={containerClasses} style={containerStyle}>
@@ -589,7 +753,7 @@ const ScoringView = ({
         </div>
       )}
 
-      <div className="hidden md:block">
+      <div className={showDesktopLayout ? 'hidden md:block' : 'hidden'}>
         <ModuleHeader
           eyebrow="Scoring & Stats"
           title="Match Events"
@@ -618,7 +782,7 @@ const ScoringView = ({
         />
       </div>
 
-      <div className="rounded-2xl bg-white p-3 shadow-sm md:hidden">
+      <div className={mobileLayoutClass}>
         <div className="flex items-center justify-between gap-2">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Live scoring</div>
@@ -647,13 +811,15 @@ const ScoringView = ({
             >
               Focus
             </button>
-            <button
-              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
-              onClick={openVideoPicker}
-            >
-              {videoUrl ? 'Video' : 'Select video'}
-            </button>
-            {videoUrl && (
+            {!compactAppFullscreen && (
+              <button
+                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
+                onClick={openVideoPicker}
+              >
+                {videoUrl ? 'Video' : 'Select video'}
+              </button>
+            )}
+            {!compactAppFullscreen && videoUrl && (
               <button
                 className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600"
                 onClick={clearVideo}
@@ -664,7 +830,7 @@ const ScoringView = ({
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+        <div className="mt-3 grid grid-cols-[1fr_auto_auto] gap-2">
           <select
             aria-label="Live selected match"
             className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
@@ -686,6 +852,13 @@ const ScoringView = ({
           >
             Undo
           </button>
+          <button
+            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
+            onClick={openLineupEditor}
+            disabled={!currentMatchId || !lineupSupported}
+          >
+            Lineup
+          </button>
         </div>
 
         <div className="mt-2 text-[11px] font-semibold text-slate-500">
@@ -694,18 +867,37 @@ const ScoringView = ({
             : 'No lineup selected for this match. Using full team roster.'}
         </div>
 
+        {!compactAppFullscreen && (
+          <div className="mt-2 grid grid-cols-[1fr_1fr_auto] gap-2">
+            <input
+              className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+              placeholder="Match name"
+              value={creatingMatch.name}
+              onChange={(event) => setCreatingMatch((prev) => ({ ...prev, name: event.target.value }))}
+            />
+            <input
+              className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+              placeholder="Opponent (optional)"
+              value={creatingMatch.opponentName}
+              onChange={(event) => setCreatingMatch((prev) => ({ ...prev, opponentName: event.target.value }))}
+            />
+            <button
+              className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+              onClick={createMatch}
+              disabled={!creatingMatch.name.trim() || savingMatch}
+            >
+              Create
+            </button>
+          </div>
+        )}
+
         {matches.length === 0 && (
           <div className="mt-3">
             <ModuleEmptyState
               compact
               title="No matches found"
-              description="Create a match first. Scoring is tied to one selected match."
-              actions={[
-                {
-                  label: 'Open Matches',
-                  onClick: () => onOpenModule?.('matches')
-                }
-              ]}
+              description="Create the first match above. Scoring is tied to one selected match."
+              actions={[]}
             />
           </div>
         )}
@@ -909,7 +1101,8 @@ const ScoringView = ({
           </div>
         </div>
 
-        <details className="mt-3 rounded-lg border border-slate-200 p-2">
+        {!compactAppFullscreen && (
+          <details className="mt-3 rounded-lg border border-slate-200 p-2">
           <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
             Advanced
           </summary>
@@ -922,7 +1115,8 @@ const ScoringView = ({
             Team stats: goals {stats.totals.shot_goal} · shots {stats.shots} · shot conversion {stats.shotConversion}% · personal fouls{' '}
             {stats.personalFouls}
           </div>
-        </details>
+          </details>
+        )}
       </div>
 
       {error && (
@@ -931,7 +1125,7 @@ const ScoringView = ({
         </div>
       )}
 
-      <div className="hidden grid-cols-1 gap-4 md:grid xl:grid-cols-[1.45fr_0.95fr]">
+      <div className={showDesktopLayout ? 'hidden grid-cols-1 gap-4 md:grid xl:grid-cols-[1.45fr_0.95fr]' : 'hidden'}>
         <div className="space-y-4">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -1417,6 +1611,63 @@ const ScoringView = ({
           )}
         </div>
       </div>
+
+      {editingLineup && (
+        <div className="fixed inset-0 z-[95] flex items-end bg-slate-900/40 p-3 sm:items-center sm:justify-center">
+          <button className="absolute inset-0" onClick={() => setEditingLineup(false)} />
+          <div className="relative max-h-[85vh] w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Match lineup</h3>
+                <p className="text-xs text-slate-500">
+                  {Object.values(lineupSelection).filter(Boolean).length} selected
+                </p>
+              </div>
+              <button className="text-sm font-semibold text-slate-500" onClick={() => setEditingLineup(false)}>
+                Close
+              </button>
+            </div>
+            <div className="max-h-[58vh] overflow-y-auto px-4 py-3">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {allRoster.map((player) => {
+                  const key = getLineupSelectionKey(player);
+                  return (
+                    <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(lineupSelection[key])}
+                        onChange={(event) =>
+                          setLineupSelection((prev) => ({
+                            ...prev,
+                            [key]: event.target.checked
+                          }))
+                        }
+                      />
+                      <span className="font-semibold text-slate-700">#{player.capNumber}</span>
+                      <span className="text-slate-500">{player.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3">
+              <button
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
+                onClick={() => setEditingLineup(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                onClick={saveLineup}
+                disabled={savingLineup}
+              >
+                Save lineup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

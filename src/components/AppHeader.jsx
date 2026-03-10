@@ -11,7 +11,9 @@ const AppHeader = ({
   onSelectSeason,
   teamOptions,
   selectedTeamId,
-  onSelectTeam
+  onSelectTeam,
+  onOpenWorkspace,
+  onSignOut
 }) => (
   <header className="wp-surface wp-border sticky top-0 z-40 border-b px-4 py-3 sm:px-6 sm:py-4">
     <div className="mx-auto flex max-w-7xl flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -65,6 +67,26 @@ const AppHeader = ({
             ))}
           </select>
         </label>
+        {(onOpenWorkspace || onSignOut) && (
+          <div className="col-span-2 flex items-center gap-2 pt-1">
+            {onOpenWorkspace && (
+              <button
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                onClick={onOpenWorkspace}
+              >
+                Manage teams
+              </button>
+            )}
+            {onSignOut && (
+              <button
+                className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white"
+                onClick={onSignOut}
+              >
+                Sign out
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   </header>

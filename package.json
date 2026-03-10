@@ -9,17 +9,9 @@
     "preview": "vite preview",
     "test:unit": "node --test tests/unit/*.test.mjs",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed",
-    "mobile:build": "npm run build && npx cap sync",
-    "mobile:sync": "npx cap sync",
-    "mobile:add:ios": "npx cap add ios",
-    "mobile:add:android": "npx cap add android",
-    "mobile:open:ios": "npx cap open ios",
-    "mobile:open:android": "npx cap open android",
-    "mobile:copy": "npm run build && npx cap copy"
+    "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
-    "@capacitor/core": "^8.2.0",
     "@supabase/supabase-js": "^2.45.4",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
@@ -28,9 +20,6 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@capacitor/android": "^8.2.0",
-    "@capacitor/cli": "^8.2.0",
-    "@capacitor/ios": "^8.2.0",
     "@playwright/test": "^1.53.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",

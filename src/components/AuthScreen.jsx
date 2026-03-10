@@ -1,7 +1,7 @@
 import React from 'react';
 import PublicSeoContent from './PublicSeoContent';
 
-const AuthScreen = ({ authEmail, setAuthEmail, authMessage, onSendMagicLink, overlays }) => (
+const AuthScreen = ({ authEmail, setAuthEmail, authMessage, onSignInWithGitHub, onSendMagicLink, overlays }) => (
   <div className="min-h-screen px-6 py-8">
     <div className="mx-auto max-w-4xl space-y-6">
       <header className="rounded-3xl bg-white p-6 shadow-sm">
@@ -13,6 +13,17 @@ const AuthScreen = ({ authEmail, setAuthEmail, authMessage, onSendMagicLink, ove
       </header>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.15fr]">
         <div className="rounded-2xl bg-white p-6 shadow-sm">
+          <button
+            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800"
+            onClick={onSignInWithGitHub}
+          >
+            Continue with GitHub
+          </button>
+          <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
+            <span className="h-px flex-1 bg-slate-200" />
+            <span>or use magic link</span>
+            <span className="h-px flex-1 bg-slate-200" />
+          </div>
           <label className="text-xs font-semibold text-slate-500">Email</label>
           <input
             className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"

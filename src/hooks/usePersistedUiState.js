@@ -9,8 +9,14 @@ const DEFAULT_PREFERENCES = {
   lastBackupAt: ''
 };
 
-export const usePersistedUiState = ({ sessionUser, moduleConfig, seasons, loadingSeasons }) => {
-  const [activeTab, setActiveTab] = useState('hub');
+export const usePersistedUiState = ({
+  sessionUser,
+  moduleConfig,
+  seasons,
+  loadingSeasons,
+  defaultTab = 'hub'
+}) => {
+  const [activeTab, setActiveTab] = useState(defaultTab);
   const [selectedSeasonId, setSelectedSeasonId] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [moduleVisibility, setModuleVisibility] = useState({});
@@ -131,8 +137,10 @@ export const usePersistedUiState = ({ sessionUser, moduleConfig, seasons, loadin
 
   useEffect(() => {
     const visibleKeys = new Set([...navItems.map((item) => item.key), 'privacy']);
-    if (!visibleKeys.has(activeTab)) setActiveTab('hub');
-  }, [activeTab, navItems]);
+    if (visibleKeys.has(activeTab)) return;
+    const nextTab = navItems.find((item) => item.key === defaultTab)?.key || navItems[0]?.key || 'hub';
+    setActiveTab(nextTab);
+  }, [activeTab, defaultTab, navItems]);
 
   useEffect(() => {
     if (!sessionUser || !preferences.rememberLastTab || didApplyStartTab.current) return;

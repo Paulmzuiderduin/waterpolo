@@ -59,6 +59,7 @@ const StatSheetView = lazy(() => import('./modules/statsheet/StatSheetView'));
 const ChangelogView = lazy(() => import('./modules/changelog/ChangelogView'));
 
 const App = () => {
+  const isNativeScoringMode = false;
   const { session, authLoading } = useAuthSession();
   const { seasons, setSeasons, loadingSeasons } = useSeasonsTeams(session?.user?.id);
   const [authEmail, setAuthEmail] = useState('');
@@ -91,22 +92,25 @@ const App = () => {
   }, []);
 
   const moduleConfig = useMemo(
-    () => [
-      { key: 'hub', label: 'Dashboard', icon: <Home size={16} />, alwaysVisible: true },
-      { key: 'matches', label: 'Matches', icon: <CalendarDays size={16} /> },
-      { key: 'shotmap', label: 'Shotmap', icon: <Share2 size={16} /> },
-      { key: 'analytics', label: 'Analytics', icon: <BarChart2 size={16} /> },
-      { key: 'scoring', label: 'Scoring', icon: <ClipboardList size={16} /> },
-      { key: 'statsheet', label: 'Stat Sheet', icon: <TableProperties size={16} /> },
-      { key: 'players', label: 'Players', icon: <IdCard size={16} /> },
-      { key: 'roster', label: 'Roster', icon: <Users size={16} /> },
-      { key: 'video', label: 'Video', icon: <Clapperboard size={16} />, advanced: true },
-      { key: 'possession', label: 'Possession', icon: <Share2 size={16} />, advanced: true },
-      { key: 'help', label: 'Help', icon: <HelpCircle size={16} />, alwaysVisible: true },
-      { key: 'changelog', label: 'Changelog', icon: <ClipboardList size={16} />, alwaysVisible: true },
-      { key: 'settings', label: 'Settings', icon: <Settings2 size={16} />, alwaysVisible: true }
-    ],
-    []
+    () =>
+      isNativeScoringMode
+        ? [{ key: 'scoring', label: 'Live Scoring', icon: <ClipboardList size={16} />, alwaysVisible: true }]
+        : [
+            { key: 'hub', label: 'Dashboard', icon: <Home size={16} />, alwaysVisible: true },
+            { key: 'matches', label: 'Matches', icon: <CalendarDays size={16} /> },
+            { key: 'shotmap', label: 'Shotmap', icon: <Share2 size={16} /> },
+            { key: 'analytics', label: 'Analytics', icon: <BarChart2 size={16} /> },
+            { key: 'scoring', label: 'Scoring', icon: <ClipboardList size={16} /> },
+            { key: 'statsheet', label: 'Stat Sheet', icon: <TableProperties size={16} /> },
+            { key: 'players', label: 'Players', icon: <IdCard size={16} /> },
+            { key: 'roster', label: 'Roster', icon: <Users size={16} /> },
+            { key: 'video', label: 'Video', icon: <Clapperboard size={16} />, advanced: true },
+            { key: 'possession', label: 'Possession', icon: <Share2 size={16} />, advanced: true },
+            { key: 'help', label: 'Help', icon: <HelpCircle size={16} />, alwaysVisible: true },
+            { key: 'changelog', label: 'Changelog', icon: <ClipboardList size={16} />, alwaysVisible: true },
+            { key: 'settings', label: 'Settings', icon: <Settings2 size={16} />, alwaysVisible: true }
+          ],
+    [isNativeScoringMode]
   );
 
   const moduleShellCopy = useMemo(
@@ -150,7 +154,8 @@ const App = () => {
     sessionUser: session?.user,
     moduleConfig,
     seasons,
-    loadingSeasons
+    loadingSeasons,
+    defaultTab: isNativeScoringMode ? 'scoring' : 'hub'
   });
 
   const { featureRequestDialog, setFeatureRequestDialog, openFeatureRequestDialog, submitFeatureRequest, featureRequestContext } =
@@ -177,7 +182,7 @@ const App = () => {
   );
   useSeoMeta(seoMeta);
 
-  const activeModule = moduleConfig.find((item) => item.key === activeTab);
+  const activeModule = moduleConfig.find((item) => item.key === activeTab) || moduleConfig[0];
 
   const handleMagicLink = async () => {
     if (!authEmail) return;
@@ -188,10 +193,24 @@ const App = () => {
       options: { emailRedirectTo: redirectTo }
     });
     if (error) {
-      setAuthMessage('Failed to send link.');
+      setAuthMessage(`Failed to send link: ${error.message}`);
       return;
     }
     setAuthMessage('Check your inbox for the magic link.');
+  };
+
+  const handleGitHubSignIn = async () => {
+    setAuthMessage('Opening GitHub sign-in...');
+    const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'github',
+      options: {
+        redirectTo
+      }
+    });
+    if (error) {
+      setAuthMessage(`Failed to sign in with GitHub: ${error.message}`);
+    }
   };
 
   const createSeason = async () => {
@@ -341,6 +360,7 @@ const App = () => {
         authEmail={authEmail}
         setAuthEmail={setAuthEmail}
         authMessage={authMessage}
+        onSignInWithGitHub={handleGitHubSignIn}
         onSendMagicLink={handleMagicLink}
         overlays={overlays}
       />
@@ -380,20 +400,28 @@ const App = () => {
   }
 
   return (
-    <div className={`min-h-screen pb-20 transition-[padding] duration-200 ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
-      <SidebarNav
-        selectedSeasonName={selectedSeason.name}
-        navItems={navItems}
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        onSwitchTeam={() => {
-          setSelectedSeasonId('');
-          setSelectedTeamId('');
-        }}
-        onSignOut={() => supabase.auth.signOut()}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
-      />
+    <div
+      className={
+        isNativeScoringMode
+          ? 'min-h-screen'
+          : `min-h-screen pb-20 transition-[padding] duration-200 ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`
+      }
+    >
+      {!isNativeScoringMode && (
+        <SidebarNav
+          selectedSeasonName={selectedSeason.name}
+          navItems={navItems}
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          onSwitchTeam={() => {
+            setSelectedSeasonId('');
+            setSelectedTeamId('');
+          }}
+          onSignOut={() => supabase.auth.signOut()}
+          isCollapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
+        />
+      )}
 
       <AppHeader
         activeModuleLabel={activeModule?.label || 'Waterpolo Hub'}
@@ -411,11 +439,35 @@ const App = () => {
         teamOptions={selectedSeason.teams || []}
         selectedTeamId={selectedTeamId}
         onSelectTeam={setSelectedTeamId}
+        onOpenWorkspace={
+          isNativeScoringMode
+            ? () => {
+                setSelectedSeasonId('');
+                setSelectedTeamId('');
+              }
+            : undefined
+        }
+        onSignOut={isNativeScoringMode ? () => supabase.auth.signOut() : undefined}
       />
 
       <main className="mx-auto max-w-7xl space-y-6 p-6">
         <Suspense fallback={<div className="p-10 text-slate-700">Loading module...</div>}>
-          {activeTab === 'hub' && (
+          {isNativeScoringMode && (
+            <ScoringView
+              seasonId={selectedSeasonId}
+              teamId={selectedTeamId}
+              userId={session.user.id}
+              confirmAction={confirmAction}
+              toast={toast}
+              loadData={loadTeamScoring}
+              onDataUpdated={notifyDataUpdated}
+              periods={PERIODS}
+              periodOrder={PERIOD_ORDER}
+              showTooltips={preferences.showStatTooltips}
+              isAppMode
+            />
+          )}
+          {!isNativeScoringMode && activeTab === 'hub' && (
             <HubView
               showTips={preferences.showHubTips}
               showTooltips={preferences.showStatTooltips}
@@ -423,7 +475,7 @@ const App = () => {
               lastBackupAt={preferences.lastBackupAt}
             />
           )}
-          {activeTab === 'matches' && (
+          {!isNativeScoringMode && activeTab === 'matches' && (
             <MatchesView
               seasonId={selectedSeasonId}
               teamId={selectedTeamId}
@@ -435,7 +487,7 @@ const App = () => {
               showTooltips={preferences.showStatTooltips}
             />
           )}
-          {activeTab === 'shotmap' && (
+          {!isNativeScoringMode && activeTab === 'shotmap' && (
             <ShotmapView
               seasonId={selectedSeasonId}
               teamId={selectedTeamId}
@@ -452,7 +504,7 @@ const App = () => {
               onOpenModule={setActiveTab}
             />
           )}
-          {activeTab === 'analytics' && (
+          {!isNativeScoringMode && activeTab === 'analytics' && (
             <AnalyticsView
               seasonId={selectedSeasonId}
               teamId={selectedTeamId}
@@ -466,7 +518,7 @@ const App = () => {
               onOpenModule={setActiveTab}
             />
           )}
-          {activeTab === 'video' && (
+          {!isNativeScoringMode && activeTab === 'video' && (
             <VideoAnalysisView
               teamId={selectedTeamId}
               seasonId={selectedSeasonId}
@@ -474,7 +526,7 @@ const App = () => {
               showTooltips={preferences.showStatTooltips}
             />
           )}
-          {activeTab === 'scoring' && (
+          {!isNativeScoringMode && activeTab === 'scoring' && (
             <ScoringView
               seasonId={selectedSeasonId}
               teamId={selectedTeamId}
@@ -487,9 +539,10 @@ const App = () => {
               periodOrder={PERIOD_ORDER}
               showTooltips={preferences.showStatTooltips}
               onOpenModule={setActiveTab}
+              isAppMode={false}
             />
           )}
-          {activeTab === 'possession' && (
+          {!isNativeScoringMode && activeTab === 'possession' && (
             <PossessionView
               seasonId={selectedSeasonId}
               teamId={selectedTeamId}
@@ -503,7 +556,7 @@ const App = () => {
               onOpenModule={setActiveTab}
             />
           )}
-          {activeTab === 'statsheet' && (
+          {!isNativeScoringMode && activeTab === 'statsheet' && (
             <StatSheetView
               teamId={selectedTeamId}
               seasonId={selectedSeasonId}
@@ -513,7 +566,7 @@ const App = () => {
               toast={toast}
             />
           )}
-          {activeTab === 'players' && (
+          {!isNativeScoringMode && activeTab === 'players' && (
             <PlayersView
               seasonId={selectedSeasonId}
               teamId={selectedTeamId}
@@ -526,7 +579,7 @@ const App = () => {
               onOpenModule={setActiveTab}
             />
           )}
-          {activeTab === 'roster' && (
+          {!isNativeScoringMode && activeTab === 'roster' && (
             <RosterView
               seasonId={selectedSeasonId}
               teamId={selectedTeamId}
@@ -539,9 +592,9 @@ const App = () => {
               onOpenModule={setActiveTab}
             />
           )}
-          {activeTab === 'help' && <HelpView showTooltips={preferences.showStatTooltips} />}
-          {activeTab === 'changelog' && <ChangelogView />}
-          {activeTab === 'settings' && (
+          {!isNativeScoringMode && activeTab === 'help' && <HelpView showTooltips={preferences.showStatTooltips} />}
+          {!isNativeScoringMode && activeTab === 'changelog' && <ChangelogView />}
+          {!isNativeScoringMode && activeTab === 'settings' && (
             <SettingsView
               moduleConfig={moduleConfig}
               moduleVisibility={moduleVisibility}
@@ -575,55 +628,59 @@ const App = () => {
               toast={toast}
             />
           )}
-          {activeTab === 'privacy' && <PrivacyView />}
+          {!isNativeScoringMode && activeTab === 'privacy' && <PrivacyView />}
         </Suspense>
       </main>
 
-      <footer className="mx-auto mb-14 max-w-7xl px-6 text-xs text-slate-500 lg:mb-6">
-        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
-          <span>© {new Date().getFullYear()} Waterpolo Hub</span>
-          <div className="flex items-center gap-4">
-            <button
-              className="font-semibold text-cyan-700 underline decoration-transparent transition hover:decoration-current"
-              onClick={openFeatureRequestDialog}
-            >
-              Request Feature
-            </button>
-            <button
-              className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
-              onClick={() => setActiveTab('privacy')}
-            >
-              Privacy Policy
-            </button>
+      {!isNativeScoringMode && (
+        <footer className="mx-auto mb-14 max-w-7xl px-6 text-xs text-slate-500 lg:mb-6">
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
+            <span>© {new Date().getFullYear()} Waterpolo Hub</span>
+            <div className="flex items-center gap-4">
+              <button
+                className="font-semibold text-cyan-700 underline decoration-transparent transition hover:decoration-current"
+                onClick={openFeatureRequestDialog}
+              >
+                Request Feature
+              </button>
+              <button
+                className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
+                onClick={() => setActiveTab('privacy')}
+              >
+                Privacy Policy
+              </button>
+            </div>
           </div>
-        </div>
-      </footer>
+        </footer>
+      )}
 
-      <MobileNav
-        activeTab={activeTab}
-        primaryItems={mobilePrimaryItems}
-        overflowItems={mobileOverflowItems}
-        mobileMenuOpen={mobileMenuOpen}
-        onSelectTab={(key) => {
-          setActiveTab(key);
-          setMobileMenuOpen(false);
-        }}
-        onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
-        onCloseMobileMenu={() => setMobileMenuOpen(false)}
-        onOpenPrivacy={() => {
-          setActiveTab('privacy');
-          setMobileMenuOpen(false);
-        }}
-        onRequestFeature={() => {
-          setMobileMenuOpen(false);
-          openFeatureRequestDialog();
-        }}
-        onOpenAnalyticsPreferences={() => {
-          setMobileMenuOpen(false);
-          openAnalyticsPreferences();
-        }}
-      />
-      {renderUtilityDock()}
+      {!isNativeScoringMode && (
+        <MobileNav
+          activeTab={activeTab}
+          primaryItems={mobilePrimaryItems}
+          overflowItems={mobileOverflowItems}
+          mobileMenuOpen={mobileMenuOpen}
+          onSelectTab={(key) => {
+            setActiveTab(key);
+            setMobileMenuOpen(false);
+          }}
+          onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
+          onCloseMobileMenu={() => setMobileMenuOpen(false)}
+          onOpenPrivacy={() => {
+            setActiveTab('privacy');
+            setMobileMenuOpen(false);
+          }}
+          onRequestFeature={() => {
+            setMobileMenuOpen(false);
+            openFeatureRequestDialog();
+          }}
+          onOpenAnalyticsPreferences={() => {
+            setMobileMenuOpen(false);
+            openAnalyticsPreferences();
+          }}
+        />
+      )}
+      {!isNativeScoringMode && renderUtilityDock()}
       {overlays}
     </div>
   );

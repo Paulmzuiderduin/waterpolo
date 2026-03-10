@@ -5,8 +5,12 @@ const DEFAULT_PREFERENCES = {
   showHubTips: true,
   showStatTooltips: true,
   showAdvancedModules: false,
+  showAdvancedPlayerMetrics: false,
+  showInAppHints: true,
   showBackupReminder: true,
-  lastBackupAt: ''
+  lastBackupAt: '',
+  uiMode: 'simple',
+  onboardingCompleted: false
 };
 
 export const usePersistedUiState = ({
@@ -57,6 +61,14 @@ export const usePersistedUiState = ({
       setPreferences((prev) => ({
         ...prev,
         ...parsed,
+        uiMode: parsed.uiMode === 'advanced' ? 'advanced' : 'simple',
+        onboardingCompleted: Boolean(parsed.onboardingCompleted),
+        showInAppHints:
+          parsed.showInAppHints != null ? parsed.showInAppHints : prev.showInAppHints,
+        showAdvancedPlayerMetrics:
+          parsed.showAdvancedPlayerMetrics != null
+            ? parsed.showAdvancedPlayerMetrics
+            : prev.showAdvancedPlayerMetrics,
         showStatTooltips:
           parsed.showStatTooltips != null
             ? parsed.showStatTooltips
@@ -129,10 +141,10 @@ export const usePersistedUiState = ({
   const navItems = useMemo(
     () =>
       moduleConfig.filter((item) => {
-        if (item.advanced && !preferences.showAdvancedModules) return false;
+        if (item.advanced && (preferences.uiMode !== 'advanced' || !preferences.showAdvancedModules)) return false;
         return item.alwaysVisible || moduleVisibility[item.key] !== false;
       }),
-    [moduleConfig, moduleVisibility, preferences.showAdvancedModules]
+    [moduleConfig, moduleVisibility, preferences.showAdvancedModules, preferences.uiMode]
   );
 
   useEffect(() => {

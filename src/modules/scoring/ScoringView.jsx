@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import ModuleHeader from '../../components/ModuleHeader';
 import ModuleEmptyState from '../../components/ModuleEmptyState';
-import { formatShotTime, normalizeTime, splitTimeParts, timeToSeconds } from '../../utils/time';
+import { normalizeTime, splitTimeParts, timeToSeconds } from '../../utils/time';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
 import ToolbarButton from '../../components/ToolbarButton';
 import { loadTeamLineups, saveMatchLineup } from '../../lib/waterpolo/dataLoaders';
@@ -39,10 +39,16 @@ const ScoringView = ({
   onDataUpdated,
   periods,
   periodOrder,
+  quarterLengthMinutes = 7,
   showTooltips = true,
+  showInAppHints = true,
   onOpenModule,
   isAppMode = false
 }) => {
+  const resolvedQuarterLength = [5, 6, 7, 8].includes(Number(quarterLengthMinutes))
+    ? Number(quarterLengthMinutes)
+    : 7;
+  const defaultClock = `${resolvedQuarterLength}:00`;
   const [allRoster, setAllRoster] = useState([]);
   const [matches, setMatches] = useState([]);
   const [events, setEvents] = useState([]);
@@ -69,16 +75,20 @@ const ScoringView = ({
     type: 'goal',
     playerCap: '',
     period: '1',
-    time: formatShotTime()
+    time: defaultClock
   });
   const [videoUrl, setVideoUrl] = useState('');
   const [videoName, setVideoName] = useState('');
   const [liveMode, setLiveMode] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [quickMode, setQuickMode] = useState(true);
+  const [showMobileLog, setShowMobileLog] = useState(false);
+  const [showMobileAdvanced, setShowMobileAdvanced] = useState(false);
   const [liveGuard, setLiveGuard] = useState(true);
+  const [lastSavedAt, setLastSavedAt] = useState('');
   const [lastEventMeta, setLastEventMeta] = useState(() => ({
     period: '1',
-    time: formatShotTime()
+    time: defaultClock
   }));
   const videoInputRef = useRef(null);
   const videoElementRef = useRef(null);
@@ -86,6 +96,7 @@ const ScoringView = ({
   const secondsHoldIntervalRef = useRef(null);
   const wakeLockRef = useRef(null);
   const liveModeContainerRef = useRef(null);
+  const draftLoadedRef = useRef(false);
 
   useEffect(() => {
     if (!teamId) return;
@@ -144,6 +155,11 @@ const ScoringView = ({
     };
     return [...matches].sort((a, b) => readDate(b) - readDate(a));
   }, [matches]);
+
+  const draftStorageKey = useMemo(
+    () => (teamId ? `waterpolo_scoring_draft_${teamId}` : ''),
+    [teamId]
+  );
 
   const currentMatch = matches.find((match) => match.id === currentMatchId);
 
@@ -269,6 +285,47 @@ const ScoringView = ({
       return { ...prev, playerCap: activeRoster[0]?.capNumber || '' };
     });
   }, [activeRoster]);
+
+  useEffect(() => {
+    if (!draftStorageKey || draftLoadedRef.current) return;
+    draftLoadedRef.current = true;
+    try {
+      const raw = localStorage.getItem(draftStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      const parsedPeriod = String(parsed?.period || '1');
+      const parsedTime = normalizeTime(parsed?.time || defaultClock);
+      const parsedPlayer = String(parsed?.playerCap || '');
+      setForm((prev) => ({
+        ...prev,
+        period: periods.includes(parsedPeriod) ? parsedPeriod : prev.period,
+        time: parsedTime,
+        playerCap: parsedPlayer || prev.playerCap
+      }));
+      setLastEventMeta({
+        period: periods.includes(parsedPeriod) ? parsedPeriod : '1',
+        time: parsedTime
+      });
+    } catch {
+      // Ignore draft parse errors.
+    }
+  }, [defaultClock, draftStorageKey, periods]);
+
+  useEffect(() => {
+    if (!draftStorageKey) return;
+    try {
+      localStorage.setItem(
+        draftStorageKey,
+        JSON.stringify({
+          period: form.period,
+          time: normalizeTime(form.time),
+          playerCap: form.playerCap || ''
+        })
+      );
+    } catch {
+      // Ignore localStorage write failures.
+    }
+  }, [draftStorageKey, form.period, form.playerCap, form.time]);
 
   useEffect(() => {
     return () => {
@@ -441,11 +498,16 @@ const ScoringView = ({
   };
 
   const toClampedTime = (nextTotal) => {
-    const clamped = Math.max(0, Math.min(7 * 60, nextTotal));
+    const clamped = Math.max(0, Math.min(resolvedQuarterLength * 60, nextTotal));
     const minutes = Math.floor(clamped / 60);
     const seconds = clamped % 60;
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
   };
+
+  const timePresets = useMemo(
+    () => Array.from({ length: resolvedQuarterLength }, (_, index) => `${resolvedQuarterLength - index}:00`),
+    [resolvedQuarterLength]
+  );
 
   const adjustMinutes = (delta) => {
     setForm((prev) => {
@@ -491,8 +553,24 @@ const ScoringView = ({
   }, []);
 
   useEffect(() => {
+    setForm((prev) => {
+      const parts = splitTimeParts(prev.time);
+      return { ...prev, time: toClampedTime(parts.minutes * 60 + parts.seconds) };
+    });
+    setLastEventMeta((prev) => {
+      const parts = splitTimeParts(prev.time);
+      return { ...prev, time: toClampedTime(parts.minutes * 60 + parts.seconds) };
+    });
+  }, [resolvedQuarterLength]);
+
+  useEffect(() => {
     if (!liveMode) setLiveGuard(true);
   }, [liveMode]);
+
+  useEffect(() => {
+    if (quickMode) return;
+    setShowMobileLog(true);
+  }, [quickMode]);
 
   const saveEvent = async (eventType = form.type) => {
     if (!currentMatch) {
@@ -555,13 +633,25 @@ const ScoringView = ({
       return [...prev, nextEvent];
     });
     setLastEventMeta({ period: form.period, time: normalizeTime(form.time) });
+    setLastSavedAt(new Date().toISOString());
     setError('');
     setEditingEventId(null);
     onDataUpdated?.();
   };
 
-  const deleteEvent = async (eventId, { skipConfirm = false } = {}) => {
-    if (!skipConfirm && !(await confirmWithinCurrentView('Delete event?'))) return;
+  const deleteEvent = async (eventInput, { skipConfirm = false } = {}) => {
+    const eventId = typeof eventInput === 'string' ? eventInput : eventInput?.id;
+    if (!eventId) return;
+    if (!skipConfirm) {
+      const eventRow =
+        typeof eventInput === 'string'
+          ? events.find((evt) => evt.id === eventInput)
+          : eventInput;
+      const typeLabel = eventRow ? getScoringEventMeta(eventRow.type).label : 'event';
+      const playerLabel = eventRow?.playerCap ? `#${eventRow.playerCap}` : 'Team';
+      const detail = eventRow ? ` (${playerLabel}, P${eventRow.period} ${eventRow.time})` : '';
+      if (!(await confirmWithinCurrentView(`Delete ${typeLabel}${detail}?`))) return;
+    }
     const { error: deleteError } = await supabase.from('scoring_events').delete().eq('id', eventId);
     if (deleteError) {
       setError('Failed to delete event.');
@@ -569,6 +659,7 @@ const ScoringView = ({
       return;
     }
     setEvents((prev) => prev.filter((evt) => evt.id !== eventId));
+    setLastSavedAt(new Date().toISOString());
     onDataUpdated?.();
     toast('Event deleted.', 'success');
   };
@@ -584,7 +675,7 @@ const ScoringView = ({
     })[0];
     if (!last) return;
     if (!(await confirmWithinCurrentView('Undo last event?'))) return;
-    await deleteEvent(last.id, { skipConfirm: true });
+    await deleteEvent(last, { skipConfirm: true });
   };
 
   const getLineupSelectionKey = (player) => player.teamPlayerId || player.playerId || player.id;
@@ -730,6 +821,7 @@ const ScoringView = ({
   const compactAppFullscreen = isAppMode && (focusMode || isFullscreenActive || (liveMode && isLandscape));
   const showDesktopLayout = !isAppMode;
   const mobileLayoutClass = isAppMode ? 'rounded-2xl bg-white p-3 shadow-sm' : 'rounded-2xl bg-white p-3 shadow-sm md:hidden';
+  const savedLabel = lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not saved yet';
 
   return (
     <div ref={liveModeContainerRef} className={containerClasses} style={containerStyle}>
@@ -811,6 +903,14 @@ const ScoringView = ({
             >
               Focus
             </button>
+            <button
+              className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
+                quickMode ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-700'
+              }`}
+              onClick={() => setQuickMode((prev) => !prev)}
+            >
+              Quick
+            </button>
             {!compactAppFullscreen && (
               <button
                 className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
@@ -828,6 +928,10 @@ const ScoringView = ({
               </button>
             )}
           </div>
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-slate-500">
+          <span>{savedLabel}</span>
+          {showInAppHints && <span>Set time + player, then tap one action.</span>}
         </div>
 
         <div className="mt-3 grid grid-cols-[1fr_auto_auto] gap-2">
@@ -868,6 +972,7 @@ const ScoringView = ({
         </div>
 
         {!compactAppFullscreen && (
+          !quickMode && (
           <div className="mt-2 grid grid-cols-[1fr_1fr_auto] gap-2">
             <input
               className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
@@ -889,6 +994,7 @@ const ScoringView = ({
               Create
             </button>
           </div>
+          )
         )}
 
         {matches.length === 0 && (
@@ -966,17 +1072,19 @@ const ScoringView = ({
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {['7:00', '6:00', '5:00', '4:00', '3:00', '2:00', '1:00'].map((preset) => (
-            <button
-              key={preset}
-              className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700"
-              onClick={() => setForm((prev) => ({ ...prev, time: preset }))}
-            >
-              {preset}
-            </button>
-          ))}
-        </div>
+        {!quickMode && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {timePresets.map((preset) => (
+              <button
+                key={preset}
+                className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700"
+                onClick={() => setForm((prev) => ({ ...prev, time: preset }))}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="mt-3 grid grid-cols-6 gap-1.5">
           <button
@@ -1002,7 +1110,13 @@ const ScoringView = ({
           ))}
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-1.5">
+        {showInAppHints && (
+          <div className="mt-3 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-2 text-[11px] font-semibold text-cyan-800">
+            1) Set period/time · 2) Select player · 3) Tap action to add it instantly.
+          </div>
+        )}
+
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
           {SCORING_EVENTS.map((evt) => (
             <button
               key={`mobile_${evt.key}`}
@@ -1040,9 +1154,12 @@ const ScoringView = ({
 
         <div className="mt-3 rounded-lg border border-slate-200 p-2">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Event log ({matchEventsSorted.length})
-            </div>
+            <button
+              className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500"
+              onClick={() => setShowMobileLog((prev) => !prev)}
+            >
+              {showMobileLog ? 'Hide' : 'Show'} event log ({matchEventsSorted.length})
+            </button>
             {liveMode && (
               <button
                 className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
@@ -1054,68 +1171,83 @@ const ScoringView = ({
               </button>
             )}
           </div>
-          <div className="mt-2 max-h-[22vh] space-y-1.5 overflow-y-auto pr-1">
-            {matchEventsSorted.length === 0 && (
-              <div className="rounded-lg border border-slate-100 px-2 py-2 text-xs text-slate-500">
-                No events logged for the selected match.
-              </div>
-            )}
-            {matchEventsSorted.map((evt) => {
-              const playerLabel = evt.playerCap ? `#${evt.playerCap}` : 'Team';
-              const typeLabel = getScoringEventMeta(evt.type).label;
-              return (
-                <div key={`mobile_event_${evt.id}`} className="rounded-lg border border-slate-100 px-2 py-2 text-xs">
-                  <div className="font-semibold text-slate-700">
-                    {typeLabel} | {playerLabel}
-                  </div>
-                  <div className="text-slate-500">
-                    P{evt.period} · {evt.time}
-                  </div>
-                  <div className="mt-1 flex items-center gap-2 font-semibold">
-                    <button
-                      className="text-slate-500"
-                      disabled={liveMode && liveGuard}
-                      onClick={() => {
-                        setEditingEventId(evt.id);
-                        setForm({
-                          type: evt.type,
-                          playerCap: evt.playerCap,
-                          period: evt.period,
-                          time: evt.time
-                        });
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="text-red-500 disabled:opacity-40"
-                      disabled={liveMode && liveGuard}
-                      onClick={() => deleteEvent(evt.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
+          {showMobileLog && (
+            <div className="mt-2 max-h-[22vh] space-y-1.5 overflow-y-auto pr-1">
+              {matchEventsSorted.length === 0 && (
+                <div className="rounded-lg border border-slate-100 px-2 py-2 text-xs text-slate-500">
+                  No events logged for the selected match.
                 </div>
-              );
-            })}
-          </div>
+              )}
+              {matchEventsSorted.map((evt) => {
+                const playerLabel = evt.playerCap ? `#${evt.playerCap}` : 'Team';
+                const typeLabel = getScoringEventMeta(evt.type).label;
+                return (
+                  <div key={`mobile_event_${evt.id}`} className="rounded-lg border border-slate-100 px-2 py-2 text-xs">
+                    <div className="font-semibold text-slate-700">
+                      {typeLabel} | {playerLabel}
+                    </div>
+                    <div className="text-slate-500">
+                      P{evt.period} · {evt.time}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 font-semibold">
+                      <button
+                        className="text-slate-500"
+                        disabled={liveMode && liveGuard}
+                        onClick={() => {
+                          setEditingEventId(evt.id);
+                          setForm({
+                            type: evt.type,
+                            playerCap: evt.playerCap,
+                            period: evt.period,
+                            time: evt.time
+                          });
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="text-red-500 disabled:opacity-40"
+                        disabled={liveMode && liveGuard}
+                        onClick={() => deleteEvent(evt)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {!compactAppFullscreen && (
-          <details className="mt-3 rounded-lg border border-slate-200 p-2">
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-            Advanced
-          </summary>
-          {videoUrl && (
-            <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-black">
-              <video ref={videoElementRef} className="h-auto max-h-[220px] w-full object-contain" controls playsInline src={videoUrl} />
-            </div>
-          )}
-          <div className="mt-2 text-xs text-slate-500">
-            Team stats: goals {stats.totals.shot_goal} · shots {stats.shots} · shot conversion {stats.shotConversion}% · personal fouls{' '}
-            {stats.personalFouls}
+          <div className="mt-3 rounded-lg border border-slate-200 p-2">
+            <button
+              className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-slate-500"
+              onClick={() => setShowMobileAdvanced((prev) => !prev)}
+            >
+              {showMobileAdvanced ? 'Hide advanced' : 'Show advanced'}
+            </button>
+            {showMobileAdvanced && (
+              <>
+                {videoUrl && (
+                  <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-black">
+                    <video
+                      ref={videoElementRef}
+                      className="h-auto max-h-[220px] w-full object-contain"
+                      controls
+                      playsInline
+                      src={videoUrl}
+                    />
+                  </div>
+                )}
+                <div className="mt-2 text-xs text-slate-500">
+                  Team stats: goals {stats.totals.shot_goal} · shots {stats.shots} · shot conversion{' '}
+                  {stats.shotConversion}% · personal fouls {stats.personalFouls}
+                </div>
+              </>
+            )}
           </div>
-          </details>
         )}
       </div>
 
@@ -1154,6 +1286,7 @@ const ScoringView = ({
                 Undo last
               </ToolbarButton>
             </div>
+            <div className="mt-2 text-xs font-semibold text-slate-500">{savedLabel}</div>
             {matches.length === 0 && (
               <div className="mt-3">
                 <ModuleEmptyState
@@ -1260,7 +1393,7 @@ const ScoringView = ({
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center gap-1 text-[11px] font-semibold text-slate-600">
-                    {['7:00', '6:00', '5:00', '4:00', '3:00', '2:00', '1:00'].map((preset) => (
+                    {timePresets.map((preset) => (
                       <button
                         key={preset}
                         className="rounded-full border border-slate-200 px-2 py-1"
@@ -1280,7 +1413,13 @@ const ScoringView = ({
                 : 'No lineup selected for this match. Using full team roster.'}
             </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {showInAppHints && (
+              <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-800">
+                Set period/time and player first. Clicking an action button logs the event immediately.
+              </div>
+            )}
+
+            <div className="mt-3 grid gap-4 xl:grid-cols-2">
               <div>
                 <h3 className="text-sm font-semibold text-slate-700">Player</h3>
                 <div className="mt-2 grid grid-cols-5 gap-2 sm:grid-cols-6 lg:grid-cols-4">
@@ -1309,7 +1448,7 @@ const ScoringView = ({
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-slate-700">Action</h3>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="mt-2 grid grid-cols-1 gap-2 2xl:grid-cols-2">
                   {['shots', 'discipline', 'possession', 'team'].map((group) => {
                     const groupItems = SCORING_EVENTS.filter((evt) => evt.group === group);
                     if (groupItems.length === 0) return null;
@@ -1456,7 +1595,7 @@ const ScoringView = ({
                       <button
                         className="text-red-500 disabled:opacity-40"
                         disabled={liveMode && liveGuard}
-                        onClick={() => deleteEvent(evt.id)}
+                        onClick={() => deleteEvent(evt)}
                       >
                         Delete
                       </button>

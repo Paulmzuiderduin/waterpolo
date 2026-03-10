@@ -21,7 +21,6 @@ const WorkspaceSetupScreen = ({
   deleteTeam,
   openFeatureRequestDialog,
   setActiveTab,
-  renderUtilityDock,
   overlays
 }) => (
   <div className="min-h-screen px-6 py-8">
@@ -180,7 +179,6 @@ const WorkspaceSetupScreen = ({
         </div>
       </div>
     </footer>
-    {renderUtilityDock()}
     {overlays}
   </div>
 );

@@ -130,8 +130,13 @@ const parseCsvRows = (text = '') => {
     row.push(field.trim());
     rows.push(row);
   }
-  return rows.filter((line) => line.some((cell) => String(cell || '').trim().length > 0));
+  return rows;
 };
+
+const sanitizeRows = (rows = []) =>
+  (rows || [])
+    .map((line) => (Array.isArray(line) ? line : []))
+    .filter((line) => line.some((cell) => String(cell ?? '').trim().length > 0));
 
 const resolveCanonicalHeaders = (rawHeaders = []) =>
   rawHeaders.map((header) => {
@@ -194,10 +199,10 @@ const parseScopeMatchName = (scopeValue) => {
   return '';
 };
 
-export const parseStatSheetImportCsv = (text) => {
-  const rawRows = parseCsvRows(text || '');
+export const parseStatSheetImportRows = (inputRows) => {
+  const rawRows = sanitizeRows(inputRows);
   if (rawRows.length < 2) {
-    return { events: [], warnings: ['CSV is empty or has no data rows.'] };
+    return { events: [], warnings: ['Import file is empty or has no data rows.'] };
   }
 
   const headers = resolveCanonicalHeaders(rawRows[0]);
@@ -251,7 +256,7 @@ export const parseStatSheetImportCsv = (text) => {
     return {
       events: [],
       warnings: [
-        'Unsupported CSV format. Use columns: match_name,event_type,player_cap,period,time,count (recommended).'
+        'Unsupported format. Use columns: match_name,event_type,player_cap,period,time,count (recommended).'
       ]
     };
   }
@@ -299,6 +304,8 @@ export const parseStatSheetImportCsv = (text) => {
   return { events: parsedEvents, warnings };
 };
 
+export const parseStatSheetImportCsv = (text) => parseStatSheetImportRows(parseCsvRows(text || ''));
+
 export const getStatSheetImportTemplateCsv = () =>
   [
     'match_name,match_date,opponent_name,event_type,player_cap,period,time,count',
@@ -307,3 +314,11 @@ export const getStatSheetImportTemplateCsv = () =>
     'League Round 1,2026-03-01,Polar Bears,exclusion_foul,3,2,4:10,1',
     'League Round 1,2026-03-01,Polar Bears,timeout,,3,2:15,1'
   ].join('\n');
+
+export const getStatSheetImportTemplateRows = () => [
+  ['match_name', 'match_date', 'opponent_name', 'event_type', 'player_cap', 'period', 'time', 'count'],
+  ['League Round 1', '2026-03-01', 'Polar Bears', 'shot_goal', '5', '1', '6:42', '1'],
+  ['League Round 1', '2026-03-01', 'Polar Bears', 'shot_saved', '7', '1', '5:31', '1'],
+  ['League Round 1', '2026-03-01', 'Polar Bears', 'exclusion_foul', '3', '2', '4:10', '1'],
+  ['League Round 1', '2026-03-01', 'Polar Bears', 'timeout', '', '3', '2:15', '1']
+];

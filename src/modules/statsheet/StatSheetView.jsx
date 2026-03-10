@@ -4,8 +4,13 @@ import { supabase } from '../../lib/supabase';
 import ModuleHeader from '../../components/ModuleHeader';
 import ModuleEmptyState from '../../components/ModuleEmptyState';
 import ToolbarButton from '../../components/ToolbarButton';
-import { buildStatSheet, exportStatSheetCsv } from '../../lib/waterpolo/statSheet';
-import { getStatSheetImportTemplateCsv, parseStatSheetImportCsv } from '../../lib/waterpolo/statSheetImport';
+import { buildStatSheet, exportStatSheetCsv, getStatSheetExportTable } from '../../lib/waterpolo/statSheet';
+import {
+  getStatSheetImportTemplateCsv,
+  getStatSheetImportTemplateRows,
+  parseStatSheetImportCsv,
+  parseStatSheetImportRows
+} from '../../lib/waterpolo/statSheetImport';
 import { normalizeScoringEventType } from '../../lib/waterpolo/scoring';
 
 const getMatchId = (match) => match.id || match.info?.id || '';
@@ -25,6 +30,7 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
   const [importing, setImporting] = useState(false);
   const [importReport, setImportReport] = useState(null);
   const [importPreview, setImportPreview] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
   const importInputRef = useRef(null);
 
   const reloadData = useCallback(async () => {
@@ -83,15 +89,22 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
     [events, matchId, matches, roster, scope, shots]
   );
 
-  const handleExport = () => {
+  const getScopeLabel = () =>
+    scope === 'match'
+      ? `Match ${sortedMatches.find((match) => getMatchId(match) === matchId)?.name || ''}`.trim()
+      : 'Season';
+
+  const getExportFileName = (extension) => {
+    const base = getScopeLabel().toLowerCase().replace(/\s+/g, '-');
+    return `waterpolo-stat-sheet-${base}.${extension}`;
+  };
+
+  const handleExportCsv = () => {
     if (!sheet.rows.length) {
       toast?.('No stat sheet rows to export.', 'error');
       return;
     }
-    const scopeLabel =
-      scope === 'match'
-        ? `Match ${sortedMatches.find((match) => getMatchId(match) === matchId)?.name || ''}`.trim()
-        : 'Season';
+    const scopeLabel = getScopeLabel();
     const csv = exportStatSheetCsv({
       rows: sheet.rows,
       total: sheet.total,
@@ -101,11 +114,45 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `waterpolo-stat-sheet-${scopeLabel.toLowerCase().replace(/\s+/g, '-')}.csv`;
+    anchor.download = getExportFileName('csv');
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportXlsx = async () => {
+    if (!sheet.rows.length) {
+      toast?.('No stat sheet rows to export.', 'error');
+      return;
+    }
+    try {
+      const XLSX = await import('xlsx');
+      const scopeLabel = getScopeLabel();
+      const table = getStatSheetExportTable({
+        rows: sheet.rows,
+        total: sheet.total,
+        scopeLabel
+      });
+      const worksheet = XLSX.utils.aoa_to_sheet(table);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, scope === 'match' ? 'Match' : 'Season');
+      const output = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([output], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = getExportFileName('xlsx');
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      toast?.('Excel export ready.', 'success');
+    } catch {
+      toast?.('Failed to export XLSX.', 'error');
+    }
   };
 
   const handleDownloadTemplate = () => {
@@ -121,17 +168,54 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
     URL.revokeObjectURL(url);
   };
 
-  const handleImportFileChange = async (event) => {
-    const file = event.target.files?.[0];
+  const handleDownloadTemplateXlsx = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const rows = getStatSheetImportTemplateRows();
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'template');
+      const output = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([output], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'waterpolo-stat-sheet-import-template.xlsx';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    } catch {
+      toast?.('Failed to download XLSX template.', 'error');
+    }
+  };
+
+  const processImportFile = async (file) => {
     if (!file || !teamId || !seasonId || !userId) return;
     setImporting(true);
     setError('');
     setImportReport(null);
     try {
-      const text = await file.text();
-      const { events: parsedEvents, warnings } = parseStatSheetImportCsv(text);
+      let parsed = { events: [], warnings: ['Unsupported file type. Use CSV or XLSX.'] };
+      const fileName = String(file.name || '').toLowerCase();
+      if (fileName.endsWith('.xlsx')) {
+        const XLSX = await import('xlsx');
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const firstSheet = sheetName ? workbook.Sheets[sheetName] : null;
+        const rows = firstSheet ? XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' }) : [];
+        parsed = parseStatSheetImportRows(rows);
+      } else if (fileName.endsWith('.csv')) {
+        const text = await file.text();
+        parsed = parseStatSheetImportCsv(text);
+      }
+
+      const { events: parsedEvents, warnings } = parsed;
       if (!parsedEvents.length) {
-        setError('No importable events found in CSV.');
+        setError('No importable events found in file.');
         setImportReport({
           status: 'error',
           fileName: file.name,
@@ -173,7 +257,7 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
       });
       toast?.(`Preview ready: ${parsedEvents.length} events`, 'info');
     } catch {
-      setError('Failed to import stat sheet CSV.');
+      setError('Failed to import stat sheet file.');
       setImportReport({
         status: 'error',
         fileName: file.name,
@@ -182,11 +266,24 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
         warnings: ['Unexpected import error. Check CSV format and try again.']
       });
       setImportPreview(null);
-      toast?.('Failed to import stat sheet CSV.', 'error');
+      toast?.('Failed to import stat sheet file.', 'error');
     } finally {
       setImporting(false);
       if (importInputRef.current) importInputRef.current.value = '';
     }
+  };
+
+  const handleImportFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    await processImportFile(file);
+  };
+
+  const handleDrop = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragActive(false);
+    const file = event.dataTransfer?.files?.[0];
+    await processImportFile(file);
   };
 
   const handleConfirmImport = async () => {
@@ -303,7 +400,7 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
             <input
               ref={importInputRef}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               className="hidden"
               onChange={handleImportFileChange}
             />
@@ -313,18 +410,51 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
               className="text-xs sm:text-sm"
             >
               <Upload size={16} />
-              {importing ? 'Importing...' : 'Import CSV'}
+              {importing ? 'Importing...' : 'Import file'}
             </ToolbarButton>
             <ToolbarButton onClick={handleDownloadTemplate} className="text-xs sm:text-sm">
-              Download template
+              Template CSV
             </ToolbarButton>
-            <ToolbarButton variant="primary" onClick={handleExport} disabled={!sheet.rows.length}>
+            <ToolbarButton onClick={handleDownloadTemplateXlsx} className="text-xs sm:text-sm">
+              Template XLSX
+            </ToolbarButton>
+            <ToolbarButton variant="primary" onClick={handleExportXlsx} disabled={!sheet.rows.length}>
               <Download size={16} />
+              Export XLSX
+            </ToolbarButton>
+            <ToolbarButton onClick={handleExportCsv} disabled={!sheet.rows.length}>
               Export CSV
             </ToolbarButton>
           </>
         }
       />
+
+      <div
+        className={`rounded-2xl border-2 border-dashed p-4 transition ${
+          dragActive ? 'border-cyan-400 bg-cyan-50' : 'border-slate-200 bg-white'
+        }`}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setDragActive(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setDragActive(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setDragActive(false);
+        }}
+        onDrop={handleDrop}
+      >
+        <div className="text-sm font-semibold text-slate-700">Import stat sheet file</div>
+        <div className="mt-1 text-xs text-slate-500">
+          Drag and drop <span className="font-semibold">.xlsx</span> or <span className="font-semibold">.csv</span>, or use Import CSV.
+        </div>
+      </div>
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
@@ -342,6 +472,11 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
           <div className="mt-1">
             Events imported: {importReport.importedEvents} · Matches created: {importReport.createdMatches}
           </div>
+          {importReport.status === 'success' && (
+            <div className="mt-1 text-xs">
+              Next: open <span className="font-semibold">Scoring</span> to verify events, then export a fresh season stat sheet.
+            </div>
+          )}
           {importReport.warnings?.length > 0 && (
             <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
               {importReport.warnings.slice(0, 6).map((warning, index) => (
@@ -431,7 +566,7 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
               </div>
             </div>
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              Import format: <span className="font-semibold">match_name, match_date, opponent_name, event_type, player_cap, period, time, count</span>.
+              Import format (.csv/.xlsx): <span className="font-semibold">match_name, match_date, opponent_name, event_type, player_cap, period, time, count</span>.
               Missing period/time default to <span className="font-semibold">P1 · 7:00</span>.
             </div>
 

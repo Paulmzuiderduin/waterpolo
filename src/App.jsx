@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Clapperboard,
   BarChart2,
@@ -18,7 +18,6 @@ import AppOverlays from './components/AppOverlays';
 import AuthScreen from './components/AuthScreen';
 import MobileNav from './components/MobileNav';
 import SidebarNav from './components/SidebarNav';
-import UtilityDock from './components/UtilityDock';
 import WorkspaceSetupScreen from './components/WorkspaceSetupScreen';
 import { useAuthSession } from './hooks/useAuthSession';
 import { useFeatureRequestDialog } from './hooks/useFeatureRequestDialog';
@@ -63,10 +62,12 @@ const App = () => {
   const { session, authLoading } = useAuthSession();
   const { seasons, setSeasons, loadingSeasons } = useSeasonsTeams(session?.user?.id);
   const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
   const [authMessage, setAuthMessage] = useState('');
   const [seasonForm, setSeasonForm] = useState('');
   const [teamForm, setTeamForm] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [promptDialog, setPromptDialog] = useState(null);
   const [toasts, setToasts] = useState([]);
@@ -182,6 +183,33 @@ const App = () => {
   );
   useSeoMeta(seoMeta);
 
+  useEffect(() => {
+    const isAutomation =
+      typeof navigator !== 'undefined' && Boolean(navigator.webdriver);
+    if (isNativeScoringMode || !session?.user || !selectedSeason || !selectedTeam) {
+      setShowOnboarding(false);
+      return;
+    }
+    if (isAutomation) {
+      setShowOnboarding(false);
+      return;
+    }
+    if (preferences.onboardingCompleted) {
+      setShowOnboarding(false);
+      return;
+    }
+    setShowOnboarding(true);
+    if (activeTab !== 'help') setActiveTab('help');
+  }, [
+    isNativeScoringMode,
+    session?.user,
+    selectedSeason,
+    selectedTeam,
+    preferences.onboardingCompleted,
+    activeTab,
+    setActiveTab
+  ]);
+
   const activeModule = moduleConfig.find((item) => item.key === activeTab) || moduleConfig[0];
 
   const handleMagicLink = async () => {
@@ -197,6 +225,48 @@ const App = () => {
       return;
     }
     setAuthMessage('Check your inbox for the magic link.');
+  };
+
+  const handlePasswordSignIn = async () => {
+    if (!authEmail || !authPassword) {
+      setAuthMessage('Enter both email and password.');
+      return;
+    }
+    setAuthMessage('Signing in...');
+    const { error } = await supabase.auth.signInWithPassword({
+      email: authEmail.trim(),
+      password: authPassword
+    });
+    if (error) {
+      setAuthMessage(`Password sign-in failed: ${error.message}`);
+      return;
+    }
+    setAuthMessage('');
+  };
+
+  const handlePasswordSignUp = async () => {
+    if (!authEmail || !authPassword) {
+      setAuthMessage('Enter both email and password.');
+      return;
+    }
+    setAuthMessage('Creating account...');
+    const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
+    const { data, error } = await supabase.auth.signUp({
+      email: authEmail.trim(),
+      password: authPassword,
+      options: {
+        emailRedirectTo: redirectTo
+      }
+    });
+    if (error) {
+      setAuthMessage(`Account creation failed: ${error.message}`);
+      return;
+    }
+    if (data?.session) {
+      setAuthMessage('');
+      return;
+    }
+    setAuthMessage('Account created. Check your inbox to confirm email before first sign-in.');
   };
 
   const handleGitHubSignIn = async () => {
@@ -323,6 +393,28 @@ const App = () => {
     toast('Team deleted.', 'success');
   };
 
+  const updateTeamQuarterLength = async (minutes) => {
+    const value = Number(minutes);
+    if (!selectedTeamId || ![5, 6, 7, 8].includes(value)) return;
+    const { error } = await supabase
+      .from('teams')
+      .update({ quarter_length_minutes: value })
+      .eq('id', selectedTeamId);
+    if (error) {
+      toast('Failed to update team quarter length. Run latest SQL migration first.', 'error');
+      return;
+    }
+    setSeasons((prev) =>
+      prev.map((season) => ({
+        ...season,
+        teams: (season.teams || []).map((team) =>
+          team.id === selectedTeamId ? { ...team, quarter_length_minutes: value } : team
+        )
+      }))
+    );
+    toast(`Team quarter length set to ${value} minutes.`, 'success');
+  };
+
   const overlays = (
     <AppOverlays
       confirmDialog={confirmDialog}
@@ -343,13 +435,6 @@ const App = () => {
     }
   }, []);
 
-  const renderUtilityDock = () => (
-    <UtilityDock
-      onRequestFeature={openFeatureRequestDialog}
-      onAnalyticsPreferences={openAnalyticsPreferences}
-    />
-  );
-
   if (authLoading) {
     return <div className="p-10 text-slate-700">Loading...</div>;
   }
@@ -359,9 +444,13 @@ const App = () => {
       <AuthScreen
         authEmail={authEmail}
         setAuthEmail={setAuthEmail}
+        authPassword={authPassword}
+        setAuthPassword={setAuthPassword}
         authMessage={authMessage}
         onSignInWithGitHub={handleGitHubSignIn}
         onSendMagicLink={handleMagicLink}
+        onSignInWithPassword={handlePasswordSignIn}
+        onCreatePasswordAccount={handlePasswordSignUp}
         overlays={overlays}
       />
     );
@@ -393,7 +482,6 @@ const App = () => {
         deleteTeam={deleteTeam}
         openFeatureRequestDialog={openFeatureRequestDialog}
         setActiveTab={setActiveTab}
-        renderUtilityDock={renderUtilityDock}
         overlays={overlays}
       />
     );
@@ -417,6 +505,8 @@ const App = () => {
             setSelectedSeasonId('');
             setSelectedTeamId('');
           }}
+          onRequestFeature={openFeatureRequestDialog}
+          onAnalyticsPreferences={openAnalyticsPreferences}
           onSignOut={() => supabase.auth.signOut()}
           isCollapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
@@ -463,7 +553,9 @@ const App = () => {
               onDataUpdated={notifyDataUpdated}
               periods={PERIODS}
               periodOrder={PERIOD_ORDER}
+              quarterLengthMinutes={Number(selectedTeam?.quarter_length_minutes) || 7}
               showTooltips={preferences.showStatTooltips}
+              showInAppHints={preferences.showInAppHints}
               isAppMode
             />
           )}
@@ -537,7 +629,9 @@ const App = () => {
               onDataUpdated={notifyDataUpdated}
               periods={PERIODS}
               periodOrder={PERIOD_ORDER}
+              quarterLengthMinutes={Number(selectedTeam?.quarter_length_minutes) || 7}
               showTooltips={preferences.showStatTooltips}
+              showInAppHints={preferences.showInAppHints}
               onOpenModule={setActiveTab}
               isAppMode={false}
             />
@@ -576,6 +670,7 @@ const App = () => {
               onSelectTeam={setSelectedTeamId}
               loadData={loadTeamData}
               showTooltips={preferences.showStatTooltips}
+              showAdvancedMetrics={preferences.showAdvancedPlayerMetrics}
               onOpenModule={setActiveTab}
             />
           )}
@@ -618,6 +713,8 @@ const App = () => {
                   [key]: value
                 }))
               }
+              teamQuarterLength={Number(selectedTeam?.quarter_length_minutes) || 7}
+              onUpdateTeamQuarterLength={updateTeamQuarterLength}
               teamId={selectedTeamId}
               seasonName={selectedSeason.name}
               teamName={selectedTeam.name}
@@ -636,20 +733,12 @@ const App = () => {
         <footer className="mx-auto mb-14 max-w-7xl px-6 text-xs text-slate-500 lg:mb-6">
           <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
             <span>© {new Date().getFullYear()} Waterpolo Hub</span>
-            <div className="flex items-center gap-4">
-              <button
-                className="font-semibold text-cyan-700 underline decoration-transparent transition hover:decoration-current"
-                onClick={openFeatureRequestDialog}
-              >
-                Request Feature
-              </button>
-              <button
-                className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
-                onClick={() => setActiveTab('privacy')}
-              >
-                Privacy Policy
-              </button>
-            </div>
+            <button
+              className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
+              onClick={() => setActiveTab('privacy')}
+            >
+              Privacy Policy
+            </button>
           </div>
         </footer>
       )}
@@ -680,7 +769,47 @@ const App = () => {
           }}
         />
       )}
-      {!isNativeScoringMode && renderUtilityDock()}
+      {showOnboarding && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+          <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">First-time setup</p>
+            <h3 className="mt-2 text-2xl font-bold text-slate-900">Welcome to Waterpolo Hub</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              You are in <span className="font-semibold">{selectedSeason?.name}</span> /{' '}
+              <span className="font-semibold">{selectedTeam?.name}</span>.  
+              Start with this order for match day:
+            </p>
+            <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-slate-700">
+              <li>Add roster in `Roster`.</li>
+              <li>Create match in `Matches`.</li>
+              <li>Track live events in `Scoring`.</li>
+              <li>Review in `Stat Sheet`, `Shotmap`, and `Analytics`.</li>
+            </ol>
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              <button
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                onClick={() => {
+                  setPreferences((prev) => ({ ...prev, onboardingCompleted: true }));
+                  setShowOnboarding(false);
+                  setActiveTab('matches');
+                }}
+              >
+                Start in Matches
+              </button>
+              <button
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+                onClick={() => {
+                  setPreferences((prev) => ({ ...prev, onboardingCompleted: true }));
+                  setShowOnboarding(false);
+                  setActiveTab('help');
+                }}
+              >
+                Open full help
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {overlays}
     </div>
   );

@@ -36,6 +36,7 @@ const PlayersView = ({
   onSelectTeam,
   loadData,
   showTooltips = true,
+  showAdvancedMetrics = false,
   onOpenModule
 }) => {
   const [data, setData] = useState({ roster: [], matches: [] });
@@ -396,6 +397,150 @@ const PlayersView = ({
     selectedStats && reportSource === 'scoring' && selectedMatchCount
       ? (selectedStats.total / selectedMatchCount).toFixed(1)
       : '—';
+
+  const exportPDF = async () => {
+    if (!selectedPlayer || !selectedStats) {
+      return;
+    }
+
+    const { jsPDF } = await import('jspdf');
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 40;
+    const right = pageWidth - margin;
+    let y = margin;
+
+    const ensureSpace = (height) => {
+      if (y + height > pageHeight - margin) {
+        pdf.addPage();
+        y = margin;
+      }
+    };
+
+    const drawRight = (text, x, yy) => {
+      const value = String(text ?? '');
+      pdf.text(value, x - pdf.getTextWidth(value), yy);
+    };
+
+    const sectionTitle = (label) => {
+      ensureSpace(28);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(15, 23, 42);
+      pdf.setFontSize(12);
+      pdf.text(label, margin, y);
+      y += 8;
+      pdf.setDrawColor(226, 232, 240);
+      pdf.line(margin, y, right, y);
+      y += 16;
+    };
+
+    const keyValue = (label, value) => {
+      ensureSpace(20);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(71, 85, 105);
+      pdf.setFontSize(10);
+      pdf.text(label, margin, y);
+      pdf.setTextColor(15, 23, 42);
+      drawRight(value, right, y);
+      y += 6;
+      pdf.setDrawColor(241, 245, 249);
+      pdf.line(margin, y, right, y);
+      y += 14;
+    };
+
+    const sourceLabel = reportSource === 'shotmap' ? 'Shotmap' : 'Scoring';
+    const createdAt = new Date().toLocaleDateString('en-GB');
+    const infoLines = [
+      `Player: #${selectedPlayer.capNumber} ${selectedPlayer.name}`,
+      `Source: ${sourceLabel}`,
+      `Season: ${selectedSeason?.name || 'Unknown'}`,
+      `Team: ${selectedTeam?.name || 'Unknown'}`,
+      `Matches included: ${selectedMatchCount}`,
+      `Generated: ${createdAt}`
+    ];
+
+    pdf.setFillColor(15, 23, 42);
+    pdf.roundedRect(margin, y, pageWidth - margin * 2, 72, 10, 10, 'F');
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(18);
+    pdf.text('Waterpolo Player Report Card', margin + 16, y + 24);
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`#${selectedPlayer.capNumber} ${selectedPlayer.name}`, margin + 16, y + 44);
+    drawRight(sourceLabel, right - 16, y + 24);
+    drawRight(createdAt, right - 16, y + 44);
+    y += 92;
+
+    sectionTitle('Context');
+    infoLines.forEach((line) => {
+      keyValue(line.split(':')[0], line.slice(line.indexOf(':') + 1).trim());
+    });
+
+    sectionTitle('Profile');
+    keyValue('Age', computeAge(selectedPlayer.birthday) ?? '—');
+    keyValue('Dominant hand', selectedPlayer.dominantHand || '—');
+    keyValue('Height', selectedPlayer.heightCm ? `${selectedPlayer.heightCm} cm` : '—');
+    keyValue('Weight', selectedPlayer.weightKg ? `${selectedPlayer.weightKg} kg` : '—');
+    keyValue('BMI', playerBmi);
+
+    sectionTitle(sourceLabel === 'Shotmap' ? 'Shot Performance' : 'Scoring Performance');
+    if (reportSource === 'shotmap') {
+      keyValue('Shots', selectedStats.total);
+      keyValue('Goals', selectedStats.goals);
+      keyValue('Saved', selectedStats.saves);
+      keyValue('Missed', selectedStats.misses);
+      keyValue('Goal %', `${selectedStats.goalPct}%`);
+      keyValue('On target %', `${selectedStats.onTargetPct}%`);
+      keyValue('Shots per match', selectedShotsPerMatch);
+      keyValue('Average shot distance', `${selectedStats.avgAllDistance}m`);
+      keyValue('Preferred goal zone', `Zone ${selectedStats.preferredZone}`);
+      if (showAdvancedMetrics) {
+        keyValue('Conversion on target', `${selectedStats.conversionOnTargetPct}%`);
+        keyValue('Average goal distance', `${selectedStats.avgDistance}m`);
+        keyValue('Consistency (σ shots)', selectedStats.trend.shotStdDev);
+      }
+    } else {
+      keyValue('Events', selectedStats.total);
+      keyValue('Shot goals', selectedStats.goals);
+      keyValue('Shots', selectedStats.shots);
+      keyValue('Scoring impact', `${selectedStats.scoringImpactPct}%`);
+      keyValue('Events per match', selectedEventsPerMatch);
+      keyValue('Personal fouls', selectedStats.personalFouls);
+      keyValue('Turnovers won', selectedStats.turnoversWon);
+      keyValue('Turnovers lost', selectedStats.turnoversLost);
+      keyValue('Turnover net', selectedStats.turnoverNet);
+      if (showAdvancedMetrics) {
+        keyValue('Ordinary fouls', selectedStats.ordinaryFouls);
+        keyValue('Misconducts', selectedStats.misconducts);
+        keyValue('Violent actions', selectedStats.violentActions);
+        keyValue('Discipline load', selectedStats.disciplineLoad);
+        keyValue('Consistency (σ events)', selectedStats.trend.eventStdDev);
+      }
+    }
+
+    const recentRows =
+      reportSource === 'shotmap'
+        ? selectedStats.recentShots.slice(0, 6).map((row) => ({
+            label: `${row.matchName} · P${row.period} ${row.time}`,
+            value: `Zone ${row.zone} · ${row.result}`
+          }))
+        : selectedStats.recentEvents.slice(0, 6).map((row) => ({
+            label: `${row.matchName} · P${row.period} ${row.time}`,
+            value: row.type
+          }));
+
+    sectionTitle(reportSource === 'shotmap' ? 'Recent Shots' : 'Recent Events');
+    if (!recentRows.length) {
+      keyValue('Log', 'No recent entries in selected scope');
+    } else {
+      recentRows.forEach((row, index) => keyValue(`${index + 1}. ${row.label}`, row.value));
+    }
+
+    const file = `player_report_${selectedPlayer.capNumber}_${sourceLabel.toLowerCase()}.pdf`;
+    pdf.save(file);
+  };
   const teamShotLeaders = useMemo(
     () =>
       roster
@@ -434,25 +579,6 @@ const PlayersView = ({
         .slice(0, 5),
     [roster, scopedScoringEvents]
   );
-
-  const exportPDF = async () => {
-    if (!reportRef.current) return;
-    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
-    const canvas = await html2canvas(reportRef.current, {
-      backgroundColor: '#ffffff',
-      scale: 2,
-      useCORS: true
-    });
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
-    const imgWidth = canvas.width * ratio;
-    const imgHeight = canvas.height * ratio;
-    pdf.addImage(imgData, 'PNG', (pageWidth - imgWidth) / 2, 20, imgWidth, imgHeight);
-    pdf.save(`player_report_${selectedPlayer?.capNumber || 'player'}.pdf`);
-  };
 
   if (loading) {
     return <div className="p-10 text-slate-700">Loading...</div>;
@@ -605,28 +731,42 @@ const PlayersView = ({
             </div>
           </div>
 
-          <div ref={reportRef} className="rounded-2xl bg-white p-6 shadow-sm">
+          <div
+            ref={reportRef}
+            className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 p-6 shadow-sm"
+          >
             {selectedPlayer ? (
               <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                  <div className="h-20 w-20 overflow-hidden rounded-2xl bg-slate-100">
-                    {selectedPlayer.photoUrl ? (
-                      <img
-                        src={selectedPlayer.photoUrl}
-                        alt={selectedPlayer.name}
-                        crossOrigin="anonymous"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">No photo</div>
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold">#{selectedPlayer.capNumber} {selectedPlayer.name}</h3>
-                    <div className="text-sm text-slate-500">
-                      {selectedPlayer.dominantHand || 'Hand n/a'}
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-20 w-20 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
+                      {selectedPlayer.photoUrl ? (
+                        <img
+                          src={selectedPlayer.photoUrl}
+                          alt={selectedPlayer.name}
+                          crossOrigin="anonymous"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">No photo</div>
+                      )}
                     </div>
-                    <div className="text-xs text-slate-400">{scopeSummary}</div>
+                    <div>
+                      <h3 className="text-xl font-semibold">#{selectedPlayer.capNumber} {selectedPlayer.name}</h3>
+                      <div className="text-sm text-slate-500">
+                        {selectedPlayer.dominantHand || 'Hand n/a'}
+                      </div>
+                      <div className="text-xs text-slate-400">{scopeSummary}</div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs">
+                    <div className="font-semibold uppercase tracking-wide text-slate-500">Report source</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {reportSource === 'shotmap' ? 'Shotmap' : 'Scoring'}
+                    </div>
+                    <div className="mt-2 text-slate-500">
+                      Matches included: <span className="font-semibold text-slate-700">{selectedMatchCount}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -658,16 +798,6 @@ const PlayersView = ({
                       <div className="rounded-xl border border-slate-100 p-3">
                         <div className="text-xs text-slate-500">
                           <StatTooltipLabel
-                            label="Conv. (on target)"
-                            tooltip={PLAYER_TOOLTIPS.conversionOnTarget}
-                            enabled={showTooltips}
-                          />
-                        </div>
-                        <div className="text-lg font-semibold">{selectedStats.conversionOnTargetPct}%</div>
-                      </div>
-                      <div className="rounded-xl border border-slate-100 p-3">
-                        <div className="text-xs text-slate-500">
-                          <StatTooltipLabel
                             label="Shots / match"
                             tooltip={PLAYER_TOOLTIPS.shotsPerMatch}
                             enabled={showTooltips}
@@ -679,65 +809,83 @@ const PlayersView = ({
                         <div className="text-xs text-slate-500">Avg shot distance</div>
                         <div className="text-lg font-semibold">{selectedStats.avgAllDistance}m</div>
                       </div>
-                      <div className="rounded-xl border border-slate-100 p-3">
-                        <div className="text-xs text-slate-500">Avg goal distance</div>
-                        <div className="text-lg font-semibold">{selectedStats.avgDistance}m</div>
-                      </div>
-                      <div className="rounded-xl border border-slate-100 p-3">
-                        <div className="text-xs text-slate-500">Last 5 avg shots</div>
-                        <div className="text-lg font-semibold">{selectedStats.trend.avgShotsLastFive}</div>
-                      </div>
-                      <div className="rounded-xl border border-slate-100 p-3">
-                        <div className="text-xs text-slate-500">Season avg shots</div>
-                        <div className="text-lg font-semibold">{selectedStats.trend.avgShotsAll}</div>
-                      </div>
-                      <div className="rounded-xl border border-slate-100 p-3">
-                        <div className="text-xs text-slate-500">Consistency (σ shots)</div>
-                        <div className="text-lg font-semibold">{selectedStats.trend.shotStdDev}</div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                      <div className="rounded-xl border border-slate-100 p-3 text-sm">
-                        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">By Period</div>
-                        <div className="space-y-2">
-                          {selectedStats.periodRows.map((row) => (
-                            <div key={row.period} className="grid grid-cols-4 gap-2 text-xs">
-                              <span className="font-semibold text-slate-700">P{row.period}</span>
-                              <span className="text-slate-600">{row.attempts} att</span>
-                              <span className="text-slate-600">{row.goalPct}% goal</span>
-                              <span className="text-slate-600">{row.onTargetPct}% on target</span>
+                      {showAdvancedMetrics && (
+                        <>
+                          <div className="rounded-xl border border-slate-100 p-3">
+                            <div className="text-xs text-slate-500">
+                              <StatTooltipLabel
+                                label="Conv. (on target)"
+                                tooltip={PLAYER_TOOLTIPS.conversionOnTarget}
+                                enabled={showTooltips}
+                              />
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-slate-100 p-3 text-sm">
-                        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">By Attack Type</div>
-                        <div className="space-y-2">
-                          {selectedStats.attackRows.slice(0, 6).map((row) => (
-                            <div key={row.attackType} className="grid grid-cols-3 gap-2 text-xs">
-                              <span className="font-semibold text-slate-700">{row.attackType}</span>
-                              <span className="text-slate-600">{row.attempts} att</span>
-                              <span className="text-slate-600">{row.goalPct}% goal</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-slate-100 p-3 text-sm">
-                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Top Zones</div>
-                      <div className="space-y-2">
-                        {selectedStats.topZones.map((zone) => (
-                          <div key={zone.zone} className="grid grid-cols-4 gap-2 text-xs">
-                            <span className="font-semibold text-slate-700">Zone {zone.zone}</span>
-                            <span className="text-slate-600">{zone.attempts} att</span>
-                            <span className="text-slate-600">{zone.goals} goals</span>
-                            <span className="text-slate-600">{zone.goalPct}% goal</span>
+                            <div className="text-lg font-semibold">{selectedStats.conversionOnTargetPct}%</div>
                           </div>
-                        ))}
-                      </div>
+                          <div className="rounded-xl border border-slate-100 p-3">
+                            <div className="text-xs text-slate-500">Avg goal distance</div>
+                            <div className="text-lg font-semibold">{selectedStats.avgDistance}m</div>
+                          </div>
+                          <div className="rounded-xl border border-slate-100 p-3">
+                            <div className="text-xs text-slate-500">Last 5 avg shots</div>
+                            <div className="text-lg font-semibold">{selectedStats.trend.avgShotsLastFive}</div>
+                          </div>
+                          <div className="rounded-xl border border-slate-100 p-3">
+                            <div className="text-xs text-slate-500">Season avg shots</div>
+                            <div className="text-lg font-semibold">{selectedStats.trend.avgShotsAll}</div>
+                          </div>
+                          <div className="rounded-xl border border-slate-100 p-3">
+                            <div className="text-xs text-slate-500">Consistency (σ shots)</div>
+                            <div className="text-lg font-semibold">{selectedStats.trend.shotStdDev}</div>
+                          </div>
+                        </>
+                      )}
                     </div>
+
+                    {showAdvancedMetrics && (
+                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        <div className="rounded-xl border border-slate-100 p-3 text-sm">
+                          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">By Period</div>
+                          <div className="space-y-2">
+                            {selectedStats.periodRows.map((row) => (
+                              <div key={row.period} className="grid grid-cols-4 gap-2 text-xs">
+                                <span className="font-semibold text-slate-700">P{row.period}</span>
+                                <span className="text-slate-600">{row.attempts} att</span>
+                                <span className="text-slate-600">{row.goalPct}% goal</span>
+                                <span className="text-slate-600">{row.onTargetPct}% on target</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 p-3 text-sm">
+                          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">By Attack Type</div>
+                          <div className="space-y-2">
+                            {selectedStats.attackRows.slice(0, 6).map((row) => (
+                              <div key={row.attackType} className="grid grid-cols-3 gap-2 text-xs">
+                                <span className="font-semibold text-slate-700">{row.attackType}</span>
+                                <span className="text-slate-600">{row.attempts} att</span>
+                                <span className="text-slate-600">{row.goalPct}% goal</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {showAdvancedMetrics && (
+                      <div className="rounded-xl border border-slate-100 p-3 text-sm">
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Top Zones</div>
+                        <div className="space-y-2">
+                          {selectedStats.topZones.map((zone) => (
+                            <div key={zone.zone} className="grid grid-cols-4 gap-2 text-xs">
+                              <span className="font-semibold text-slate-700">Zone {zone.zone}</span>
+                              <span className="text-slate-600">{zone.attempts} att</span>
+                              <span className="text-slate-600">{zone.goals} goals</span>
+                              <span className="text-slate-600">{zone.goalPct}% goal</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -786,44 +934,50 @@ const PlayersView = ({
                           {selectedStats.turnoverNet}
                         </div>
                       </div>
-                      <div className="rounded-xl border border-slate-100 p-3">
-                        <div className="text-xs text-slate-500">
-                          <StatTooltipLabel
-                            label="Discipline load"
-                            tooltip={PLAYER_TOOLTIPS.disciplineLoad}
-                            enabled={showTooltips}
-                          />
-                        </div>
-                        <div className="text-lg font-semibold">{selectedStats.disciplineLoad}</div>
-                      </div>
-                      <div className="rounded-xl border border-slate-100 p-3">
-                        <div className="text-xs text-slate-500">Last 5 avg events</div>
-                        <div className="text-lg font-semibold">{selectedStats.trend.avgEventsLastFive}</div>
-                      </div>
-                      <div className="rounded-xl border border-slate-100 p-3">
-                        <div className="text-xs text-slate-500">Season avg events</div>
-                        <div className="text-lg font-semibold">{selectedStats.trend.avgEventsAll}</div>
-                      </div>
-                      <div className="rounded-xl border border-slate-100 p-3">
-                        <div className="text-xs text-slate-500">Consistency (σ events)</div>
-                        <div className="text-lg font-semibold">{selectedStats.trend.eventStdDev}</div>
-                      </div>
+                      {showAdvancedMetrics && (
+                        <>
+                          <div className="rounded-xl border border-slate-100 p-3">
+                            <div className="text-xs text-slate-500">
+                              <StatTooltipLabel
+                                label="Discipline load"
+                                tooltip={PLAYER_TOOLTIPS.disciplineLoad}
+                                enabled={showTooltips}
+                              />
+                            </div>
+                            <div className="text-lg font-semibold">{selectedStats.disciplineLoad}</div>
+                          </div>
+                          <div className="rounded-xl border border-slate-100 p-3">
+                            <div className="text-xs text-slate-500">Last 5 avg events</div>
+                            <div className="text-lg font-semibold">{selectedStats.trend.avgEventsLastFive}</div>
+                          </div>
+                          <div className="rounded-xl border border-slate-100 p-3">
+                            <div className="text-xs text-slate-500">Season avg events</div>
+                            <div className="text-lg font-semibold">{selectedStats.trend.avgEventsAll}</div>
+                          </div>
+                          <div className="rounded-xl border border-slate-100 p-3">
+                            <div className="text-xs text-slate-500">Consistency (σ events)</div>
+                            <div className="text-lg font-semibold">{selectedStats.trend.eventStdDev}</div>
+                          </div>
+                        </>
+                      )}
                     </div>
 
-                    <div className="rounded-xl border border-slate-100 p-3 text-sm">
-                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">By Period</div>
-                      <div className="space-y-2">
-                        {selectedStats.periodRows.map((row) => (
-                          <div key={row.period} className="grid grid-cols-5 gap-2 text-xs">
-                            <span className="font-semibold text-slate-700">P{row.period}</span>
-                            <span className="text-slate-600">{row.total} events</span>
-                            <span className="text-slate-600">{row.shotGoals} goals</span>
-                            <span className="text-slate-600">{row.personalFouls} p.f.</span>
-                            <span className="text-slate-600">{row.ordinaryFouls} ord.</span>
-                          </div>
-                        ))}
+                    {showAdvancedMetrics && (
+                      <div className="rounded-xl border border-slate-100 p-3 text-sm">
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">By Period</div>
+                        <div className="space-y-2">
+                          {selectedStats.periodRows.map((row) => (
+                            <div key={row.period} className="grid grid-cols-5 gap-2 text-xs">
+                              <span className="font-semibold text-slate-700">P{row.period}</span>
+                              <span className="text-slate-600">{row.total} events</span>
+                              <span className="text-slate-600">{row.shotGoals} goals</span>
+                              <span className="text-slate-600">{row.personalFouls} p.f.</span>
+                              <span className="text-slate-600">{row.ordinaryFouls} ord.</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </>
                 )}
 

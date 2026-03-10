@@ -218,72 +218,170 @@ export const exportStatSheetCsv = ({ rows = [], total, scopeLabel = 'Season' }) 
     'Shots penalty'
   ];
 
-  const lines = [header.join(',')];
+  const table = [header];
   rows.forEach((row) => {
-    lines.push(
-      [
-        scopeLabel,
-        `"${row.name}"`,
-        row.capNumber,
-        row.matches,
-        row.totalEvents,
-        row.shots,
-        row.shotGoals,
-        row.shotSaved,
-        row.shotMissed,
-        row.shotPct,
-        row.exclusionFouls,
-        row.penaltyFouls,
-        row.personalFouls,
-        row.ordinaryFouls,
-        row.turnoversWon,
-        row.turnoversLost,
-        row.misconducts,
-        row.violentActions,
-        row.goalP1,
-        row.goalP2,
-        row.goalP3,
-        row.goalP4,
-        row.goalOT,
-        row.sixVsSixShots,
-        row.manUpShots,
-        row.penaltyShots
-      ].join(',')
-    );
+    table.push([
+      scopeLabel,
+      row.name,
+      row.capNumber,
+      row.matches,
+      row.totalEvents,
+      row.shots,
+      row.shotGoals,
+      row.shotSaved,
+      row.shotMissed,
+      row.shotPct,
+      row.exclusionFouls,
+      row.penaltyFouls,
+      row.personalFouls,
+      row.ordinaryFouls,
+      row.turnoversWon,
+      row.turnoversLost,
+      row.misconducts,
+      row.violentActions,
+      row.goalP1,
+      row.goalP2,
+      row.goalP3,
+      row.goalP4,
+      row.goalOT,
+      row.sixVsSixShots,
+      row.manUpShots,
+      row.penaltyShots
+    ]);
   });
 
   if (total) {
-    lines.push(
-      [
-        scopeLabel,
-        '"Team total"',
-        '',
-        total.matches,
-        total.totalEvents,
-        total.shots,
-        total.shotGoals,
-        total.shotSaved,
-        total.shotMissed,
-        total.shotPct,
-        total.exclusionFouls,
-        total.penaltyFouls,
-        total.personalFouls,
-        total.ordinaryFouls,
-        total.turnoversWon,
-        total.turnoversLost,
-        total.misconducts,
-        total.violentActions,
-        total.goalP1,
-        total.goalP2,
-        total.goalP3,
-        total.goalP4,
-        total.goalOT,
-        total.sixVsSixShots,
-        total.manUpShots,
-        total.penaltyShots
-      ].join(',')
-    );
+    table.push([
+      scopeLabel,
+      'Team total',
+      '',
+      total.matches,
+      total.totalEvents,
+      total.shots,
+      total.shotGoals,
+      total.shotSaved,
+      total.shotMissed,
+      total.shotPct,
+      total.exclusionFouls,
+      total.penaltyFouls,
+      total.personalFouls,
+      total.ordinaryFouls,
+      total.turnoversWon,
+      total.turnoversLost,
+      total.misconducts,
+      total.violentActions,
+      total.goalP1,
+      total.goalP2,
+      total.goalP3,
+      total.goalP4,
+      total.goalOT,
+      total.sixVsSixShots,
+      total.manUpShots,
+      total.penaltyShots
+    ]);
   }
 
-  return lines.join('\n');
+  const escapeCsvCell = (value) => {
+    const cell = String(value ?? '');
+    if (/[",\n]/.test(cell)) return `"${cell.replace(/"/g, '""')}"`;
+    return cell;
+  };
+
+  return table.map((row) => row.map(escapeCsvCell).join(',')).join('\n');
+};
+
+export const getStatSheetExportTable = ({ rows = [], total, scopeLabel = 'Season' }) => {
+  const header = [
+    'Scope',
+    'Player',
+    'Cap',
+    'Matches',
+    'Events',
+    'Shots',
+    'Shot goals',
+    'Shot saved',
+    'Shot missed',
+    'Shot %',
+    'Exclusion fouls',
+    'Penalty fouls',
+    'Personal fouls',
+    'Ordinary fouls',
+    'Turnovers won',
+    'Turnovers lost',
+    'Misconduct',
+    'Violent action',
+    'Goal P1',
+    'Goal P2',
+    'Goal P3',
+    'Goal P4',
+    'Goal OT',
+    'Shots 6v6',
+    'Shots 6v5/6v4',
+    'Shots penalty'
+  ];
+
+  const table = [header];
+  rows.forEach((row) => {
+    table.push([
+      scopeLabel,
+      row.name,
+      row.capNumber,
+      row.matches,
+      row.totalEvents,
+      row.shots,
+      row.shotGoals,
+      row.shotSaved,
+      row.shotMissed,
+      Number(row.shotPct),
+      row.exclusionFouls,
+      row.penaltyFouls,
+      row.personalFouls,
+      row.ordinaryFouls,
+      row.turnoversWon,
+      row.turnoversLost,
+      row.misconducts,
+      row.violentActions,
+      row.goalP1,
+      row.goalP2,
+      row.goalP3,
+      row.goalP4,
+      row.goalOT,
+      row.sixVsSixShots,
+      row.manUpShots,
+      row.penaltyShots
+    ]);
+  });
+
+  if (total) {
+    table.push([
+      scopeLabel,
+      'Team total',
+      '',
+      total.matches,
+      total.totalEvents,
+      total.shots,
+      total.shotGoals,
+      total.shotSaved,
+      total.shotMissed,
+      Number(total.shotPct),
+      total.exclusionFouls,
+      total.penaltyFouls,
+      total.personalFouls,
+      total.ordinaryFouls,
+      total.turnoversWon,
+      total.turnoversLost,
+      total.misconducts,
+      total.violentActions,
+      total.goalP1,
+      total.goalP2,
+      total.goalP3,
+      total.goalP4,
+      total.goalOT,
+      total.sixVsSixShots,
+      total.manUpShots,
+      total.penaltyShots
+    ]);
+  }
+
+  return table;
 };

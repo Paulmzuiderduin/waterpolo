@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronsLeft, ChevronsRight, LogOut, RefreshCcw } from 'lucide-react';
+import { BarChart2, ChevronsLeft, ChevronsRight, LogOut, MessageSquare, RefreshCcw } from 'lucide-react';
 
 const SidebarNav = ({
   selectedSeasonName,
@@ -7,6 +7,8 @@ const SidebarNav = ({
   activeTab,
   onSelectTab,
   onSwitchTeam,
+  onRequestFeature,
+  onAnalyticsPreferences,
   onSignOut,
   isCollapsed,
   onToggleCollapse
@@ -87,6 +89,24 @@ const SidebarNav = ({
       );
     })()}
     <div className="mt-4 space-y-2 pb-1">
+      <button
+        className={`w-full rounded-xl border border-cyan-200 bg-cyan-50 py-2 text-sm font-semibold text-cyan-700 ${
+          isCollapsed ? 'px-2' : 'px-4'
+        }`}
+        onClick={onRequestFeature}
+        title="Request feature"
+      >
+        {isCollapsed ? <MessageSquare size={16} className="mx-auto" /> : 'Request feature'}
+      </button>
+      <button
+        className={`w-full rounded-xl border border-slate-200 bg-slate-50 py-2 text-sm font-semibold text-slate-700 ${
+          isCollapsed ? 'px-2' : 'px-4'
+        }`}
+        onClick={onAnalyticsPreferences}
+        title="Analytics preferences"
+      >
+        {isCollapsed ? <BarChart2 size={16} className="mx-auto" /> : 'Analytics preferences'}
+      </button>
       <button
         className={`w-full rounded-xl border border-slate-200 py-2 text-sm font-semibold ${
           isCollapsed ? 'px-2' : 'px-4'

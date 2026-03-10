@@ -21,6 +21,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://waterpolo.paulzuiderduin.com/water-polo-stat-sheet-app.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://waterpolo.paulzuiderduin.com/docs/waterpolo-quickstart.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>

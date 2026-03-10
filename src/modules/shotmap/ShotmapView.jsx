@@ -337,7 +337,22 @@ const ShotmapView = ({
       ctx.font = '600 36px Space Grotesk, sans-serif';
       const title = seasonMode ? 'Water Polo Shotmap (Season)' : `Water Polo Shotmap - ${currentMatch?.info?.name || ''}`;
       ctx.fillText(title, 40, 64);
-      ctx.drawImage(canvas, 0, 100, 1440, 1200);
+      const targetX = 0;
+      const targetY = 100;
+      const targetWidth = 1440;
+      const targetHeight = 1200;
+      const sourceWidth = canvas.width || 1;
+      const sourceHeight = canvas.height || 1;
+      const scale = Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight);
+      const drawWidth = sourceWidth * scale;
+      const drawHeight = sourceHeight * scale;
+      const offsetX = targetX + (targetWidth - drawWidth) / 2;
+      const offsetY = targetY + (targetHeight - drawHeight) / 2;
+
+      // Keep field proportions stable in export, even on narrow mobile layouts.
+      ctx.fillStyle = '#0b4a7a';
+      ctx.fillRect(targetX, targetY, targetWidth, targetHeight);
+      ctx.drawImage(canvas, offsetX, offsetY, drawWidth, drawHeight);
       const url = output.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = url;

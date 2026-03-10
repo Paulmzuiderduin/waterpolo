@@ -335,7 +335,9 @@ const MatchesView = ({
   };
 
   const deleteMatch = async (matchId) => {
-    if (!(await confirmAction('Delete this match and all linked data?'))) return;
+    const match = matches.find((row) => row.id === matchId);
+    const label = match?.name || 'this match';
+    if (!(await confirmAction(`Delete "${label}" and all linked data?`))) return;
     try {
       setSaving(true);
       const { error: deleteError } = await supabase.from('matches').delete().eq('id', matchId);

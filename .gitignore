@@ -4,3 +4,17 @@ dist/
 .env
 .env.local
 .env.*.local
+
+# SSH keys and other local credential material should never live in this repo.
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+**/id_rsa
+**/id_rsa.pub
+**/id_ed25519
+**/id_ed25519.pub
+eval "$(ssh-agent -s)"
+eval "$(ssh-agent -s)".pub

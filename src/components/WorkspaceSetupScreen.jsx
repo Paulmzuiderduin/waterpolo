@@ -19,8 +19,6 @@ const WorkspaceSetupScreen = ({
   deleteSeason,
   renameTeam,
   deleteTeam,
-  openFeatureRequestDialog,
-  setActiveTab,
   overlays
 }) => (
   <div className="min-h-screen px-6 py-8">
@@ -151,34 +149,14 @@ const WorkspaceSetupScreen = ({
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-700">Getting started</h2>
             <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-600">
-              <li>Create a season on the left.</li>
+              <li>Create a season.</li>
               <li>Select the season and create a team.</li>
-              <li>Open Roster to add players.</li>
-              <li>Create a match in Matches, then open Shotmap to start tracking shots.</li>
+              <li>Then move into live scoring.</li>
             </ol>
           </div>
         </div>
       </div>
     </div>
-    <footer className="mx-auto mt-8 max-w-5xl px-6 pb-8 text-xs text-slate-500">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white/70 px-4 py-3 shadow-sm">
-        <span>© {new Date().getFullYear()} Waterpolo Shotmap & Analytics</span>
-        <div className="flex items-center gap-4">
-          <button
-            className="font-semibold text-cyan-700 underline decoration-transparent transition hover:decoration-current"
-            onClick={openFeatureRequestDialog}
-          >
-            Request Feature
-          </button>
-          <button
-            className="font-semibold text-slate-700 underline decoration-transparent transition hover:decoration-current"
-            onClick={() => setActiveTab('privacy')}
-          >
-            Privacy
-          </button>
-        </div>
-      </div>
-    </footer>
     {overlays}
   </div>
 );

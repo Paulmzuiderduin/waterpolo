@@ -1,57 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const DEFAULT_PREFERENCES = {
-  rememberLastTab: true,
   showHubTips: true,
   showStatTooltips: true,
-  showAdvancedModules: false,
   showAdvancedPlayerMetrics: false,
   showInAppHints: true,
   showBackupReminder: true,
-  lastBackupAt: '',
-  uiMode: 'simple',
-  onboardingCompleted: false
+  lastBackupAt: ''
 };
 
 export const usePersistedUiState = ({
   sessionUser,
-  moduleConfig,
   seasons,
-  loadingSeasons,
-  defaultTab = 'hub'
+  loadingSeasons
 }) => {
-  const [activeTab, setActiveTab] = useState(defaultTab);
   const [selectedSeasonId, setSelectedSeasonId] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState('');
-  const [moduleVisibility, setModuleVisibility] = useState({});
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const didApplyStartTab = useRef(false);
   const didApplyWorkspaceSelection = useRef(false);
-
-  useEffect(() => {
-    if (!sessionUser) return;
-    const defaults = moduleConfig.reduce((acc, item) => {
-      if (!item.alwaysVisible) acc[item.key] = true;
-      return acc;
-    }, {});
-
-    try {
-      const raw = localStorage.getItem(`waterpolo_module_visibility_${sessionUser.id}`);
-      const parsed = raw ? JSON.parse(raw) : {};
-      setModuleVisibility({ ...defaults, ...parsed });
-    } catch {
-      setModuleVisibility(defaults);
-    }
-  }, [moduleConfig, sessionUser]);
-
-  useEffect(() => {
-    if (!sessionUser) return;
-    localStorage.setItem(
-      `waterpolo_module_visibility_${sessionUser.id}`,
-      JSON.stringify(moduleVisibility)
-    );
-  }, [moduleVisibility, sessionUser]);
 
   useEffect(() => {
     if (!sessionUser) return;
@@ -61,18 +27,13 @@ export const usePersistedUiState = ({
       setPreferences((prev) => ({
         ...prev,
         ...parsed,
-        uiMode: parsed.uiMode === 'advanced' ? 'advanced' : 'simple',
-        onboardingCompleted: Boolean(parsed.onboardingCompleted),
         showInAppHints:
           parsed.showInAppHints != null ? parsed.showInAppHints : prev.showInAppHints,
         showAdvancedPlayerMetrics:
           parsed.showAdvancedPlayerMetrics != null
             ? parsed.showAdvancedPlayerMetrics
             : prev.showAdvancedPlayerMetrics,
-        showStatTooltips:
-          parsed.showStatTooltips != null
-            ? parsed.showStatTooltips
-            : parsed.showHelpTooltips ?? prev.showStatTooltips
+        showStatTooltips: parsed.showStatTooltips != null ? parsed.showStatTooltips : prev.showStatTooltips
       }));
     } catch {
       setPreferences(DEFAULT_PREFERENCES);
@@ -138,37 +99,6 @@ export const usePersistedUiState = ({
     [selectedSeason, selectedTeamId]
   );
 
-  const navItems = useMemo(
-    () =>
-      moduleConfig.filter((item) => {
-        if (item.advanced && (preferences.uiMode !== 'advanced' || !preferences.showAdvancedModules)) return false;
-        return item.alwaysVisible || moduleVisibility[item.key] !== false;
-      }),
-    [moduleConfig, moduleVisibility, preferences.showAdvancedModules, preferences.uiMode]
-  );
-
-  useEffect(() => {
-    const visibleKeys = new Set([...navItems.map((item) => item.key), 'privacy']);
-    if (visibleKeys.has(activeTab)) return;
-    const nextTab = navItems.find((item) => item.key === defaultTab)?.key || navItems[0]?.key || 'hub';
-    setActiveTab(nextTab);
-  }, [activeTab, defaultTab, navItems]);
-
-  useEffect(() => {
-    if (!sessionUser || !preferences.rememberLastTab || didApplyStartTab.current) return;
-    if (!selectedSeason || !selectedTeam) return;
-    const last = localStorage.getItem(`waterpolo_last_tab_${sessionUser.id}`);
-    if (last && navItems.some((item) => item.key === last)) {
-      setActiveTab(last);
-    }
-    didApplyStartTab.current = true;
-  }, [navItems, preferences.rememberLastTab, selectedSeason, selectedTeam, sessionUser]);
-
-  useEffect(() => {
-    if (!sessionUser || !preferences.rememberLastTab || !didApplyStartTab.current) return;
-    localStorage.setItem(`waterpolo_last_tab_${sessionUser.id}`, activeTab);
-  }, [activeTab, preferences.rememberLastTab, sessionUser]);
-
   useEffect(() => {
     if (!selectedSeason && selectedSeasonId) {
       setSelectedSeasonId('');
@@ -176,46 +106,14 @@ export const usePersistedUiState = ({
     }
   }, [selectedSeason, selectedSeasonId, selectedTeam, selectedTeamId]);
 
-  const sidebarStorageKey = sessionUser
-    ? `waterpolo_sidebar_collapsed_${sessionUser.id}`
-    : 'waterpolo_sidebar_collapsed';
-
-  useEffect(() => {
-    if (!sessionUser) return;
-    try {
-      const raw = localStorage.getItem(sidebarStorageKey);
-      setSidebarCollapsed(raw === '1');
-    } catch {
-      setSidebarCollapsed(false);
-    }
-  }, [sessionUser, sidebarStorageKey]);
-
-  useEffect(() => {
-    if (!sessionUser) return;
-    localStorage.setItem(sidebarStorageKey, sidebarCollapsed ? '1' : '0');
-  }, [sessionUser, sidebarCollapsed, sidebarStorageKey]);
-
-  const mobilePrimaryKeys = ['hub', 'matches', 'shotmap', 'analytics'];
-  const mobilePrimaryItems = navItems.filter((item) => mobilePrimaryKeys.includes(item.key));
-  const mobileOverflowItems = navItems.filter((item) => !mobilePrimaryKeys.includes(item.key));
-
   return {
-    activeTab,
-    setActiveTab,
     selectedSeasonId,
     setSelectedSeasonId,
     selectedTeamId,
     setSelectedTeamId,
-    moduleVisibility,
-    setModuleVisibility,
     preferences,
     setPreferences,
-    sidebarCollapsed,
-    setSidebarCollapsed,
     selectedSeason,
-    selectedTeam,
-    navItems,
-    mobilePrimaryItems,
-    mobileOverflowItems
+    selectedTeam
   };
 };

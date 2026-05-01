@@ -805,22 +805,26 @@ const ScoringView = ({
 
   const containerClasses = [
     'space-y-4 md:space-y-6',
-    focusMode ? 'fixed inset-0 z-[90] overflow-y-auto bg-slate-100 p-3' : '',
+    focusMode || compactAppFullscreen ? 'overflow-y-auto' : '',
+    focusMode ? 'fixed inset-0 z-[90] bg-slate-100 p-3' : '',
     liveMode && !focusMode ? 'rounded-2xl border border-cyan-200 bg-cyan-50/40 p-3' : ''
   ]
     .filter(Boolean)
     .join(' ');
 
-  const containerStyle = focusMode
+  const containerStyle = focusMode || compactAppFullscreen
     ? {
         paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
-        paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))'
+        paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+        minHeight: '100dvh'
       }
     : undefined;
 
   const compactAppFullscreen = isAppMode && (focusMode || isFullscreenActive || (liveMode && isLandscape));
   const showDesktopLayout = !isAppMode;
-  const mobileLayoutClass = isAppMode ? 'rounded-2xl bg-white p-3 shadow-sm' : 'rounded-2xl bg-white p-3 shadow-sm md:hidden';
+  const mobileLayoutClass = isAppMode
+    ? 'rounded-2xl bg-white p-3 pb-24 shadow-sm'
+    : 'rounded-2xl bg-white p-3 shadow-sm md:hidden';
   const savedLabel = lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not saved yet';
 
   return (

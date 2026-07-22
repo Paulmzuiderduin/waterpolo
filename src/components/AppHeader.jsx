@@ -37,6 +37,8 @@ const AppHeader = ({
       <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[34rem]">
         <div className="flex flex-wrap gap-2 rounded-2xl bg-slate-100 p-1">
           {[
+            { key: 'matches', label: 'Matches' },
+            { key: 'roster', label: 'Roster' },
             { key: 'scoring', label: 'Scoring' },
             { key: 'shotmap', label: 'Shotmap' },
             { key: 'statsheet', label: 'Stat Sheet' }

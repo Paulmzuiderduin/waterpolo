@@ -7,17 +7,27 @@ import WorkspaceSetupScreen from './components/WorkspaceSetupScreen';
 import { useAuthSession } from './hooks/useAuthSession';
 import { usePersistedUiState } from './hooks/usePersistedUiState';
 import { useSeasonsTeams } from './hooks/useSeasonsTeams';
-import { loadTeamData, loadTeamScoring, notifyDataUpdated } from './lib/waterpolo/dataLoaders';
+import { loadTeamData, loadTeamMatchesOverview, loadTeamScoring, notifyDataUpdated } from './lib/waterpolo/dataLoaders';
 import { ATTACK_TYPES, PERIOD_ORDER, PERIODS, RESULT_COLORS, ZONES } from './lib/waterpolo/constants';
 
+const MatchesView = lazy(() => import('./modules/matches/MatchesView'));
+const RosterView = lazy(() => import('./modules/roster/RosterView'));
 const ScoringView = lazy(() => import('./modules/scoring/ScoringView'));
 const ShotmapView = lazy(() => import('./modules/shotmap/ShotmapView'));
 const StatSheetView = lazy(() => import('./modules/statsheet/StatSheetView'));
 
 const MODULES = {
+  matches: {
+    label: 'Matches',
+    description: 'Create and manage matches and lineups for the selected team.'
+  },
+  roster: {
+    label: 'Roster',
+    description: 'Manage players, cap numbers, and team roster profiles.'
+  },
   scoring: {
     label: 'Live Scoring',
-    description: 'Create a match, set a lineup, and score live.'
+    description: 'Record live match events, goals, and fouls.'
   },
   shotmap: {
     label: 'Shotmap',
@@ -302,8 +312,31 @@ const App = () => {
       />
 
       <main className="mx-auto max-w-7xl space-y-6 p-6">
-        <Suspense fallback={<div className="p-10 text-slate-700">Loading scoring module...</div>}>
-          {activeModule === 'scoring' ? (
+        <Suspense fallback={<div className="p-10 text-slate-700">Loading module...</div>}>
+          {activeModule === 'matches' ? (
+            <MatchesView
+              seasonId={selectedSeasonId}
+              teamId={selectedTeamId}
+              userId={session.user.id}
+              confirmAction={confirmAction}
+              toast={toast}
+              loadOverview={loadTeamMatchesOverview}
+              onDataUpdated={notifyDataUpdated}
+              showTooltips={preferences.showStatTooltips}
+            />
+          ) : activeModule === 'roster' ? (
+            <RosterView
+              seasonId={selectedSeasonId}
+              teamId={selectedTeamId}
+              userId={session.user.id}
+              confirmAction={confirmAction}
+              toast={toast}
+              loadData={loadTeamData}
+              onDataUpdated={notifyDataUpdated}
+              showTooltips={preferences.showStatTooltips}
+              onOpenModule={setActiveModule}
+            />
+          ) : activeModule === 'scoring' ? (
             <ScoringView
               seasonId={selectedSeasonId}
               teamId={selectedTeamId}

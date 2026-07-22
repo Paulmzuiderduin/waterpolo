@@ -803,6 +803,8 @@ const ScoringView = ({
     return <div className="p-10 text-slate-700">Loading...</div>;
   }
 
+  const compactAppFullscreen = isAppMode && (focusMode || isFullscreenActive || (liveMode && isLandscape));
+
   const containerClasses = [
     'space-y-4 md:space-y-6',
     focusMode || compactAppFullscreen ? 'overflow-y-auto' : '',
@@ -819,8 +821,6 @@ const ScoringView = ({
         minHeight: '100dvh'
       }
     : undefined;
-
-  const compactAppFullscreen = isAppMode && (focusMode || isFullscreenActive || (liveMode && isLandscape));
   const showDesktopLayout = !isAppMode;
   const mobileLayoutClass = isAppMode
     ? 'rounded-2xl bg-white p-3 pb-24 shadow-sm'

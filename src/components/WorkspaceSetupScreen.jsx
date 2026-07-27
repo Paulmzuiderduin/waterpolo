@@ -19,14 +19,27 @@ const WorkspaceSetupScreen = ({
   deleteSeason,
   renameTeam,
   deleteTeam,
-  overlays
+  overlays,
+  onClose
 }) => (
   <div className="min-h-screen px-6 py-8">
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="rounded-3xl bg-white p-6 shadow-sm">
-        <p className="text-sm font-semibold text-cyan-700">Water Polo Platform</p>
-        <h1 className="text-3xl font-semibold">Seasons & Teams</h1>
-        <p className="mt-2 text-sm text-slate-500">Select a season and team, or create new folders.</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-cyan-700">Water Polo Platform</p>
+            <h1 className="text-3xl font-semibold">Seasons & Teams</h1>
+            <p className="mt-2 text-sm text-slate-500">Select a season and team, or create new folders.</p>
+          </div>
+          {onClose && (
+            <button
+              className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={onClose}
+            >
+              ← Back to app
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr]">

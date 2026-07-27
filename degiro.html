@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>Degiro Portfolio Viewer</title>
+    <style>
+      :root{--bg:#f5f7fb;--panel:#fff;--text:#0f172a;--muted:#64748b;--line:#dbe2ee;--blue:#2563eb;--green:#16a34a;--red:#dc2626}
+      *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+      .container{max-width:1280px;margin:0 auto;padding:24px;display:grid;gap:20px}.hero,.panel,.dropzone{background:var(--panel);border:1px solid var(--line);border-radius:18px}
+      .hero{padding:24px;display:grid;gap:16px} h1,h2,p{margin:0}.muted{color:var(--muted)} h1{font-size:clamp(28px,4vw,44px)} h2{font-size:20px;margin-bottom:14px}
+      .toolbar{display:grid;gap:12px}.dropzone{padding:18px;border-style:dashed}.dropzone.dragover{border-color:var(--blue);background:#eff6ff}
+      textarea{width:100%;min-height:150px;padding:14px;border-radius:14px;border:1px solid var(--line);font:inherit;resize:vertical}
+      button,input[type="file"]::file-selector-button{border:0;background:var(--blue);color:#fff;border-radius:12px;padding:12px 16px;font:inherit;cursor:pointer}
+      .secondary{background:#e2e8f0;color:var(--text)} .stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+      .stat-card{padding:16px;border:1px solid var(--line);border-radius:16px;background:#fff}.stat-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.stat-value{font-size:22px;font-weight:700;margin-top:8px}
+      .positive{color:var(--green)} .negative{color:var(--red)} .grid-2{display:grid;grid-template-columns:1.1fr .9fr;gap:20px}.panel{padding:18px}
+      .chart{width:100%;height:auto;display:block}.chart-wide{max-height:300px}.chart-center-label{font-size:12px;fill:var(--muted)} .chart-center-value{font-size:18px;font-weight:700;fill:var(--text)}
+      .legend{display:grid;gap:8px;margin-top:14px}.legend-item{display:flex;align-items:center;gap:10px;justify-content:space-between;color:var(--text)} .legend-swatch,.chart-legend i{width:12px;height:12px;border-radius:999px;display:inline-block}
+      .chart-legend{display:flex;gap:20px;flex-wrap:wrap;margin-top:10px;color:var(--muted)} .chart-legend span{display:inline-flex;align-items:center;gap:8px} .axis{stroke:#cbd5e1;stroke-width:1}
+      .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:16px;background:#fff} table{width:100%;border-collapse:collapse;min-width:1100px}
+      th,td{padding:12px 14px;border-bottom:1px solid #edf2f7;text-align:left;vertical-align:top} th{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);background:#f8fafc;position:sticky;top:0}
+      .primary{font-weight:600}.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#eff6ff;color:var(--blue);font-size:12px;font-weight:600}.section{display:grid;gap:14px}
+      .topline{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}.empty-inline{color:var(--muted);padding:12px 0}
+      input[type="number"]{width:140px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);font:inherit} details summary{cursor:pointer;font-weight:600}
+      @media (max-width:1100px){.stats,.grid-2{grid-template-columns:1fr}}
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <section class="hero">
+        <div class="topline">
+          <div>
+            <span class="pill">Degiro Portfolio Viewer</span>
+            <h1>Portefeuilleoverzicht</h1>
+            <p class="muted">Upload je transactiebestand om je posities, inleg, rendement en transacties te bekijken.</p>
+          </div>
+          <div id="fileMeta" class="muted">Nog geen bestand geladen.</div>
+        </div>
+        <div class="toolbar">
+          <div class="dropzone" id="dropZone">
+            <div><strong>Sleep Transactions.csv hierheen</strong> of kies een bestand.</div>
+            <input id="fileInput" type="file" accept=".csv,text/csv" />
+          </div>
+          <div><textarea id="csvTextarea" placeholder="Plak hier de CSV-inhoud als je geen bestand wilt uploaden."></textarea></div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <button id="loadButton">CSV laden</button>
+            <button id="sampleButton" class="secondary">Voorbeeld laden</button>
+            <button id="clearButton" class="secondary">Tekstveld leegmaken</button>
+          </div>
+          <p class="muted">Tip: de huidige koers kan je per positie aanpassen in de tabel om de actuele waarde te herberekenen.</p>
+        </div>
+      </section>
+      <section id="importSummary" class="stats"></section>
+      <section class="section">
+        <div class="topline"><h2>Grafieken</h2><div id="rangeSummary" class="muted"></div></div>
+        <div id="charts" class="grid-2"></div>
+      </section>
+      <section class="section">
+        <h2>Posities per effect</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Effect</th><th>Aantal</th><th>Huidige koers</th><th>Waarde</th><th>Inleg</th><th>Resultaat</th><th>Rendement</th></tr></thead>
+            <tbody id="holdingsBody"><tr><td colspan="7" class="empty-inline">Laad eerst een CSV-bestand.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="section">
+        <details open>
+          <summary>Transacties</summary>
+          <div class="muted" style="margin:10px 0 14px;">De volledige transactielijst blijft standaard zichtbaar als referentie.</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Datum</th><th>Product</th><th>ISIN</th><th>Aantal</th><th>Transactiewaarde</th><th>Totaal EUR</th><th>Kosten</th></tr></thead>
+              <tbody id="transactionsBody"><tr><td colspan="7" class="empty-inline">Geen transacties geladen.</td></tr></tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+    </main>
+    <script>
+      const state = { csvText: '', fileName: '', portfolio: null, prices: {} };
+      const els = {};
+      const sampleCsv = [
+        'Datum,Tijd,Product,ISIN,Beurs,Uitvoeringsplaats,Aantal,Koers,,Lokale waarde,,Waarde EUR,Wisselkoers,AutoFX Kosten,Transactiekosten en/of kosten van derden EUR,Totaal EUR,Order ID,',
+        '11-05-2026,18:52,MICRON TECHNOLOGY INC,US5951121038,NDQ,JNST,-4,"794,7900",USD,"3179,16",USD,"2699,94","1,1775","-6,75","-2,00","2691,19",,c392da2b-0698-4286-b0d4-c5281af43253',
+        '22-01-2026,13:57,ISHARES PHYSICAL GOLD ETC,IE00B4ND3602,TDG,XGAT,1,"80,0100",EUR,"-80,01",EUR,"-80,01",,"0,00","-1,00","-81,01",,13ea1dae-b337-4485-a0c8-ae110c0421bc',
+        '22-01-2026,13:18,ISHARES PHYSICAL SILVER ETC,IE00B4NCWG09,TDG,XGAT,6,"76,0458",EUR,"-456,27",EUR,"-456,27",,"0,00","-1,00","-457,27",,8a4ce3e5-3fb0-434b-8941-f88fbd27390b'
+      ].join('\n');
+      const qs = (selector) => document.querySelector(selector);
+      const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      const parseNumber = (value) => { const text = String(value ?? '').trim(); if (!text) return 0; const normalized = text.replace(/\./g, '').replace(/[^\d,-]/g, '').replace(',', '.'); const parsed = Number(normalized); return Number.isFinite(parsed) ? parsed : 0; };
+      const parseDateParts = (value) => { const [day, month, year] = String(value || '').trim().split('-').map(Number); return day && month && year ? { year, month, day } : null; };
+      const formatDate = (value, locale='nl-NL') => { const parts = parseDateParts(value); if (!parts) return String(value || ''); const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)); return new Intl.DateTimeFormat(locale, { day:'2-digit', month:'short', year:'numeric' }).format(date); };
+      const formatMoney = (value, locale='nl-NL', currency='EUR') => new Intl.NumberFormat(locale, { style:'currency', currency, maximumFractionDigits:2 }).format(value || 0);
+      const formatPercent = (value, locale='nl-NL') => new Intl.NumberFormat(locale, { style:'percent', maximumFractionDigits:1 }).format(value || 0);
+      const formatNumber = (value) => new Intl.NumberFormat('nl-NL', { minimumFractionDigits:0, maximumFractionDigits:6 }).format(value || 0);
+      const parseCsv = (text) => {
+        const rows = []; let row = []; let cell = ''; let index = 0; let inQuotes = false; const source = String(text || '').replace(/^\uFEFF/, '');
+        while (index < source.length) { const char = source[index]; const next = source[index + 1];
+          if (inQuotes) { if (char === '"' && next === '"') { cell += '"'; index += 2; continue; } if (char === '"') { inQuotes = false; index += 1; continue; } cell += char; index += 1; continue; }
+          if (char === '"') { inQuotes = true; index += 1; continue; } if (char === ',') { row.push(cell); cell=''; index += 1; continue; } if (char === '\n') { row.push(cell); rows.push(row); row=[]; cell=''; index += 1; continue; } if (char === '\r') { index += 1; continue; } cell += char; index += 1;
+        }
+        if (cell.length || row.length) { row.push(cell); rows.push(row); }
+        return rows.filter((r) => r.some((value) => String(value || '').trim() !== ''));
+      };
+      const normalizeHeader = (header) => String(header || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/[^\p{L}\p{N}_]/gu, '');
+      const parseTransactionsCsv = (csvText) => {
+        const rows = parseCsv(csvText); if (!rows.length) return { transactions: [], byAsset: [], summary: emptySummary() };
+        const headers = rows[0].map(normalizeHeader);
+        const transactions = rows.slice(1).map((columns, index) => {
+          const record = {}; headers.forEach((header, i) => { record[header] = columns[i] ?? ''; });
+          const product = String(record.product || '').trim(); const isin = String(record.isin || '').trim(); const date = String(record.datum || '').trim();
+          if (!product && !isin && !date) return null;
+          return { id: `${date}-${index}`, sortKey: Date.parse(`${date.split('-').reverse().join('-')}T00:00:00Z`) || index, date, product, isin, exchange: String(record.beurs || '').trim(), venue: String(record.uitvoeringsplaats || '').trim(), quantity: parseNumber(record.aantal), price: parseNumber(record.koers), totalEur: parseNumber(record.totaal_eur), fee: Math.abs(parseNumber(record.transactiekostenenofkostenvanderden_eur)), autoFxFee: Math.abs(parseNumber(record.autofx_kosten)) };
+        }).filter(Boolean).sort((a,b) => a.sortKey - b.sortKey);
+        const assets = new Map();
+        for (const tx of transactions) {
+          const key = tx.isin || tx.product;
+          if (!assets.has(key)) assets.set(key, { key, isin: tx.isin, product: tx.product, exchange: tx.exchange, quantity: 0, invested: 0, proceeds: 0, fees: 0, transactions: [], latestTradePrice: 0, latestTradeDate: '' });
+          const asset = assets.get(key); asset.quantity += tx.quantity; asset.fees += tx.fee + tx.autoFxFee; asset.transactions.push(tx); asset.latestTradePrice = tx.price || asset.latestTradePrice; asset.latestTradeDate = tx.date || asset.latestTradeDate; if (tx.totalEur < 0) asset.invested += Math.abs(tx.totalEur); else asset.proceeds += tx.totalEur;
+        }
+        const byAsset = [...assets.values()].map((asset) => ({ ...asset, tradeCount: asset.transactions.length, averageBuyPrice: asset.quantity > 0 && asset.invested > 0 ? asset.invested / asset.quantity : 0, averageSellPrice: asset.quantity < 0 && asset.proceeds > 0 ? asset.proceeds / Math.abs(asset.quantity) : 0 })).sort((a,b) => b.quantity - a.quantity || a.product.localeCompare(b.product));
+        const summary = byAsset.reduce((acc, asset) => { acc.transactionCount += asset.tradeCount; acc.assetCount += 1; acc.invested += asset.invested; acc.proceeds += asset.proceeds; acc.fees += asset.fees; acc.netQuantity += asset.quantity; return acc; }, emptySummary());
+        return { transactions, byAsset, summary, firstDate: transactions[0]?.date || '', lastDate: transactions.at(-1)?.date || '' };
+      };
+      const emptySummary = () => ({ transactionCount:0, assetCount:0, invested:0, proceeds:0, fees:0, netQuantity:0 });
+      const buildPortfolioView = ({ csvText, currentPrices = {} }) => {
+        const parsed = parseTransactionsCsv(csvText);
+        const holdings = parsed.byAsset.map((asset) => { const price = Number(currentPrices[asset.isin || asset.key]) || asset.latestTradePrice || 0; const marketValue = asset.quantity * price; const costBasis = asset.invested - asset.proceeds; const pnl = marketValue - costBasis - asset.fees; const returnPct = costBasis > 0 ? pnl / costBasis : 0; return { ...asset, price, marketValue, costBasis, pnl, returnPct }; });
+        const totalValue = holdings.reduce((sum, item) => sum + item.marketValue, 0); const totalCostBasis = holdings.reduce((sum, item) => sum + item.costBasis, 0); const totalPnl = holdings.reduce((sum, item) => sum + item.pnl, 0);
+        const timeline = parsed.transactions.reduce((acc, tx) => { const last = acc[acc.length - 1]; acc.push({ date: tx.date, cash: (last?.cash || 0) + tx.totalEur, cumulativeInvested: (last?.cumulativeInvested || 0) + (tx.totalEur < 0 ? Math.abs(tx.totalEur) : 0) }); return acc; }, []);
+        return { ...parsed, holdings, metrics: { totalValue, totalCostBasis, totalPnl, totalFees: parsed.summary.fees, returnPct: totalCostBasis > 0 ? totalPnl / totalCostBasis : 0 }, timeline };
+      };
+      const readPrices = () => { const next = {}; els.holdingsBody.querySelectorAll('tr').forEach((row) => { const isin = row.dataset.isin; const input = row.querySelector('input[data-price-input]'); if (isin && input) next[isin] = Number(String(input.value).replace(',', '.')) || 0; }); return next; };
+      const renderAllocationChart = (holdings) => { const width=360,height=260,radius=84,cx=140,cy=130,total=holdings.reduce((sum,item)=>sum+Math.abs(item.marketValue),0)||1; let cursor=-90; const slices=holdings.map((item,index)=>{ const share=Math.abs(item.marketValue)/total; const sweep=Math.max(share*360,item.marketValue?1:0); const start=cursor,end=cursor+sweep; cursor=end; const startRad=Math.PI/180*start,endRad=Math.PI/180*end,x1=cx+radius*Math.cos(startRad),y1=cy+radius*Math.sin(startRad),x2=cx+radius*Math.cos(endRad),y2=cy+radius*Math.sin(endRad),largeArc=sweep>180?1:0; return { color:`hsl(${(index*47)%360} 70% 52%)`, d:`M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}` }; }); const legend=holdings.map((item,index)=>`<div class="legend-item"><span class="legend-swatch" style="background:${slices[index]?.color || '#cbd5e1'}"></span><span>${escapeHtml(item.product)}</span><strong>${formatMoney(item.marketValue)}</strong></div>`).join(''); return `<svg viewBox="0 0 ${width} ${height}" class="chart"><circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="#e2e8f0" stroke-width="28"></circle>${slices.map((slice)=>`<path d="${slice.d}" fill="none" stroke="${slice.color}" stroke-width="28" stroke-linecap="butt"></path>`).join('')}<text x="${cx}" y="${cy-8}" text-anchor="middle" class="chart-center-label">Totale waarde</text><text x="${cx}" y="${cy+22}" text-anchor="middle" class="chart-center-value">${formatMoney(holdings.reduce((sum,item)=>sum+item.marketValue,0))}</text></svg><div class="legend">${legend || '<div class="empty-inline">Geen posities gevonden.</div>'}</div>`; };
+      const renderTimelineChart = (timeline) => { const width=760,height=280,padding=36,values=timeline.flatMap((p)=>[p.cumulativeInvested,p.cash]),min=Math.min(0,...values),max=Math.max(1,...values),span=max-min||1,xStep=timeline.length>1?(width-padding*2)/(timeline.length-1):0; const buildPath=(key)=>timeline.map((p,i)=>{ const x=padding+i*xStep; const y=height-padding-((p[key]-min)/span)*(height-padding*2); return `${i===0?'M':'L'} ${x} ${y}`; }).join(' '); return `<svg viewBox="0 0 ${width} ${height}" class="chart chart-wide"><line x1="${padding}" y1="${height-padding}" x2="${width-padding}" y2="${height-padding}" class="axis"></line><line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height-padding}" class="axis"></line><path d="${buildPath('cumulativeInvested')}" fill="none" stroke="#2563eb" stroke-width="3"></path><path d="${buildPath('cash')}" fill="none" stroke="#16a34a" stroke-width="3"></path></svg><div class="chart-legend"><span><i style="background:#2563eb"></i>Geaccumuleerde inleg</span><span><i style="background:#16a34a"></i>Netto kasstroom</span></div>`; };
+      const renderPortfolio = () => {
+        if (!state.csvText) return; state.portfolio = buildPortfolioView({ csvText: state.csvText, currentPrices: state.prices }); const { holdings, summary, metrics, transactions, timeline, firstDate, lastDate } = state.portfolio;
+        els.fileMeta.textContent = state.fileName ? `Bestand: ${state.fileName}` : 'Nog geen bestand geladen.';
+        els.importSummary.innerHTML = `<div class="stat-card"><div class="stat-label">Posities</div><div class="stat-value">${summary.assetCount}</div></div><div class="stat-card"><div class="stat-label">Transacties</div><div class="stat-value">${summary.transactionCount}</div></div><div class="stat-card"><div class="stat-label">Geïnvesteerd</div><div class="stat-value">${formatMoney(summary.invested)}</div></div><div class="stat-card"><div class="stat-label">Huidige waarde</div><div class="stat-value">${formatMoney(metrics.totalValue)}</div></div><div class="stat-card"><div class="stat-label">Resultaat</div><div class="stat-value ${metrics.totalPnl>=0?'positive':'negative'}">${formatMoney(metrics.totalPnl)}</div></div><div class="stat-card"><div class="stat-label">Rendement</div><div class="stat-value ${metrics.returnPct>=0?'positive':'negative'}">${formatPercent(metrics.returnPct)}</div></div>`;
+        els.rangeSummary.textContent = firstDate && lastDate ? `${formatDate(firstDate)} — ${formatDate(lastDate)}` : 'Geen datum beschikbaar';
+        els.charts.innerHTML = `<section class="panel"><h2>Portefeuilleverdeling</h2>${renderAllocationChart(holdings)}</section><section class="panel"><h2>Inleg en kasstroom</h2>${renderTimelineChart(timeline)}</section>`;
+        els.holdingsBody.innerHTML = holdings.map((item) => `<tr data-isin="${escapeHtml(item.isin || item.key)}"><td><div class="primary">${escapeHtml(item.product)}</div><div class="muted">${escapeHtml(item.isin || 'Onbekende ISIN')} · ${escapeHtml(item.exchange || '—')}</div></td><td>${formatNumber(item.quantity)}</td><td><input data-price-input type="number" step="0.0001" value="${escapeHtml(state.prices[item.isin || item.key] ?? item.latestTradePrice ?? 0)}" /></td><td>${formatMoney(item.marketValue)}</td><td>${formatMoney(item.costBasis)}</td><td class="${item.pnl >= 0 ? 'positive' : 'negative'}">${formatMoney(item.pnl)}</td><td>${formatPercent(item.returnPct)}</td></tr>`).join('');
+        els.transactionsBody.innerHTML = transactions.map((item) => `<tr><td>${formatDate(item.date)}</td><td>${escapeHtml(item.product)}</td><td>${escapeHtml(item.isin || '')}</td><td>${formatNumber(item.quantity)}</td><td>${formatMoney(item.price * Math.abs(item.quantity))}</td><td class="${item.totalEur >= 0 ? 'positive' : 'negative'}">${formatMoney(item.totalEur)}</td><td>${formatMoney(item.fee + item.autoFxFee)}</td></tr>`).join('');
+        els.holdingsBody.querySelectorAll('input[data-price-input]').forEach((input) => input.addEventListener('input', () => { state.prices = readPrices(); renderPortfolio(); }));
+      };
+      const handleFile = async (file) => { if (!file) return; state.csvText = await file.text(); state.fileName = file.name; state.prices = {}; renderPortfolio(); };
+      const init = () => {
+        els.fileInput = qs('#fileInput'); els.csvTextarea = qs('#csvTextarea'); els.loadButton = qs('#loadButton'); els.sampleButton = qs('#sampleButton'); els.importSummary = qs('#importSummary'); els.fileMeta = qs('#fileMeta'); els.charts = qs('#charts'); els.holdingsBody = qs('#holdingsBody'); els.transactionsBody = qs('#transactionsBody'); els.rangeSummary = qs('#rangeSummary');
+        els.fileInput.addEventListener('change', (event) => handleFile(event.target.files?.[0]));
+        els.loadButton.addEventListener('click', () => { const text = els.csvTextarea.value.trim(); if (!text) return; state.csvText = text; state.fileName = 'Plaktekst'; state.prices = {}; renderPortfolio(); });
+        els.sampleButton.addEventListener('click', () => { els.csvTextarea.value = sampleCsv; });
+        els.clearButton = qs('#clearButton');
+        els.clearButton.addEventListener('click', () => { els.csvTextarea.value = ''; });
+        const dropZone = qs('#dropZone'); dropZone.addEventListener('dragover', (event) => { event.preventDefault(); dropZone.classList.add('dragover'); }); dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover')); dropZone.addEventListener('drop', async (event) => { event.preventDefault(); dropZone.classList.remove('dragover'); await handleFile(event.dataTransfer.files?.[0]); });
+      };
+      document.addEventListener('DOMContentLoaded', init);
+    </script>
+  </body>
+</html>

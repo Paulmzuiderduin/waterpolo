@@ -51,6 +51,7 @@ const App = () => {
   const [promptDialog, setPromptDialog] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [activeModule, setActiveModule] = useState('scoring');
+  const [isManagingWorkspace, setIsManagingWorkspace] = useState(false);
 
   const toast = useCallback((message, type = 'info') => {
     const id = `${Date.now()}_${Math.random()}`;
@@ -263,7 +264,7 @@ const App = () => {
 
   const activeModuleConfig = MODULES[activeModule] || MODULES.scoring;
 
-  if (!selectedSeason || !selectedTeam) {
+  if (!selectedSeason || !selectedTeam || isManagingWorkspace) {
     return (
       <WorkspaceSetupScreen
         seasons={seasons}
@@ -284,6 +285,7 @@ const App = () => {
         renameTeam={renameTeam}
         deleteTeam={deleteTeam}
         overlays={overlays}
+        onClose={selectedSeason && selectedTeam ? () => setIsManagingWorkspace(false) : undefined}
       />
     );
   }
@@ -309,6 +311,7 @@ const App = () => {
         activeModule={activeModule}
         onSelectModule={setActiveModule}
         onSignOut={() => supabase.auth.signOut()}
+        onManageWorkspace={() => setIsManagingWorkspace(true)}
       />
 
       <main className="mx-auto max-w-7xl space-y-6 p-6">

@@ -14,7 +14,8 @@ const AppHeader = ({
   onSelectTeam,
   activeModule,
   onSelectModule,
-  onSignOut
+  onSignOut,
+  onManageWorkspace
 }) => (
   <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur sm:px-6">
     <div className="mx-auto flex max-w-7xl flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -90,7 +91,15 @@ const AppHeader = ({
             ))}
           </select>
         </label>
-        <div className="col-span-2 flex justify-end pt-1">
+        <div className="col-span-2 flex justify-end gap-2 pt-1">
+          {onManageWorkspace && (
+            <button
+              className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-700 hover:bg-cyan-100"
+              onClick={onManageWorkspace}
+            >
+              Seasons &amp; Teams
+            </button>
+          )}
           {onSignOut && (
             <button
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"

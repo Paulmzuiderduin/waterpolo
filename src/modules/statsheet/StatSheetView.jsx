@@ -27,6 +27,9 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
   const [error, setError] = useState('');
   const [scope, setScope] = useState('season');
   const [matchId, setMatchId] = useState('');
+  const [showSummary, setShowSummary] = useState(true);
+  const [showImportExport, setShowImportExport] = useState(false);
+  const [showImportHelp, setShowImportHelp] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importReport, setImportReport] = useState(null);
   const [importPreview, setImportPreview] = useState(null);
@@ -88,6 +91,23 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
       }),
     [events, matchId, matches, roster, scope, shots]
   );
+
+  const coachingSummary = useMemo(() => {
+    const topPlayer = [...sheet.rows].sort((a, b) => Number(b.shots || 0) - Number(a.shots || 0))[0];
+    const bestPct = [...sheet.rows]
+      .filter((row) => row.shots > 0)
+      .sort((a, b) => Number(b.shotPct) - Number(a.shotPct))[0];
+    const totalShots = sheet.summary.shots;
+    const goals = sheet.total.shotGoals;
+    const conversion = totalShots ? ((goals / totalShots) * 100).toFixed(1) : '0.0';
+    return {
+      totalShots,
+      goals,
+      conversion,
+      topPlayer,
+      bestPct
+    };
+  }, [sheet.rows, sheet.summary.shots, sheet.total.shotGoals]);
 
   const getScopeLabel = () =>
     scope === 'match'
@@ -390,71 +410,128 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
   if (loading) return <div className="p-10 text-slate-700">Loading...</div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <ModuleHeader
         eyebrow="Stat Sheet"
-        title="Match & Season Stat Sheet"
-        description="Summary table built from scoring events for match review and season-level player reporting."
+        title="Player Comparison"
+        description="Compare players and team totals from scoring events and shot data."
         actions={
           <>
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              className="hidden"
-              onChange={handleImportFileChange}
-            />
-            <ToolbarButton
-              onClick={() => importInputRef.current?.click()}
-              disabled={importing}
-              className="text-xs sm:text-sm"
-            >
-              <Upload size={16} />
-              {importing ? 'Importing...' : 'Import file'}
+            <ToolbarButton onClick={() => setShowSummary((prev) => !prev)}>
+              {showSummary ? 'Hide summary' : 'Show summary'}
             </ToolbarButton>
-            <ToolbarButton onClick={handleDownloadTemplate} className="text-xs sm:text-sm">
-              Template CSV
-            </ToolbarButton>
-            <ToolbarButton onClick={handleDownloadTemplateXlsx} className="text-xs sm:text-sm">
-              Template XLSX
-            </ToolbarButton>
-            <ToolbarButton variant="primary" onClick={handleExportXlsx} disabled={!sheet.rows.length}>
-              <Download size={16} />
-              Export XLSX
-            </ToolbarButton>
-            <ToolbarButton onClick={handleExportCsv} disabled={!sheet.rows.length}>
-              Export CSV
+            <ToolbarButton onClick={() => setShowImportExport((prev) => !prev)}>
+              {showImportExport ? 'Hide import/export' : 'Import/export'}
             </ToolbarButton>
           </>
         }
       />
 
-      <div
-        className={`rounded-2xl border-2 border-dashed p-4 transition ${
-          dragActive ? 'border-cyan-400 bg-cyan-50' : 'border-slate-200 bg-white'
-        }`}
-        onDragEnter={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setDragActive(true);
-        }}
-        onDragOver={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setDragActive(true);
-        }}
-        onDragLeave={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setDragActive(false);
-        }}
-        onDrop={handleDrop}
-      >
-        <div className="text-sm font-semibold text-slate-700">Import stat sheet file</div>
-        <div className="mt-1 text-xs text-slate-500">
-          Drag and drop <span className="font-semibold">.xlsx</span> or <span className="font-semibold">.csv</span>, or use Import CSV.
+      {showSummary && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Shots</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">{coachingSummary.totalShots}</div>
+          </div>
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Goals</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">{coachingSummary.goals}</div>
+          </div>
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversion</div>
+            <div className="mt-1 text-2xl font-semibold text-emerald-700">{coachingSummary.conversion}%</div>
+          </div>
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top shooter</div>
+            <div className="mt-1 text-sm text-slate-700">
+              {coachingSummary.topPlayer ? coachingSummary.topPlayer.name : 'No player data yet'}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Best %</div>
+            <div className="mt-1 text-sm text-slate-700">
+              {coachingSummary.bestPct ? `${coachingSummary.bestPct.name} (${coachingSummary.bestPct.shotPct}%)` : 'No data yet'}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {showImportExport && (
+        <>
+          <div
+            className={`rounded-2xl border-2 border-dashed p-4 transition ${
+              dragActive ? 'border-cyan-400 bg-cyan-50' : 'border-slate-200 bg-white'
+            }`}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setDragActive(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setDragActive(true);
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setDragActive(false);
+            }}
+            onDrop={handleDrop}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-700">Import and export</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Drag and drop <span className="font-semibold">.xlsx</span> or <span className="font-semibold">.csv</span>, or open the import controls.
+                </div>
+              </div>
+              <button
+                className="text-xs font-semibold text-slate-500 underline decoration-transparent hover:decoration-current"
+                onClick={() => setShowImportHelp((prev) => !prev)}
+              >
+                {showImportHelp ? 'Hide help' : 'Show help'}
+              </button>
+            </div>
+            {showImportHelp && (
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                Import format (.csv/.xlsx): <span className="font-semibold">match_name, match_date, opponent_name, event_type, player_cap, period, time, count</span>.
+                Missing period/time default to <span className="font-semibold">P1 · 7:00</span>.
+              </div>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={handleImportFileChange}
+              />
+              <ToolbarButton
+                onClick={() => importInputRef.current?.click()}
+                disabled={importing}
+                className="text-xs sm:text-sm"
+              >
+                <Upload size={16} />
+                {importing ? 'Importing...' : 'Import file'}
+              </ToolbarButton>
+              <ToolbarButton onClick={handleDownloadTemplate} className="text-xs sm:text-sm">
+                Template CSV
+              </ToolbarButton>
+              <ToolbarButton onClick={handleDownloadTemplateXlsx} className="text-xs sm:text-sm">
+                Template XLSX
+              </ToolbarButton>
+              <ToolbarButton variant="primary" onClick={handleExportXlsx} disabled={!sheet.rows.length}>
+                <Download size={16} />
+                Export XLSX
+              </ToolbarButton>
+              <ToolbarButton onClick={handleExportCsv} disabled={!sheet.rows.length}>
+                Export CSV
+              </ToolbarButton>
+            </div>
+          </div>
+        </>
+      )}
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
@@ -564,10 +641,6 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
                 <span>6v5/6v4 shots: {sheet.total.manUpShots}</span>
                 <span>Penalty shots: {sheet.total.penaltyShots}</span>
               </div>
-            </div>
-            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              Import format (.csv/.xlsx): <span className="font-semibold">match_name, match_date, opponent_name, event_type, player_cap, period, time, count</span>.
-              Missing period/time default to <span className="font-semibold">P1 · 7:00</span>.
             </div>
 
             {scope === 'match' && (

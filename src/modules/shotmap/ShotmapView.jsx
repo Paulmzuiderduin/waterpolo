@@ -564,38 +564,56 @@ const ShotmapView = ({
             </div>
           )}
 
-          {showFilters && seasonMode && (
+          {showFilters && (
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-700">Season filters</h3>
-              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Matches</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {sortedMatches.map((match) => (
-                      <button
-                        key={match.info.id}
-                        className={`rounded-full px-3 py-1 text-xs ${
-                          filters.matches.includes(match.info.id)
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                        onClick={() =>
-                          setFilters((prev) => ({
-                            ...prev,
-                            matches: prev.matches.includes(match.info.id)
-                              ? prev.matches.filter((id) => id !== match.info.id)
-                              : [...prev.matches, match.info.id]
-                          }))
-                        }
-                      >
-                        {match.info.name}
-                      </button>
-                    ))}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-slate-700">Quick filters</h3>
+                <button
+                  className="text-xs font-semibold text-slate-500 underline decoration-transparent hover:decoration-current"
+                  onClick={() =>
+                    setFilters({
+                      players: [],
+                      results: [],
+                      periods: [],
+                      attackTypes: [],
+                      matches: []
+                    })
+                  }
+                >
+                  Clear all
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {seasonMode && (
+                  <div className="w-full">
+                    <div className="mb-2 text-xs font-semibold text-slate-500">Matches</div>
+                    <div className="flex flex-wrap gap-2">
+                      {sortedMatches.map((match) => (
+                        <button
+                          key={match.info.id}
+                          className={`rounded-full px-3 py-1 text-xs ${
+                            filters.matches.includes(match.info.id)
+                              ? 'bg-slate-900 text-white'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}
+                          onClick={() =>
+                            setFilters((prev) => ({
+                              ...prev,
+                              matches: prev.matches.includes(match.info.id)
+                                ? prev.matches.filter((id) => id !== match.info.id)
+                                : [...prev.matches, match.info.id]
+                            }))
+                          }
+                        >
+                          {match.info.name}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">Players</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                )}
+                <div className="w-full">
+                  <div className="mb-2 text-xs font-semibold text-slate-500">Players</div>
+                  <div className="flex flex-wrap gap-2">
                     {roster.map((player) => (
                       <button
                         key={player.id}
@@ -619,8 +637,8 @@ const ShotmapView = ({
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500">Outcome</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mb-2 text-xs font-semibold text-slate-500">Outcome</div>
+                  <div className="flex flex-wrap gap-2">
                     {[
                       { value: 'raak', label: 'Goal' },
                       { value: 'redding', label: 'Saved' },
@@ -648,8 +666,8 @@ const ShotmapView = ({
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500">Period</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mb-2 text-xs font-semibold text-slate-500">Period</div>
+                  <div className="flex flex-wrap gap-2">
                     {periods.map((period) => (
                       <button
                         key={period}
@@ -673,8 +691,8 @@ const ShotmapView = ({
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500">Attack type</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mb-2 text-xs font-semibold text-slate-500">Attack type</div>
+                  <div className="flex flex-wrap gap-2">
                     {attackTypes.map((type) => (
                       <button
                         key={type}

@@ -314,7 +314,7 @@ const App = () => {
         onManageWorkspace={() => setIsManagingWorkspace(true)}
       />
 
-      <main className="mx-auto max-w-7xl space-y-6 p-6">
+      <main className="mx-auto max-w-7xl space-y-4 px-4 py-4 sm:px-6 sm:py-5">
         <Suspense fallback={<div className="p-10 text-slate-700">Loading module...</div>}>
           {activeModule === 'matches' ? (
             <MatchesView

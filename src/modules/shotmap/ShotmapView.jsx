@@ -337,7 +337,8 @@ const ShotmapView = ({
       return acc;
     }, {});
     const topZone = Object.entries(byZone).sort((a, b) => b[1] - a[1])[0];
-    return { total, goals, saves, misses, conversion, byPeriod, topZone };
+    const topPeriod = Object.entries(byPeriod).sort((a, b) => Number(b[1]) - Number(a[1]))[0];
+    return { total, goals, saves, misses, conversion, byPeriod, topZone, topPeriod };
   }, [displayShots, periods]);
 
   const downloadPNG = async () => {
@@ -447,29 +448,53 @@ const ShotmapView = ({
       />
 
       {showSummary && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Shots</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">{summary.total}</div>
-          </div>
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Goals</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">{summary.goals}</div>
-          </div>
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversion</div>
-            <div className="mt-1 text-2xl font-semibold text-emerald-700">{summary.conversion}%</div>
-          </div>
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Result split</div>
-            <div className="mt-1 text-sm text-slate-700">
-              G {summary.goals} · S {summary.saves} · M {summary.misses}
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Shots</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-900">{summary.total}</div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Goals</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-900">{summary.goals}</div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversion</div>
+              <div className="mt-1 text-2xl font-semibold text-emerald-700">{summary.conversion}%</div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Result split</div>
+              <div className="mt-1 text-sm text-slate-700">
+                G {summary.goals} · S {summary.saves} · M {summary.misses}
+              </div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top zone</div>
+              <div className="mt-1 text-sm text-slate-700">
+                {summary.topZone ? `Zone ${summary.topZone[0]} (${summary.topZone[1]})` : 'No shots yet'}
+              </div>
             </div>
           </div>
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top zone</div>
-            <div className="mt-1 text-sm text-slate-700">
-              {summary.topZone ? `Zone ${summary.topZone[0]} (${summary.topZone[1]})` : 'No shots yet'}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-950">
+              <div className="text-xs font-semibold uppercase tracking-wide text-cyan-700">
+                Location trend
+              </div>
+              <div className="mt-1 font-semibold">
+                {summary.topZone
+                  ? `Most volume comes from Zone ${summary.topZone[0]}.`
+                  : 'No location trend yet.'}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Period trend
+              </div>
+              <div className="mt-1 font-semibold">
+                {summary.topPeriod
+                  ? `Highest shot volume in P${summary.topPeriod[0]} (${summary.topPeriod[1]} shots).`
+                  : 'No period trend yet.'}
+              </div>
             </div>
           </div>
         </div>

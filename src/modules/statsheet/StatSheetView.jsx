@@ -97,6 +97,11 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
     const bestPct = [...sheet.rows]
       .filter((row) => row.shots > 0)
       .sort((a, b) => Number(b.shotPct) - Number(a.shotPct))[0];
+    const impactPlayer = [...sheet.rows]
+      .sort(
+        (a, b) =>
+          Number(b.shotGoals || 0) + Number(b.shots || 0) - (Number(a.shotGoals || 0) + Number(a.shots || 0))
+      )[0];
     const totalShots = sheet.summary.shots;
     const goals = sheet.total.shotGoals;
     const conversion = totalShots ? ((goals / totalShots) * 100).toFixed(1) : '0.0';
@@ -105,7 +110,8 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
       goals,
       conversion,
       topPlayer,
-      bestPct
+      bestPct,
+      impactPlayer
     };
   }, [sheet.rows, sheet.summary.shots, sheet.total.shotGoals]);
 
@@ -428,29 +434,53 @@ const StatSheetView = ({ teamId, seasonId, userId, loadData, onOpenModule, toast
       />
 
       {showSummary && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Shots</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">{coachingSummary.totalShots}</div>
-          </div>
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Goals</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">{coachingSummary.goals}</div>
-          </div>
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversion</div>
-            <div className="mt-1 text-2xl font-semibold text-emerald-700">{coachingSummary.conversion}%</div>
-          </div>
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top shooter</div>
-            <div className="mt-1 text-sm text-slate-700">
-              {coachingSummary.topPlayer ? coachingSummary.topPlayer.name : 'No player data yet'}
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Shots</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-900">{coachingSummary.totalShots}</div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Goals</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-900">{coachingSummary.goals}</div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversion</div>
+              <div className="mt-1 text-2xl font-semibold text-emerald-700">{coachingSummary.conversion}%</div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top shooter</div>
+              <div className="mt-1 text-sm text-slate-700">
+                {coachingSummary.topPlayer ? coachingSummary.topPlayer.name : 'No player data yet'}
+              </div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Best %</div>
+              <div className="mt-1 text-sm text-slate-700">
+                {coachingSummary.bestPct ? `${coachingSummary.bestPct.name} (${coachingSummary.bestPct.shotPct}%)` : 'No data yet'}
+              </div>
             </div>
           </div>
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Best %</div>
-            <div className="mt-1 text-sm text-slate-700">
-              {coachingSummary.bestPct ? `${coachingSummary.bestPct.name} (${coachingSummary.bestPct.shotPct}%)` : 'No data yet'}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-950">
+              <div className="text-xs font-semibold uppercase tracking-wide text-cyan-700">
+                Player impact
+              </div>
+              <div className="mt-1 font-semibold">
+                {coachingSummary.impactPlayer
+                  ? `${coachingSummary.impactPlayer.name} is driving the most shot volume and finishes.`
+                  : 'No player impact trend yet.'}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Team outcome
+              </div>
+              <div className="mt-1 font-semibold">
+                {coachingSummary.totalShots
+                  ? `${coachingSummary.goals} goals on ${coachingSummary.totalShots} shots.`
+                  : 'No team outcome data yet.'}
+              </div>
             </div>
           </div>
         </div>

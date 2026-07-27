@@ -84,6 +84,7 @@ const ScoringView = ({
   const [quickMode, setQuickMode] = useState(true);
   const [showMobileLog, setShowMobileLog] = useState(false);
   const [showMobileAdvanced, setShowMobileAdvanced] = useState(false);
+  const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [liveGuard, setLiveGuard] = useState(true);
   const [lastSavedAt, setLastSavedAt] = useState('');
   const [lastEventMeta, setLastEventMeta] = useState(() => ({
@@ -826,6 +827,12 @@ const ScoringView = ({
     ? 'rounded-2xl bg-white p-3 pb-24 shadow-sm'
     : 'rounded-2xl bg-white p-3 shadow-sm md:hidden';
   const savedLabel = lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not saved yet';
+  const compactStatsSummary = [
+    `Goals ${stats.totals.shot_goal}`,
+    `Shots ${stats.shots}`,
+    `Conv ${stats.shotConversion}%`,
+    `PF ${stats.personalFouls}`
+  ].join(' · ');
 
   return (
     <div ref={liveModeContainerRef} className={containerClasses} style={containerStyle}>
@@ -879,34 +886,52 @@ const ScoringView = ({
       </div>
 
       <div className={mobileLayoutClass}>
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Live scoring</div>
-            <div className="text-sm font-semibold text-slate-900">Match events</div>
+        <div className="sticky top-0 z-20 -mx-3 -mt-3 mb-3 border-b border-slate-100 bg-white/95 px-3 py-3 backdrop-blur">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Live scoring</div>
+              <div className="text-sm font-semibold text-slate-900">{currentMatch?.name || 'No match selected'}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
+                  liveMode ? 'border-cyan-600 bg-cyan-600 text-white' : 'border-slate-200 text-slate-700'
+                }`}
+                onClick={() => setLiveMode((prev) => !prev)}
+              >
+                Live
+              </button>
+              <button
+                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
+                onClick={toggleFullscreen}
+              >
+                Full
+              </button>
+              <button
+                className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
+                  focusMode ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-700'
+                }`}
+                onClick={() => setFocusMode((prev) => !prev)}
+              >
+                Focus
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
-                liveMode ? 'border-cyan-600 bg-cyan-600 text-white' : 'border-slate-200 text-slate-700'
-              }`}
-              onClick={() => setLiveMode((prev) => !prev)}
+          <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+            <select
+              aria-label="Live selected match"
+              className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+              value={currentMatchId}
+              onChange={(event) => setCurrentMatchId(event.target.value)}
             >
-              Live
-            </button>
-            <button
-              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
-              onClick={toggleFullscreen}
-            >
-              Full
-            </button>
-            <button
-              className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
-                focusMode ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-700'
-              }`}
-              onClick={() => setFocusMode((prev) => !prev)}
-            >
-              Focus
-            </button>
+              {matches.length === 0 && <option value="">No matches</option>}
+              {sortedMatches.map((match) => (
+                <option key={match.id} value={match.id}>
+                  {match.name}
+                  {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
+                </option>
+              ))}
+            </select>
             <button
               className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
                 quickMode ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-700'
@@ -915,64 +940,11 @@ const ScoringView = ({
             >
               Quick
             </button>
-            {!compactAppFullscreen && (
-              <button
-                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
-                onClick={openVideoPicker}
-              >
-                {videoUrl ? 'Video' : 'Select video'}
-              </button>
-            )}
-            {!compactAppFullscreen && videoUrl && (
-              <button
-                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600"
-                onClick={clearVideo}
-              >
-                Remove
-              </button>
-            )}
           </div>
-        </div>
-        <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-slate-500">
-          <span>{savedLabel}</span>
-          {showInAppHints && <span>Set time + player, then tap one action.</span>}
-        </div>
-
-        <div className="mt-3 grid grid-cols-[1fr_auto_auto] gap-2">
-          <select
-            aria-label="Live selected match"
-            className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
-            value={currentMatchId}
-            onChange={(event) => setCurrentMatchId(event.target.value)}
-          >
-            {matches.length === 0 && <option value="">No matches</option>}
-            {sortedMatches.map((match) => (
-              <option key={match.id} value={match.id}>
-                {match.name}
-                {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
-              </option>
-            ))}
-          </select>
-          <button
-            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
-            onClick={undoLastEvent}
-            disabled={!currentMatchId}
-          >
-            Undo
-          </button>
-          <button
-            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
-            onClick={openLineupEditor}
-            disabled={!currentMatchId || !lineupSupported}
-          >
-            Lineup
-          </button>
-        </div>
-
-        <div className="mt-2 text-[11px] font-semibold text-slate-500">
-          {isUsingMatchLineup
-            ? `Using match lineup (${activeRoster.length} selected).`
-            : 'No lineup selected for this match. Using full team roster.'}
+          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-500">
+            <span>{savedLabel}</span>
+            <span className="truncate">{showInAppHints ? 'Log first, review later.' : compactStatsSummary}</span>
+          </div>
         </div>
 
         {!compactAppFullscreen && (
@@ -1141,6 +1113,35 @@ const ScoringView = ({
           ))}
         </div>
 
+        <div className="mt-3 grid grid-cols-[1fr_auto_auto] gap-2">
+          <button
+            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
+            onClick={undoLastEvent}
+            disabled={!currentMatchId}
+          >
+            Undo
+          </button>
+          <button
+            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
+            onClick={openLineupEditor}
+            disabled={!currentMatchId || !lineupSupported}
+          >
+            Lineup
+          </button>
+          <button
+            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
+            onClick={() => setShowDetailedStats((prev) => !prev)}
+          >
+            {showDetailedStats ? 'Hide stats' : 'Show stats'}
+          </button>
+        </div>
+
+        <div className="mt-2 text-[11px] font-semibold text-slate-500">
+          {isUsingMatchLineup
+            ? `Using match lineup (${activeRoster.length} selected).`
+            : 'No lineup selected for this match. Using full team roster.'}
+        </div>
+
         {editingEventId && (
           <div className="mt-3 flex items-center gap-2 text-xs text-slate-600">
             <span>Editing event</span>
@@ -1224,7 +1225,7 @@ const ScoringView = ({
           )}
         </div>
 
-        {!compactAppFullscreen && (
+        {!compactAppFullscreen && showDetailedStats && (
           <div className="mt-3 rounded-lg border border-slate-200 p-2">
             <button
               className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-slate-500"
@@ -1610,147 +1611,162 @@ const ScoringView = ({
             </div>
           </div>
 
-          {!liveMode && (
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-700">Stats scope</h3>
-              <label className="mt-3 block text-xs font-semibold text-slate-500">Match selection</label>
-              <select
-                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                value={statsMatchId}
-                onChange={(event) => setStatsMatchId(event.target.value)}
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700">Analysis summary</h3>
+                <div className="mt-1 text-xs text-slate-500">{compactStatsSummary}</div>
+              </div>
+              <button
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
+                onClick={() => setShowDetailedStats((prev) => !prev)}
               >
-                <option value="">All matches</option>
-                {sortedMatches.map((match) => (
-                  <option key={match.id} value={match.id}>
-                    {match.name}
-                    {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
-                  </option>
-                ))}
-              </select>
+                {showDetailedStats ? 'Hide details' : 'Show details'}
+              </button>
             </div>
-          )}
+          </div>
 
-          {!liveMode && (
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Team stats</h3>
-            <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-600">
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel label="Shot goals" tooltip={SCORING_TOOLTIPS.shotGoals} enabled={showTooltips} />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.shot_goal}</span>
+          {showDetailedStats && !liveMode && (
+            <>
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-700">Stats scope</h3>
+                <label className="mt-3 block text-xs font-semibold text-slate-500">Match selection</label>
+                <select
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  value={statsMatchId}
+                  onChange={(event) => setStatsMatchId(event.target.value)}
+                >
+                  <option value="">All matches</option>
+                  {sortedMatches.map((match) => (
+                    <option key={match.id} value={match.id}>
+                      {match.name}
+                      {match.opponent_name ? ` vs ${match.opponent_name}` : ''} · {match.date}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel label="Shots" tooltip={SCORING_TOOLTIPS.shots} enabled={showTooltips} />{' '}
-                <span className="font-semibold text-slate-900">{stats.shots}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel
-                  label="Exclusion fouls"
-                  tooltip={SCORING_TOOLTIPS.exclusions}
-                  enabled={showTooltips}
-                />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.exclusion_foul}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel
-                  label="Personal fouls"
-                  tooltip={SCORING_TOOLTIPS.personalFouls}
-                  enabled={showTooltips}
-                />{' '}
-                <span className="font-semibold text-slate-900">{stats.personalFouls}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel
-                  label="Penalty fouls"
-                  tooltip={SCORING_TOOLTIPS.penaltyFouls}
-                  enabled={showTooltips}
-                />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.penalty_foul}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel
-                  label="Ordinary fouls"
-                  tooltip={SCORING_TOOLTIPS.ordinaryFouls}
-                  enabled={showTooltips}
-                />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.ordinary_foul}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel
-                  label="Misconduct"
-                  tooltip={SCORING_TOOLTIPS.misconducts}
-                  enabled={showTooltips}
-                />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.misconduct}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel
-                  label="Violent action"
-                  tooltip={SCORING_TOOLTIPS.violentActions}
-                  enabled={showTooltips}
-                />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.violent_action}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel
-                  label="Turnovers won"
-                  tooltip={SCORING_TOOLTIPS.turnoversWon}
-                  enabled={showTooltips}
-                />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.turnover_won}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel
-                  label="Turnovers lost"
-                  tooltip={SCORING_TOOLTIPS.turnoversLost}
-                  enabled={showTooltips}
-                />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.turnover_lost}</span>
-              </div>
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel
-                  label="Timeouts"
-                  tooltip={SCORING_TOOLTIPS.timeouts}
-                  enabled={showTooltips}
-                />{' '}
-                <span className="font-semibold text-slate-900">{stats.totals.timeout}</span>
-              </div>
-            </div>
-            <div className="mt-3 text-xs text-slate-500">Scoring now treats shots and fouls as separate live stats inputs.</div>
-            <div className="mt-2 grid grid-cols-2 gap-3 text-sm text-slate-600">
-              <div className="rounded-lg border border-slate-100 px-3 py-2">
-                <StatTooltipLabel
-                  label="Shot conversion"
-                  tooltip={SCORING_TOOLTIPS.shotConversion}
-                  enabled={showTooltips}
-                />{' '}
-                <span className="font-semibold text-emerald-700">{stats.shotConversion}%</span>
-              </div>
-            </div>
-            </div>
-          )}
 
-          {!liveMode && (
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Player stats</h3>
-            <div className="mt-3 space-y-2 text-sm text-slate-600">
-              {Object.keys(stats.playerStats).length === 0 && <div>No player events logged.</div>}
-              {Object.entries(stats.playerStats).map(([cap, data]) => (
-                <div key={cap} className="rounded-lg border border-slate-100 px-3 py-2">
-                  <div className="font-semibold text-slate-700">#{cap}</div>
-                  <div className="mt-1 grid grid-cols-2 gap-2 text-xs text-slate-500">
-                    <span>Shots: {data.shots}</span>
-                    <span>Shot goals: {data.shotGoals}</span>
-                    <span>Personal fouls: {data.personalFouls}</span>
-                    <span>Ordinary fouls: {data.ordinaryFouls}</span>
-                    <span>Won: {data.turnoversWon}</span>
-                    <span>Lost: {data.turnoversLost}</span>
-                    <span>Misconduct: {data.misconducts}</span>
-                    <span>Violent action: {data.violentActions}</span>
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-700">Team stats</h3>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-600">
+                  <div className="rounded-lg border border-slate-100 px-3 py-2">
+                    <StatTooltipLabel label="Shot goals" tooltip={SCORING_TOOLTIPS.shotGoals} enabled={showTooltips} />{' '}
+                    <span className="font-semibold text-slate-900">{stats.totals.shot_goal}</span>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 px-3 py-2">
+                    <StatTooltipLabel label="Shots" tooltip={SCORING_TOOLTIPS.shots} enabled={showTooltips} />{' '}
+                    <span className="font-semibold text-slate-900">{stats.shots}</span>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 px-3 py-2">
+                    <StatTooltipLabel
+                      label="Exclusion fouls"
+                      tooltip={SCORING_TOOLTIPS.exclusions}
+                      enabled={showTooltips}
+                    />{' '}
+                    <span className="font-semibold text-slate-900">{stats.totals.exclusion_foul}</span>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 px-3 py-2">
+                    <StatTooltipLabel
+                      label="Personal fouls"
+                      tooltip={SCORING_TOOLTIPS.personalFouls}
+                      enabled={showTooltips}
+                    />{' '}
+                    <span className="font-semibold text-slate-900">{stats.personalFouls}</span>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 px-3 py-2">
+                    <StatTooltipLabel
+                      label="Penalty fouls"
+                      tooltip={SCORING_TOOLTIPS.penaltyFouls}
+                      enabled={showTooltips}
+                    />{' '}
+                    <span className="font-semibold text-slate-900">{stats.totals.penalty_foul}</span>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 px-3 py-2">
+                    <StatTooltipLabel
+                      label="Ordinary fouls"
+                      tooltip={SCORING_TOOLTIPS.ordinaryFouls}
+                      enabled={showTooltips}
+                    />{' '}
+                    <span className="font-semibold text-slate-900">{stats.totals.ordinary_foul}</span>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 px-3 py-2">
+                    <StatTooltipLabel
+                      label="Misconduct"
+                      tooltip={SCORING_TOOLTIPS.misconducts}
+                      enabled={showTooltips}
+                    />{' '}
+                    <span className="font-semibold text-slate-900">{stats.totals.misconduct}</span>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 px-3 py-2">
+                    <StatTooltipLabel
+                      label="Violent action"
+                      tooltip={SCORING_TOOLTIPS.violentActions}
+                      enabled={showTooltips}
+                    />{' '}
+                    <span className="font-semibold text-slate-900">{stats.totals.violent_action}</span>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 px-3 py-2">
+                    <StatTooltipLabel
+                      label="Turnovers won"
+                      tooltip={SCORING_TOOLTIPS.turnoversWon}
+                      enabled={showTooltips}
+                    />{' '}
+                    <span className="font-semibold text-slate-900">{stats.totals.turnover_won}</span>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 px-3 py-2">
+                    <StatTooltipLabel
+                      label="Turnovers lost"
+                      tooltip={SCORING_TOOLTIPS.turnoversLost}
+                      enabled={showTooltips}
+                    />{' '}
+                    <span className="font-semibold text-slate-900">{stats.totals.turnover_lost}</span>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 px-3 py-2">
+                    <StatTooltipLabel
+                      label="Timeouts"
+                      tooltip={SCORING_TOOLTIPS.timeouts}
+                      enabled={showTooltips}
+                    />{' '}
+                    <span className="font-semibold text-slate-900">{stats.totals.timeout}</span>
                   </div>
                 </div>
-              ))}
-            </div>
-            </div>
+                <div className="mt-3 text-xs text-slate-500">
+                  Scoring now treats shots and fouls as separate live stats inputs.
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-3 text-sm text-slate-600">
+                  <div className="rounded-lg border border-slate-100 px-3 py-2">
+                    <StatTooltipLabel
+                      label="Shot conversion"
+                      tooltip={SCORING_TOOLTIPS.shotConversion}
+                      enabled={showTooltips}
+                    />{' '}
+                    <span className="font-semibold text-emerald-700">{stats.shotConversion}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-700">Player stats</h3>
+                <div className="mt-3 space-y-2 text-sm text-slate-600">
+                  {Object.keys(stats.playerStats).length === 0 && <div>No player events logged.</div>}
+                  {Object.entries(stats.playerStats).map(([cap, data]) => (
+                    <div key={cap} className="rounded-lg border border-slate-100 px-3 py-2">
+                      <div className="font-semibold text-slate-700">#{cap}</div>
+                      <div className="mt-1 grid grid-cols-2 gap-2 text-xs text-slate-500">
+                        <span>Shots: {data.shots}</span>
+                        <span>Shot goals: {data.shotGoals}</span>
+                        <span>Personal fouls: {data.personalFouls}</span>
+                        <span>Ordinary fouls: {data.ordinaryFouls}</span>
+                        <span>Won: {data.turnoversWon}</span>
+                        <span>Lost: {data.turnoversLost}</span>
+                        <span>Misconduct: {data.misconducts}</span>
+                        <span>Violent action: {data.violentActions}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>

@@ -43,6 +43,9 @@ const ShotmapView = ({
   const [pendingShot, setPendingShot] = useState(null);
   const [editingShotId, setEditingShotId] = useState(null);
   const [seasonMode, setSeasonMode] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showExports, setShowExports] = useState(false);
+  const [showSummary, setShowSummary] = useState(true);
   const [filters, setFilters] = useState({
     players: [],
     results: [],
@@ -319,6 +322,24 @@ const ShotmapView = ({
     });
   }, [filteredShots]);
 
+  const summary = useMemo(() => {
+    const total = displayShots.length;
+    const goals = displayShots.filter((shot) => shot.result === 'raak').length;
+    const saves = displayShots.filter((shot) => shot.result === 'redding').length;
+    const misses = displayShots.filter((shot) => shot.result === 'mis').length;
+    const conversion = total ? ((goals / total) * 100).toFixed(1) : '0.0';
+    const byPeriod = periods.reduce((acc, period) => {
+      acc[period] = displayShots.filter((shot) => shot.period === period).length;
+      return acc;
+    }, {});
+    const byZone = displayShots.reduce((acc, shot) => {
+      acc[shot.zone] = (acc[shot.zone] || 0) + 1;
+      return acc;
+    }, {});
+    const topZone = Object.entries(byZone).sort((a, b) => b[1] - a[1])[0];
+    return { total, goals, saves, misses, conversion, byPeriod, topZone };
+  }, [displayShots, periods]);
+
   const downloadPNG = async () => {
     if (!fieldRef.current) return;
     try {
@@ -408,20 +429,51 @@ const ShotmapView = ({
     <div className="space-y-6">
       <ModuleHeader
         eyebrow="Water Polo Shotmap"
-        title="Shot Tracking & Recording"
-        description="Track match shots on the field or review the selected season scope with filters."
+        title="Shot Review"
+        description="Inspect shot location, outcome, and match context for the selected scope."
         actions={
           <>
-            <ToolbarButton variant="primary" onClick={downloadPNG}>
-              <Download size={16} />
-              Download PNG
+            <ToolbarButton onClick={() => setShowSummary((prev) => !prev)}>
+              {showSummary ? 'Hide summary' : 'Show summary'}
             </ToolbarButton>
-            <ToolbarButton onClick={exportCSV}>
-              Export CSV
+            <ToolbarButton onClick={() => setShowFilters((prev) => !prev)}>
+              {showFilters ? 'Hide filters' : 'Filters'}
+            </ToolbarButton>
+            <ToolbarButton onClick={() => setShowExports((prev) => !prev)}>
+              {showExports ? 'Hide export' : 'Export'}
             </ToolbarButton>
           </>
         }
       />
+
+      {showSummary && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Shots</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">{summary.total}</div>
+          </div>
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Goals</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">{summary.goals}</div>
+          </div>
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversion</div>
+            <div className="mt-1 text-2xl font-semibold text-emerald-700">{summary.conversion}%</div>
+          </div>
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Result split</div>
+            <div className="mt-1 text-sm text-slate-700">
+              G {summary.goals} · S {summary.saves} · M {summary.misses}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top zone</div>
+            <div className="mt-1 text-sm text-slate-700">
+              {summary.topZone ? `Zone ${summary.topZone[0]} (${summary.topZone[1]})` : 'No shots yet'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -512,7 +564,7 @@ const ShotmapView = ({
             </div>
           )}
 
-          {seasonMode && (
+          {showFilters && seasonMode && (
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-700">Season filters</h3>
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -736,6 +788,18 @@ const ShotmapView = ({
         </div>
 
         <div className="space-y-4">
+          {showExports && (
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <ToolbarButton variant="primary" onClick={downloadPNG}>
+                  <Download size={16} />
+                  Download PNG
+                </ToolbarButton>
+                <ToolbarButton onClick={exportCSV}>Export CSV</ToolbarButton>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-700">Roster</h3>
             <p className="mt-2 text-sm text-slate-500">
@@ -766,14 +830,14 @@ const ShotmapView = ({
                 enabled={showTooltips}
               />
             </h3>
-            <div className="mt-3 max-h-[280px] space-y-2 overflow-y-auto text-sm">
+            <div className="mt-3 max-h-[320px] space-y-2 overflow-y-auto text-sm">
               {displayShots.length === 0 && (
                 <ModuleEmptyState
                   compact
                   title="No shots recorded"
                   description={
                     seasonMode
-                      ? 'Adjust the filters or log shots in Shotmap to populate this list.'
+                      ? 'Use filters or log shots in Shotmap to populate this list.'
                       : 'Log the first shot for the selected match to start building the list.'
                   }
                   actions={[

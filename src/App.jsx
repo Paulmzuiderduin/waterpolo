@@ -7,37 +7,10 @@ import WorkspaceSetupScreen from './components/WorkspaceSetupScreen';
 import { useAuthSession } from './hooks/useAuthSession';
 import { usePersistedUiState } from './hooks/usePersistedUiState';
 import { useSeasonsTeams } from './hooks/useSeasonsTeams';
-import { loadTeamData, loadTeamMatchesOverview, loadTeamScoring, notifyDataUpdated } from './lib/waterpolo/dataLoaders';
-import { ATTACK_TYPES, PERIOD_ORDER, PERIODS, RESULT_COLORS, ZONES } from './lib/waterpolo/constants';
+import { loadTeamData, notifyDataUpdated } from './lib/waterpolo/dataLoaders';
+import { ATTACK_TYPES, PERIODS, RESULT_COLORS, ZONES } from './lib/waterpolo/constants';
 
-const MatchesView = lazy(() => import('./modules/matches/MatchesView'));
-const RosterView = lazy(() => import('./modules/roster/RosterView'));
-const ScoringView = lazy(() => import('./modules/scoring/ScoringView'));
 const ShotmapView = lazy(() => import('./modules/shotmap/ShotmapView'));
-const StatSheetView = lazy(() => import('./modules/statsheet/StatSheetView'));
-
-const MODULES = {
-  matches: {
-    label: 'Matches',
-    description: 'Create and manage matches and lineups for the selected team.'
-  },
-  roster: {
-    label: 'Roster',
-    description: 'Manage players, cap numbers, and team roster profiles.'
-  },
-  scoring: {
-    label: 'Live Scoring',
-    description: 'Record live match events, goals, and fouls.'
-  },
-  shotmap: {
-    label: 'Shotmap',
-    description: 'Review shot locations and outcomes for the selected team.'
-  },
-  statsheet: {
-    label: 'Stat Sheet',
-    description: 'Generate season or match stat sheets from scoring and shot data.'
-  }
-};
 
 const App = () => {
   const { session, authLoading } = useAuthSession();
@@ -50,7 +23,8 @@ const App = () => {
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [promptDialog, setPromptDialog] = useState(null);
   const [toasts, setToasts] = useState([]);
-  const [activeModule, setActiveModule] = useState('scoring');
+  const [headerMatches, setHeaderMatches] = useState([]);
+  const [selectedMatchId, setSelectedMatchId] = useState('');
   const [isManagingWorkspace, setIsManagingWorkspace] = useState(false);
 
   const toast = useCallback((message, type = 'info') => {
@@ -262,8 +236,6 @@ const App = () => {
 
   if (loadingSeasons) return <div className="p-10 text-slate-700">Loading...</div>;
 
-  const activeModuleConfig = MODULES[activeModule] || MODULES.scoring;
-
   if (!selectedSeason || !selectedTeam || isManagingWorkspace) {
     return (
       <WorkspaceSetupScreen
@@ -293,11 +265,6 @@ const App = () => {
   return (
     <div className="min-h-screen">
       <AppHeader
-        activeModuleLabel={activeModuleConfig.label}
-        activeModuleDescription={activeModuleConfig.description}
-        selectedSeasonName={selectedSeason.name}
-        selectedTeamName={selectedTeam.name}
-        userEmail={session.user.email}
         seasons={seasons}
         selectedSeasonId={selectedSeasonId}
         onSelectSeason={(nextSeasonId) => {
@@ -308,78 +275,32 @@ const App = () => {
         teamOptions={selectedSeason.teams || []}
         selectedTeamId={selectedTeamId}
         onSelectTeam={setSelectedTeamId}
-        activeModule={activeModule}
-        onSelectModule={setActiveModule}
+        matches={headerMatches}
+        selectedMatchId={selectedMatchId}
+        onSelectMatch={setSelectedMatchId}
         onSignOut={() => supabase.auth.signOut()}
-        onManageWorkspace={() => setIsManagingWorkspace(true)}
+        onOpenSetup={() => setIsManagingWorkspace(true)}
       />
 
       <main className="mx-auto max-w-7xl space-y-4 px-4 py-4 sm:px-6 sm:py-5">
         <Suspense fallback={<div className="p-10 text-slate-700">Loading module...</div>}>
-          {activeModule === 'matches' ? (
-            <MatchesView
-              seasonId={selectedSeasonId}
-              teamId={selectedTeamId}
-              userId={session.user.id}
-              confirmAction={confirmAction}
-              toast={toast}
-              loadOverview={loadTeamMatchesOverview}
-              onDataUpdated={notifyDataUpdated}
-              showTooltips={preferences.showStatTooltips}
-            />
-          ) : activeModule === 'roster' ? (
-            <RosterView
-              seasonId={selectedSeasonId}
-              teamId={selectedTeamId}
-              userId={session.user.id}
-              confirmAction={confirmAction}
-              toast={toast}
-              loadData={loadTeamData}
-              onDataUpdated={notifyDataUpdated}
-              showTooltips={preferences.showStatTooltips}
-              onOpenModule={setActiveModule}
-            />
-          ) : activeModule === 'scoring' ? (
-            <ScoringView
-              seasonId={selectedSeasonId}
-              teamId={selectedTeamId}
-              userId={session.user.id}
-              confirmAction={confirmAction}
-              toast={toast}
-              loadData={loadTeamScoring}
-              onDataUpdated={notifyDataUpdated}
-              periods={PERIODS}
-              periodOrder={PERIOD_ORDER}
-              showTooltips={preferences.showStatTooltips}
-              showInAppHints={preferences.showInAppHints}
-              onOpenModule={setActiveModule}
-            />
-          ) : activeModule === 'shotmap' ? (
-            <ShotmapView
-              seasonId={selectedSeasonId}
-              teamId={selectedTeamId}
-              userId={session.user.id}
-              confirmAction={confirmAction}
-              toast={toast}
-              loadData={loadTeamData}
-              onDataUpdated={notifyDataUpdated}
-              periods={PERIODS}
-              attackTypes={ATTACK_TYPES}
-              zones={ZONES}
-              resultColors={RESULT_COLORS}
-              showTooltips={preferences.showStatTooltips}
-              onOpenModule={setActiveModule}
-            />
-          ) : (
-            <StatSheetView
-              seasonId={selectedSeasonId}
-              teamId={selectedTeamId}
-              userId={session.user.id}
-              loadData={loadTeamData}
-              onOpenModule={setActiveModule}
-              toast={toast}
-            />
-          )}
+          <ShotmapView
+            seasonId={selectedSeasonId}
+            teamId={selectedTeamId}
+            userId={session.user.id}
+            confirmAction={confirmAction}
+            toast={toast}
+            loadData={loadTeamData}
+            onDataUpdated={notifyDataUpdated}
+            periods={PERIODS}
+            attackTypes={ATTACK_TYPES}
+            zones={ZONES}
+            resultColors={RESULT_COLORS}
+            showTooltips={preferences.showStatTooltips}
+            selectedMatchId={selectedMatchId}
+            onSelectMatch={setSelectedMatchId}
+            onMatchesChange={setHeaderMatches}
+          />
         </Suspense>
       </main>
       {overlays}

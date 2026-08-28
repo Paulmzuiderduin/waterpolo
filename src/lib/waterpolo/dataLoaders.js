@@ -218,7 +218,9 @@ export const loadTeamData = async (teamId) => {
           id: match.id,
           name: match.name,
           date: match.date,
-          opponent: match.opponent_name || ''
+          opponent: match.opponent_name || '',
+          opponentScore: match.opponent_score || 0,
+          teamScoreAdjustment: match.team_score_adjustment || 0
         },
         shots: E2E_SAMPLE.shots
           .filter((shot) => shot.match_id === match.id)
@@ -232,7 +234,10 @@ export const loadTeamData = async (teamId) => {
             playerCap: shot.player_cap,
             attackType: shot.attack_type,
             time: shot.time,
-            period: shot.period
+            period: shot.period,
+            scoreFor: shot.score_for,
+            scoreAgainst: shot.score_against,
+            followUpOutcome: shot.follow_up_outcome || ''
           }))
       }))
     };
@@ -253,7 +258,9 @@ export const loadTeamData = async (teamId) => {
         id: match.id,
         name: match.name,
         date: match.date,
-        opponent: match.opponent_name || ''
+        opponent: match.opponent_name || '',
+        opponentScore: match.opponent_score || 0,
+        teamScoreAdjustment: match.team_score_adjustment || 0
       },
       shots: []
     });
@@ -271,7 +278,10 @@ export const loadTeamData = async (teamId) => {
       playerCap: shot.player_cap,
       attackType: shot.attack_type,
       time: shot.time,
-      period: shot.period
+      period: shot.period,
+      scoreFor: shot.score_for,
+      scoreAgainst: shot.score_against,
+      followUpOutcome: shot.follow_up_outcome || ''
     });
   });
   return {

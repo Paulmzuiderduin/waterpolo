@@ -120,6 +120,28 @@ alter table match_lineups drop constraint if exists match_lineups_status_check;
 alter table match_lineups add constraint match_lineups_status_check
   check (status in ('playing', 'bench', 'absent'));
 
+-- Shotmap MVP context. Safe to run after the base schema.
+alter table matches add column if not exists opponent_score integer not null default 0;
+alter table matches add column if not exists team_score_adjustment integer not null default 0;
+alter table matches drop constraint if exists matches_opponent_score_check;
+alter table matches add constraint matches_opponent_score_check
+  check (opponent_score >= 0);
+
+alter table shots add column if not exists score_for integer;
+alter table shots add column if not exists score_against integer;
+alter table shots add column if not exists follow_up_outcome text;
+alter table shots drop constraint if exists shots_score_for_check;
+alter table shots add constraint shots_score_for_check
+  check (score_for is null or score_for >= 0);
+alter table shots drop constraint if exists shots_score_against_check;
+alter table shots add constraint shots_score_against_check
+  check (score_against is null or score_against >= 0);
+alter table shots drop constraint if exists shots_follow_up_outcome_check;
+alter table shots add constraint shots_follow_up_outcome_check
+  check (follow_up_outcome is null or follow_up_outcome in (
+    'goal', 'saved_recovered', 'rebound_retained', 'rebound_lost', 'exclusion_won', 'turnover'
+  ));
+
 create index if not exists players_user_id_idx on players(user_id);
 create index if not exists team_players_team_id_idx on team_players(team_id);
 create index if not exists team_players_player_id_idx on team_players(player_id);

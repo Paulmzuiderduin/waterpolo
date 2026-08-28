@@ -20,7 +20,7 @@ export const openWorkspace = async (page) => {
     await page.getByRole('button', { name: 'dwt H1' }).click();
   }
 
-  await expect(page.getByRole('heading', { name: 'Welcome' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Demo Match' })).toBeVisible();
 };
 
 export const installSupabaseWriteMocks = async (page, handlers) => {

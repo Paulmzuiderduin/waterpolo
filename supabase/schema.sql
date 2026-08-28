@@ -102,6 +102,12 @@ create table if not exists matches (
 );
 
 alter table matches add column if not exists opponent_name text;
+alter table matches add column if not exists opponent_score integer not null default 0;
+alter table matches add column if not exists team_score_adjustment integer not null default 0;
+
+alter table matches drop constraint if exists matches_opponent_score_check;
+alter table matches add constraint matches_opponent_score_check
+  check (opponent_score >= 0);
 
 alter table matches drop constraint if exists matches_date_check;
 alter table matches add constraint matches_date_check
@@ -138,8 +144,15 @@ create table if not exists shots (
   attack_type text not null,
   period text not null,
   time text not null,
+  score_for integer,
+  score_against integer,
+  follow_up_outcome text,
   created_at timestamptz not null default now()
 );
+
+alter table shots add column if not exists score_for integer;
+alter table shots add column if not exists score_against integer;
+alter table shots add column if not exists follow_up_outcome text;
 
 alter table shots drop constraint if exists shots_x_check;
 alter table shots add constraint shots_x_check
@@ -168,6 +181,20 @@ alter table shots add constraint shots_period_check
 alter table shots drop constraint if exists shots_time_check;
 alter table shots add constraint shots_time_check
   check (time ~ '^[0-7]:[0-5][0-9]$');
+
+alter table shots drop constraint if exists shots_score_for_check;
+alter table shots add constraint shots_score_for_check
+  check (score_for is null or score_for >= 0);
+
+alter table shots drop constraint if exists shots_score_against_check;
+alter table shots add constraint shots_score_against_check
+  check (score_against is null or score_against >= 0);
+
+alter table shots drop constraint if exists shots_follow_up_outcome_check;
+alter table shots add constraint shots_follow_up_outcome_check
+  check (follow_up_outcome is null or follow_up_outcome in (
+    'goal', 'saved_recovered', 'rebound_retained', 'rebound_lost', 'exclusion_won', 'turnover'
+  ));
 
 create table if not exists scoring_events (
   id uuid primary key default gen_random_uuid(),

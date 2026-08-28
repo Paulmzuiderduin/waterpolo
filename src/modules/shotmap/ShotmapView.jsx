@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { loadTeamLineups, saveMatchLineup } from '../../lib/waterpolo/dataLoaders';
 import { detectZone, penaltyPosition } from '../../utils/field';
 import { formatShotTime, normalizeTime, splitTimeParts, timeToSeconds } from '../../utils/time';
 import ModuleEmptyState from '../../components/ModuleEmptyState';
@@ -33,12 +34,15 @@ const ShotmapView = ({
   zones,
   resultColors,
   showTooltips = true,
-  onOpenModule
+  selectedMatchId,
+  onSelectMatch,
+  onMatchesChange
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [roster, setRoster] = useState([]);
   const [matches, setMatches] = useState([]);
+  const [lineups, setLineups] = useState([]);
   const [currentMatchId, setCurrentMatchId] = useState('');
   const [pendingShot, setPendingShot] = useState(null);
   const [editingShotId, setEditingShotId] = useState(null);
@@ -46,6 +50,11 @@ const ShotmapView = ({
   const [showFilters, setShowFilters] = useState(false);
   const [showExports, setShowExports] = useState(false);
   const [showSummary, setShowSummary] = useState(true);
+  const [setupPanel, setSetupPanel] = useState('');
+  const [setupSaving, setSetupSaving] = useState(false);
+  const [newMatch, setNewMatch] = useState({ name: '', opponentName: '', date: new Date().toISOString().slice(0, 10) });
+  const [newPlayer, setNewPlayer] = useState({ name: '', capNumber: '' });
+  const [lineupSelection, setLineupSelection] = useState({});
   const [filters, setFilters] = useState({
     players: [],
     results: [],
@@ -65,21 +74,23 @@ const ShotmapView = ({
     const loadAll = async () => {
       try {
         setLoading(true);
-        const payload = await loadData(teamId);
+        const [payload, lineupPayload] = await Promise.all([loadData(teamId), loadTeamLineups(teamId)]);
         if (!active) return;
         const mappedRoster = payload.roster.map((player) => ({
           id: player.id,
+          playerId: player.player_id || player.id,
           name: player.name,
           capNumber: player.cap_number
         }));
         setRoster(mappedRoster);
         setMatches(payload.matches);
+        setLineups(lineupPayload.lineups || []);
         const sortedPayloadMatches = [...payload.matches].sort((a, b) => {
           const ad = a.info?.date ? new Date(a.info.date).getTime() : 0;
           const bd = b.info?.date ? new Date(b.info.date).getTime() : 0;
           return bd - ad;
         });
-        setCurrentMatchId(sortedPayloadMatches[0]?.info?.id || '');
+        setCurrentMatchId(selectedMatchId || sortedPayloadMatches[0]?.info?.id || '');
         setError('');
       } catch (e) {
         if (active) setError('Could not load data.');
@@ -107,20 +118,179 @@ const ShotmapView = ({
     [matches, currentMatchId]
   );
 
+  const activeLineup = useMemo(() => {
+    if (!currentMatch) return [];
+    const selectedCaps = new Set(
+      lineups
+        .filter((row) => row.match_id === currentMatch.info.id && (row.status || 'playing') === 'playing')
+        .map((row) => row.cap_number)
+    );
+    // Historic matches without lineup rows retain access to the existing team roster.
+    return selectedCaps.size ? roster.filter((player) => selectedCaps.has(player.capNumber)) : roster;
+  }, [currentMatch, lineups, roster]);
+
+  const liveScore = useMemo(() => {
+    if (!currentMatch) return { team: 0, opponent: 0 };
+    const goals = (currentMatch.shots || []).filter((shot) => shot.result === 'raak').length;
+    return {
+      team: goals + Number(currentMatch.info.teamScoreAdjustment || 0),
+      opponent: Number(currentMatch.info.opponentScore || 0)
+    };
+  }, [currentMatch]);
+
   useEffect(() => {
     if (!currentMatch) return;
     setCurrentMatchId(currentMatch.info.id);
   }, [currentMatch]);
 
+  useEffect(() => {
+    if (selectedMatchId && matches.some((match) => match.info.id === selectedMatchId)) {
+      setCurrentMatchId(selectedMatchId);
+    }
+  }, [matches, selectedMatchId]);
+
+  useEffect(() => {
+    onMatchesChange?.(sortedMatches);
+  }, [onMatchesChange, sortedMatches]);
+
+  useEffect(() => {
+    if (currentMatchId) onSelectMatch?.(currentMatchId);
+  }, [currentMatchId, onSelectMatch]);
+
   const refreshData = async () => {
-    const payload = await loadData(teamId);
+    const [payload, lineupPayload] = await Promise.all([loadData(teamId), loadTeamLineups(teamId)]);
     const mappedRoster = payload.roster.map((player) => ({
       id: player.id,
+      playerId: player.player_id || player.id,
       name: player.name,
       capNumber: player.cap_number
     }));
     setRoster(mappedRoster);
     setMatches(payload.matches);
+    setLineups(lineupPayload.lineups || []);
+  };
+
+  const createMatch = async () => {
+    if (!newMatch.name.trim()) {
+      setError('Enter a match name.');
+      return;
+    }
+    try {
+      setSetupSaving(true);
+      const { data, error: insertError } = await supabase
+        .from('matches')
+        .insert({
+          user_id: userId,
+          season_id: seasonId,
+          team_id: teamId,
+          name: newMatch.name.trim(),
+          opponent_name: newMatch.opponentName.trim(),
+          date: newMatch.date || new Date().toISOString().slice(0, 10)
+        })
+        .select('*')
+        .single();
+      if (insertError) throw insertError;
+      if (roster.length) {
+        await saveMatchLineup({
+          matchId: data.id,
+          seasonId,
+          teamId,
+          userId,
+          lineupRows: roster.map((player) => ({ id: player.id, player_id: player.playerId, cap_number: player.capNumber, status: 'playing' }))
+        });
+      }
+      await refreshData();
+      setCurrentMatchId(data.id);
+      setNewMatch({ name: '', opponentName: '', date: new Date().toISOString().slice(0, 10) });
+      setSetupPanel('');
+      toast('Match created. The current roster is in the lineup.', 'success');
+      onDataUpdated?.();
+    } catch (e) {
+      setError(e.message || 'Could not create match.');
+    } finally {
+      setSetupSaving(false);
+    }
+  };
+
+  const addPlayer = async () => {
+    if (!newPlayer.name.trim() || !newPlayer.capNumber.trim()) {
+      setError('Enter a player name and cap number.');
+      return;
+    }
+    try {
+      setSetupSaving(true);
+      const { data: player, error: playerError } = await supabase
+        .from('players')
+        .insert({ user_id: userId, name: newPlayer.name.trim() })
+        .select('id')
+        .single();
+      if (playerError) throw playerError;
+      const { error: teamPlayerError } = await supabase.from('team_players').insert({
+        user_id: userId,
+        team_id: teamId,
+        player_id: player.id,
+        cap_number: newPlayer.capNumber.trim(),
+        is_active: true
+      });
+      if (teamPlayerError) throw teamPlayerError;
+      await refreshData();
+      setNewPlayer({ name: '', capNumber: '' });
+      toast('Player added to the team.', 'success');
+      onDataUpdated?.();
+    } catch (e) {
+      setError(e.message || 'Could not add player. Run the team access SQL update first.');
+    } finally {
+      setSetupSaving(false);
+    }
+  };
+
+  const openLineupSetup = () => {
+    if (!currentMatch) return;
+    const playingCaps = new Set(
+      lineups.filter((row) => row.match_id === currentMatch.info.id && (row.status || 'playing') === 'playing').map((row) => row.cap_number)
+    );
+    setLineupSelection(Object.fromEntries(roster.map((player) => [player.id, playingCaps.size ? playingCaps.has(player.capNumber) : true])));
+    setSetupPanel('lineup');
+  };
+
+  const saveLineup = async () => {
+    if (!currentMatch) return;
+    const selected = roster.filter((player) => lineupSelection[player.id]);
+    if (!selected.length) {
+      setError('Select at least one player for the lineup.');
+      return;
+    }
+    try {
+      setSetupSaving(true);
+      await saveMatchLineup({
+        matchId: currentMatch.info.id,
+        seasonId,
+        teamId,
+        userId,
+        lineupRows: selected.map((player) => ({ id: player.id, player_id: player.playerId, cap_number: player.capNumber, status: 'playing' }))
+      });
+      await refreshData();
+      setSetupPanel('');
+      toast('Lineup saved.', 'success');
+      onDataUpdated?.();
+    } catch (e) {
+      setError(e.message || 'Could not save lineup. Run the team access SQL update first.');
+    } finally {
+      setSetupSaving(false);
+    }
+  };
+
+  const updateScore = async (field, amount) => {
+    if (!currentMatch) return;
+    const currentValue = Number(currentMatch.info[field] || 0);
+    const nextValue = Math.max(0, currentValue + amount);
+    const databaseField = field === 'teamScoreAdjustment' ? 'team_score_adjustment' : 'opponent_score';
+    const { error: updateError } = await supabase.from('matches').update({ [databaseField]: nextValue }).eq('id', currentMatch.info.id);
+    if (updateError) {
+      setError('Could not update score. Run the Shotmap MVP SQL update first.');
+      return;
+    }
+    setMatches((prev) => prev.map((match) => match.info.id === currentMatch.info.id ? { ...match, info: { ...match.info, [field]: nextValue } } : match));
   };
 
   const handleFieldClick = (event) => {
@@ -145,9 +315,10 @@ const ShotmapView = ({
       zone,
       attackType: '6vs6',
       result: 'raak',
-      playerCap: roster[0]?.capNumber || '',
+      playerCap: activeLineup[0]?.capNumber || '',
       period: lastShotMeta?.period || '1',
-      time: lastShotMeta?.time || formatShotTime()
+      time: lastShotMeta?.time || formatShotTime(),
+      followUpOutcome: 'goal'
     });
   };
 
@@ -166,9 +337,10 @@ const ShotmapView = ({
       zone: 14,
       attackType: 'strafworp',
       result: 'raak',
-      playerCap: roster[0]?.capNumber || '',
+      playerCap: activeLineup[0]?.capNumber || '',
       period: lastShotMeta?.period || '1',
-      time: lastShotMeta?.time || formatShotTime()
+      time: lastShotMeta?.time || formatShotTime(),
+      followUpOutcome: 'goal'
     });
   };
 
@@ -199,7 +371,10 @@ const ShotmapView = ({
       player_cap: pendingShot.playerCap,
       attack_type: pendingShot.attackType,
       time: normalizeTime(pendingShot.time),
-      period: pendingShot.period
+      period: pendingShot.period,
+      score_for: liveScore.team + (!editingShotId && pendingShot.result === 'raak' ? 1 : 0),
+      score_against: liveScore.opponent,
+      follow_up_outcome: pendingShot.followUpOutcome || (pendingShot.result === 'raak' ? 'goal' : null)
     };
     let data;
     if (editingShotId) {
@@ -241,9 +416,12 @@ const ShotmapView = ({
                       result: data.result,
                       playerCap: data.player_cap,
                       attackType: data.attack_type,
-                    time: data.time,
-                    period: data.period,
-                    matchId: currentMatch.info.id
+                      time: data.time,
+                      period: data.period,
+                      matchId: currentMatch.info.id,
+                      scoreFor: data.score_for,
+                      scoreAgainst: data.score_against,
+                      followUpOutcome: data.follow_up_outcome || ''
                     }
                   : shot
               )
@@ -261,7 +439,10 @@ const ShotmapView = ({
                         attackType: data.attack_type,
                         time: data.time,
                         period: data.period,
-                        matchId: currentMatch.info.id
+                        matchId: currentMatch.info.id,
+                        scoreFor: data.score_for,
+                        scoreAgainst: data.score_against,
+                        followUpOutcome: data.follow_up_outcome || ''
                       }
                     ]
               )
@@ -429,11 +610,14 @@ const ShotmapView = ({
   return (
     <div className="space-y-6">
       <ModuleHeader
-        eyebrow="Water Polo Shotmap"
-        title="Shot Review"
-        description="Inspect shot location, outcome, and match context for the selected scope."
+        eyebrow="Shotmap workspace"
+        title={currentMatch ? currentMatch.info.name : 'Start a match'}
+        description={currentMatch ? `${currentMatch.info.opponent ? `vs ${currentMatch.info.opponent} · ` : ''}${currentMatch.info.date}` : 'Create a match, set a lineup, and map shots from one workspace.'}
         actions={
           <>
+            <ToolbarButton onClick={() => setSetupPanel('match')}>New match</ToolbarButton>
+            <ToolbarButton onClick={() => setSetupPanel('roster')}>Roster</ToolbarButton>
+            <ToolbarButton onClick={openLineupSetup} disabled={!currentMatch}>Lineup</ToolbarButton>
             <ToolbarButton onClick={() => setShowSummary((prev) => !prev)}>
               {showSummary ? 'Hide summary' : 'Show summary'}
             </ToolbarButton>
@@ -506,6 +690,75 @@ const ShotmapView = ({
         </div>
       )}
 
+      {!seasonMode && currentMatch && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Live match state</div>
+            <div className="mt-1 text-xl font-semibold text-slate-900">
+              {liveScore.team} <span className="text-slate-400">-</span> {liveScore.opponent}
+            </div>
+            <div className="text-xs text-slate-600">Our goals are derived from mapped goals. Adjust only unmatched goals.</div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <div className="flex items-center gap-1">
+              <span className="font-semibold text-slate-700">Our adjustment</span>
+              <button className="rounded-md border border-cyan-200 px-2 py-1" onClick={() => updateScore('teamScoreAdjustment', -1)}>-</button>
+              <button className="rounded-md border border-cyan-200 px-2 py-1" onClick={() => updateScore('teamScoreAdjustment', 1)}>+</button>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="font-semibold text-slate-700">Opponent</span>
+              <button className="rounded-md border border-cyan-200 px-2 py-1" onClick={() => updateScore('opponentScore', -1)}>-</button>
+              <button className="rounded-md border border-cyan-200 px-2 py-1" onClick={() => updateScore('opponentScore', 1)}>+</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {setupPanel && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-slate-800">
+              {setupPanel === 'match' ? 'Create match' : setupPanel === 'roster' ? 'Team roster' : 'Match lineup'}
+            </h3>
+            <button className="text-xs font-semibold text-slate-500" onClick={() => setSetupPanel('')}>Close</button>
+          </div>
+          {setupPanel === 'match' && (
+            <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_10rem_auto]">
+              <input aria-label="Match name" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Match name" value={newMatch.name} onChange={(event) => setNewMatch((prev) => ({ ...prev, name: event.target.value }))} />
+              <input aria-label="Opponent" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Opponent" value={newMatch.opponentName} onChange={(event) => setNewMatch((prev) => ({ ...prev, opponentName: event.target.value }))} />
+              <input aria-label="Match date" type="date" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={newMatch.date} onChange={(event) => setNewMatch((prev) => ({ ...prev, date: event.target.value }))} />
+              <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={createMatch}>Create</button>
+            </div>
+          )}
+          {setupPanel === 'roster' && (
+            <div className="mt-3 space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <input aria-label="Player name" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Player name" value={newPlayer.name} onChange={(event) => setNewPlayer((prev) => ({ ...prev, name: event.target.value }))} />
+                <input aria-label="Cap number" className="w-28 rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Cap #" value={newPlayer.capNumber} onChange={(event) => setNewPlayer((prev) => ({ ...prev, capNumber: event.target.value }))} />
+                <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={addPlayer}>Add player</button>
+              </div>
+              <div className="flex flex-wrap gap-2 text-sm text-slate-700">
+                {roster.map((player) => <span key={player.id} className="rounded-full bg-slate-100 px-3 py-1">#{player.capNumber} {player.name}</span>)}
+              </div>
+            </div>
+          )}
+          {setupPanel === 'lineup' && (
+            <div className="mt-3">
+              <p className="text-xs text-slate-500">Only selected players can be chosen while mapping shots.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {roster.map((player) => (
+                  <label key={player.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" checked={Boolean(lineupSelection[player.id])} onChange={(event) => setLineupSelection((prev) => ({ ...prev, [player.id]: event.target.checked }))} />
+                    #{player.capNumber} {player.name}
+                  </label>
+                ))}
+              </div>
+              <button className="mt-3 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={saveLineup}>Save lineup</button>
+            </div>
+          )}
+        </section>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm">
@@ -534,9 +787,7 @@ const ShotmapView = ({
               </ToolbarButton>
             </div>
             {matches.length === 0 && (
-              <div className="text-xs font-semibold text-slate-500">
-                Create matches in the Matches tab first.
-              </div>
+              <button className="text-xs font-semibold text-cyan-700" onClick={() => setSetupPanel('match')}>Create your first match</button>
             )}
           </div>
           {!seasonMode && (
@@ -547,11 +798,11 @@ const ShotmapView = ({
                   <ModuleEmptyState
                     compact
                     title="No matches available"
-                    description="Create a match first, then return here to track shots on the field."
+                    description="Create a match here, then set the lineup and track shots on the field."
                     actions={[
                       {
-                        label: 'Open Matches',
-                        onClick: () => onOpenModule?.('matches')
+                        label: 'Create match',
+                        onClick: () => setSetupPanel('match')
                       }
                     ]}
                   />
@@ -583,7 +834,7 @@ const ShotmapView = ({
               )}
               {!currentMatch && matches.length === 0 && (
                 <div className="mt-3 text-xs text-slate-500">
-                  Tracking is disabled until a match is created in `Matches`.
+                  Tracking is disabled until a match is created above.
                 </div>
               )}
             </div>
@@ -846,7 +1097,7 @@ const ShotmapView = ({
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-700">Roster</h3>
             <p className="mt-2 text-sm text-slate-500">
-              Manage player details in the Roster tab.
+              Add players or change the active lineup from the setup actions above.
             </p>
             <div className="mt-3 space-y-2">
               {roster
@@ -885,7 +1136,7 @@ const ShotmapView = ({
                   }
                   actions={[
                     {
-                      label: seasonMode ? 'Clear filters' : 'Open Matches',
+                      label: seasonMode ? 'Clear filters' : 'Create match',
                       onClick: seasonMode
                         ? () =>
                             setFilters({
@@ -895,7 +1146,7 @@ const ShotmapView = ({
                               attackTypes: [],
                               matches: []
                             })
-                        : () => onOpenModule?.('matches'),
+                        : () => setSetupPanel('match'),
                       variant: seasonMode ? 'secondary' : undefined
                     }
                   ]}
@@ -926,7 +1177,8 @@ const ShotmapView = ({
                           result: shot.result,
                           playerCap: shot.playerCap,
                           period: shot.period,
-                          time: shot.time
+                          time: shot.time,
+                          followUpOutcome: shot.followUpOutcome || ''
                         });
                         setEditingShotId(shot.id);
                       }}
@@ -981,7 +1233,7 @@ const ShotmapView = ({
                   }
                 >
                   <option value="">Select player</option>
-                  {roster.map((player) => (
+                  {activeLineup.map((player) => (
                     <option key={player.id} value={player.capNumber}>
                       #{player.capNumber} {player.name}
                     </option>
@@ -1122,6 +1374,24 @@ const ShotmapView = ({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-500">After the shot</label>
+                <select
+                  aria-label="Shot follow-up outcome"
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                  value={pendingShot.followUpOutcome || ''}
+                  onChange={(event) => setPendingShot((prev) => ({ ...prev, followUpOutcome: event.target.value }))}
+                >
+                  <option value="">Not recorded</option>
+                  <option value="goal">Goal</option>
+                  <option value="saved_recovered">Saved, recovered</option>
+                  <option value="rebound_retained">Rebound retained</option>
+                  <option value="rebound_lost">Rebound lost</option>
+                  <option value="exclusion_won">Exclusion won</option>
+                  <option value="turnover">Turnover</option>
+                </select>
               </div>
 
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

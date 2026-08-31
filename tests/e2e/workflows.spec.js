@@ -30,3 +30,21 @@ test('workflow: lineup setup limits the match context', async ({ page }) => {
   await page.getByRole('button', { name: 'Save lineup' }).click();
   await expect(page.getByText('Lineup saved.')).toBeVisible();
 });
+
+test('workflow: live mode prioritizes field, score, and period', async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 720 });
+  await openWorkspace(page);
+
+  await page.getByRole('button', { name: 'Live mode' }).click();
+  await expect(page.getByLabel('Live period')).toBeVisible();
+  await expect(page.getByTestId('shotmap-field')).toBeVisible();
+  await expect(page.getByText('Outcome analysis')).toHaveCount(0);
+});
+
+test('workflow: review exposes outcome analysis dimensions', async ({ page }) => {
+  await openWorkspace(page);
+
+  await expect(page.getByText('Outcome analysis')).toBeVisible();
+  await expect(page.getByText('Score state')).toBeVisible();
+  await expect(page.getByText('After shot')).toBeVisible();
+});

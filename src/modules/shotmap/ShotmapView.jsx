@@ -49,7 +49,7 @@ const ShotmapView = ({
   const [seasonMode, setSeasonMode] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showExports, setShowExports] = useState(false);
-  const [showSummary, setShowSummary] = useState(true);
+  const [showSummary, setShowSummary] = useState(false);
   const [liveMode, setLiveMode] = useState(false);
   const [isFullscreenActive, setIsFullscreenActive] = useState(false);
   const [setupPanel, setSetupPanel] = useState('');
@@ -724,7 +724,7 @@ const ShotmapView = ({
               <Maximize2 size={15} /> Live mode
             </ToolbarButton>
             <ToolbarButton onClick={() => setShowSummary((prev) => !prev)}>
-              {showSummary ? 'Hide summary' : 'Show summary'}
+              {showSummary ? 'Hide analysis' : 'Show analysis'}
             </ToolbarButton>
             <ToolbarButton onClick={() => setShowFilters((prev) => !prev)}>
               {showFilters ? 'Hide filters' : 'Filters'}
@@ -748,7 +748,7 @@ const ShotmapView = ({
             </div>
             <label className="text-xs text-slate-300">P
               <select aria-label="Live period" className="ml-1 rounded bg-slate-800 px-2 py-1 text-sm text-white" value={lastShotMeta.period} onChange={(event) => setLastShotMeta((prev) => ({ ...prev, period: event.target.value }))}>
-                {periods.map((period) => <option key={period} value={period}>{period}</option>)}
+                {periods.map((period) => <option key={period} className="bg-slate-900 text-white" value={period}>{period}</option>)}
               </select>
             </label>
             <button className="rounded-lg border border-white/20 p-2 text-white" onClick={toggleLiveMode} title="Exit live mode">
@@ -758,7 +758,7 @@ const ShotmapView = ({
         </div>
       )}
 
-      {!liveMode && showSummary && (
+      {!liveMode && (showSummary || seasonMode) && (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -948,53 +948,16 @@ const ShotmapView = ({
               <button className="text-xs font-semibold text-cyan-700" onClick={() => setSetupPanel('match')}>Create your first match</button>
             )}
           </div>}
-          {!liveMode && !seasonMode && (
+          {!liveMode && !seasonMode && !currentMatch && (
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-700">Match selection</h3>
-              {matches.length === 0 && (
-                <div className="mt-3">
-                  <ModuleEmptyState
-                    compact
-                    title="No matches available"
-                    description="Create a match here, then set the lineup and track shots on the field."
-                    actions={[
-                      {
-                        label: 'Create match',
-                        onClick: () => setSetupPanel('match')
-                      }
-                    ]}
-                  />
-                </div>
-              )}
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                {sortedMatches.map((match) => (
-                  <button
-                    key={match.info.id}
-                    className={`rounded-full px-3 py-1 ${
-                      match.info.id === currentMatch?.info?.id
-                        ? 'bg-cyan-600 text-white'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
-                    onClick={() => setCurrentMatchId(match.info.id)}
-                  >
-                    {match.info.name}
-                  </button>
-                ))}
-              </div>
-              {currentMatch && (
-                <div className="mt-3 text-xs text-slate-500">
-                  {currentMatch.info.name}
-                  {currentMatch.info.opponent ? ` vs ${currentMatch.info.opponent}` : ''} · {currentMatch.info.date}
-                </div>
-              )}
-              {!currentMatch && matches.length > 0 && (
-                <div className="mt-3 text-xs text-slate-500">Select a match to track shots.</div>
-              )}
-              {!currentMatch && matches.length === 0 && (
-                <div className="mt-3 text-xs text-slate-500">
-                  Tracking is disabled until a match is created above.
-                </div>
-              )}
+              <ModuleEmptyState
+                compact
+                title={matches.length === 0 ? 'No matches available' : 'Select a match'}
+                description={matches.length === 0
+                  ? 'Create a match, set the lineup, and then map shots on the field.'
+                  : 'Choose the match you want to log from the selector in the top bar.'}
+                actions={matches.length === 0 ? [{ label: 'Create match', onClick: () => setSetupPanel('match') }] : []}
+              />
             </div>
           )}
 
@@ -1360,7 +1323,7 @@ const ShotmapView = ({
 
       {pendingShot && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
-          <div className="w-full max-w-xl rounded-3xl bg-white p-5 shadow-2xl shadow-slate-950/20">
+          <div className="w-full max-w-xl rounded-3xl bg-white p-5 text-slate-900 shadow-2xl shadow-slate-950/20">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">
@@ -1385,15 +1348,15 @@ const ShotmapView = ({
                 <label className="text-xs font-semibold text-slate-500">Player</label>
                 <select
                   aria-label="Shot player"
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
                   value={pendingShot.playerCap}
                   onChange={(event) =>
                     setPendingShot((prev) => ({ ...prev, playerCap: event.target.value }))
                   }
                 >
-                  <option value="">Select player</option>
+                  <option className="bg-white text-slate-900" value="">Select player</option>
                   {activeLineup.map((player) => (
-                    <option key={player.id} value={player.capNumber}>
+                    <option key={player.id} className="bg-white text-slate-900" value={player.capNumber}>
                       #{player.capNumber} {player.name}
                     </option>
                   ))}
@@ -1411,7 +1374,7 @@ const ShotmapView = ({
                   </div>
                   <select
                     aria-label="Shot result"
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
                     value={pendingShot.result}
                     onChange={(event) => {
                       const result = event.target.value;
@@ -1427,9 +1390,9 @@ const ShotmapView = ({
                       }));
                     }}
                   >
-                    <option value="raak">Goal</option>
-                    <option value="redding">Saved</option>
-                    <option value="mis">Miss</option>
+                    <option className="bg-white text-slate-900" value="raak">Goal</option>
+                    <option className="bg-white text-slate-900" value="redding">Saved</option>
+                    <option className="bg-white text-slate-900" value="mis">Miss</option>
                   </select>
                 </div>
                 <div>
@@ -1442,7 +1405,7 @@ const ShotmapView = ({
                   </div>
                   <select
                     aria-label="Shot attack"
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
                     value={pendingShot.attackType}
                     onChange={(event) =>
                       setPendingShot((prev) => ({ ...prev, attackType: event.target.value }))
@@ -1450,7 +1413,7 @@ const ShotmapView = ({
                     disabled={pendingShot.zone === 14}
                   >
                     {attackTypes.map((type) => (
-                      <option key={type} value={type}>
+                      <option key={type} className="bg-white text-slate-900" value={type}>
                         {type}
                       </option>
                     ))}
@@ -1469,14 +1432,14 @@ const ShotmapView = ({
                   </div>
                   <select
                     aria-label="Shot period"
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
                     value={pendingShot.period}
                     onChange={(event) =>
                       setPendingShot((prev) => ({ ...prev, period: event.target.value }))
                     }
                   >
                     {periods.map((period) => (
-                      <option key={period} value={period}>
+                      <option key={period} className="bg-white text-slate-900" value={period}>
                         P{period}
                       </option>
                     ))}
@@ -1497,7 +1460,7 @@ const ShotmapView = ({
                         type="number"
                         min="0"
                         max="7"
-                        className="w-20 rounded-lg border border-slate-200 px-3 py-2"
+                        className="w-20 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
                         value={splitTimeParts(pendingShot.time).minutes}
                         onChange={(event) => {
                           const minutes = Math.min(7, Math.max(0, Number(event.target.value)));
@@ -1516,7 +1479,7 @@ const ShotmapView = ({
                         type="number"
                         min="0"
                         max="59"
-                        className="w-20 rounded-lg border border-slate-200 px-3 py-2"
+                        className="w-20 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
                         value={splitTimeParts(pendingShot.time).seconds}
                         onChange={(event) => {
                           const minutes = splitTimeParts(pendingShot.time).minutes;
@@ -1549,17 +1512,17 @@ const ShotmapView = ({
                 <label className="text-xs font-semibold text-slate-500">After the shot</label>
                 <select
                   aria-label="Shot follow-up outcome"
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
                   value={pendingShot.followUpOutcome || ''}
                   onChange={(event) => setPendingShot((prev) => ({ ...prev, followUpOutcome: event.target.value }))}
                 >
-                  <option value="">Not recorded</option>
-                  <option value="goal">Goal</option>
-                  <option value="saved_recovered">Saved, recovered</option>
-                  <option value="rebound_retained">Rebound retained</option>
-                  <option value="rebound_lost">Rebound lost</option>
-                  <option value="exclusion_won">Exclusion won</option>
-                  <option value="turnover">Turnover</option>
+                  <option className="bg-white text-slate-900" value="">Not recorded</option>
+                  <option className="bg-white text-slate-900" value="goal">Goal</option>
+                  <option className="bg-white text-slate-900" value="saved_recovered">Saved, recovered</option>
+                  <option className="bg-white text-slate-900" value="rebound_retained">Rebound retained</option>
+                  <option className="bg-white text-slate-900" value="rebound_lost">Rebound lost</option>
+                  <option className="bg-white text-slate-900" value="exclusion_won">Exclusion won</option>
+                  <option className="bg-white text-slate-900" value="turnover">Turnover</option>
                 </select>
               </div>
 

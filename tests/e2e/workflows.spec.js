@@ -41,10 +41,26 @@ test('workflow: live mode prioritizes field, score, and period', async ({ page }
   await expect(page.getByText('Outcome analysis')).toHaveCount(0);
 });
 
-test('workflow: review exposes outcome analysis dimensions', async ({ page }) => {
+test('workflow: live shot editor keeps form controls legible', async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 720 });
   await openWorkspace(page);
 
+  await page.getByRole('button', { name: 'Live mode' }).click();
+  await page.getByTestId('shotmap-field').click({ position: { x: 220, y: 150 } });
+
+  await expect(page.getByLabel('Shot player')).toHaveCSS('color', 'rgb(15, 23, 42)');
+  await expect(page.getByLabel('Shot result')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+});
+
+test('workflow: analysis is opt-in in match mode and shown for season review', async ({ page }) => {
+  await openWorkspace(page);
+
+  await expect(page.getByText('Outcome analysis')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Show analysis' }).click();
   await expect(page.getByText('Outcome analysis')).toBeVisible();
   await expect(page.getByText('Score state')).toBeVisible();
   await expect(page.getByText('After shot')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Season mode' }).click();
+  await expect(page.getByText('Outcome analysis')).toBeVisible();
 });

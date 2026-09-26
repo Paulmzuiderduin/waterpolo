@@ -1,19 +1,22 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --primary: #256af4;
-  --background-light: #f5f6f8;
+  --primary: #1f6197;
+  --background-light: #f4f6f8;
   --background-dark: #101622;
   --surface-dark: #1c2433;
   --accent-success: #10b981;
   --accent-danger: #ef4444;
-  --ink: #223843;
+  --ink: #172a3d;
+  --navy: #122b42;
+  --line: #d4dde4;
+  --muted: #607587;
 
-  font-family: "Manrope", "Space Grotesk", "Segoe UI", sans-serif;
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
   color: var(--ink);
   background-color: var(--background-light);
 }
@@ -21,10 +24,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(37, 106, 244, 0.2) 0%, transparent 40%),
-    radial-gradient(circle at top right, rgba(16, 24, 34, 0.12) 0%, transparent 45%),
-    linear-gradient(180deg, #f7f8fb 0%, #f5f6f8 45%, #eef1f6 100%);
+  background: var(--background-light);
   color: var(--ink);
 }
 
@@ -69,7 +69,7 @@ select {
   background-size: 6px 6px, 6px 6px;
   background-repeat: no-repeat;
   padding-right: 2.6rem;
-  border-radius: 14px;
+  border-radius: 4px;
   border-color: rgba(16, 22, 34, 0.18);
   background-color: rgba(255, 255, 255, 0.9);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -77,8 +77,8 @@ select {
 
 select:focus {
   outline: none;
-  border-color: rgba(37, 106, 244, 0.75);
-  box-shadow: 0 0 0 3px rgba(37, 106, 244, 0.2);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(31, 97, 151, 0.15);
 }
 
 .stat-label {
@@ -127,4 +127,59 @@ select:focus {
 .stat-label:focus .stat-tooltip {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* The Shotmap shell follows the restrained navy-and-blue workspace style. */
+button, input, select, textarea { font-family: inherit; }
+button, summary { touch-action: manipulation; }
+button:disabled { cursor: not-allowed; }
+:where(button, a, summary, input, select):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.wp-topbar { background: var(--navy); border-bottom: 1px solid #25465f; }
+.wp-topbar > div { min-height: 34px; }
+.wp-topbar summary { border-color: #4e687d; color: #edf3f7; }
+.wp-topbar summary:hover { background: #23455f; }
+.wp-topbar summary:focus-visible { outline-color: #fff; }
+.wp-module-header { border-bottom: 1px solid var(--line); }
+.wp-module-header h2 { letter-spacing: -.025em; color: var(--navy); }
+.wp-shot-row:last-child { border-bottom: 0; }
+.wp-shot-row:hover { background: #f8fafb; }
+.wp-public-page { min-height: 100vh; padding: 64px 24px; background: #edf2f5; }
+.wp-public-layout { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); gap: 56px 80px; align-items: start; }
+.wp-brand { display: flex; align-items: center; gap: 10px; color: var(--navy); font-size: 18px; font-weight: 700; margin-bottom: 56px; }
+.wp-eyebrow { color: #567087; font-size: 11px; font-weight: 700; letter-spacing: .075em; text-transform: uppercase; margin-bottom: 10px; }
+.wp-introduction h1 { max-width: 600px; color: var(--navy); font-size: clamp(36px, 4.4vw, 54px); letter-spacing: -.04em; line-height: 1.08; font-weight: 750; }
+.wp-lead { margin: 20px 0 30px; color: #516a7c; font-size: 17px; line-height: 1.65; }
+.wp-benefits { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+.wp-benefits li { display: flex; gap: 16px; border-bottom: 1px solid var(--line); padding: 18px 0; }
+.wp-benefits svg { box-sizing: content-box; flex: none; padding: 8px; color: var(--primary); background: #e3ecf2; }
+.wp-benefits h2 { color: var(--navy); font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+.wp-benefits p { color: #516a7c; font-size: 14px; line-height: 1.6; margin: 0; }
+.wp-public-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; margin-top: 22px; color: var(--primary); font-size: 14px; font-weight: 600; }
+.wp-public-links a:hover { text-decoration: underline; }
+.wp-auth-card { margin-top: 80px; border: 1px solid #c3cfd7; border-radius: 4px; padding: 32px; background: #fff; scroll-margin-top: 24px; }
+.wp-auth-card h2 { color: var(--navy); font-weight: 700; font-size: 28px; letter-spacing: -.025em; }
+.wp-auth-description { color: var(--muted); line-height: 1.6; margin: 10px 0 24px; font-size: 15px; }
+.wp-form-label { display: block; margin: 18px 0 6px; font-weight: 600; font-size: 13px; color: #34536b; }
+.wp-input { display: block; width: 100%; border: 1px solid #b9c7d1; border-radius: 3px; padding: 10px 12px; background: #fff; color: var(--ink); font-size: 14px; }
+.wp-input::placeholder { color: #8394a1; }
+.wp-auth-submit, .wp-auth-secondary { width: 100%; min-height: 40px; border: 1px solid #b9c7d1; border-radius: 4px; padding: 9px 14px; font-size: 14px; font-weight: 600; }
+.wp-auth-submit { margin: 24px 0 10px; border-color: var(--primary); background: var(--primary); color: #fff; }
+.wp-auth-submit:hover { background: #194f7c; }
+.wp-auth-secondary { color: var(--primary); background: #fff; }
+.wp-auth-secondary:hover { background: #f4f7fa; }
+.wp-auth-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--muted); font-size: 12px; }
+.wp-auth-divider::before, .wp-auth-divider::after { content: ''; height: 1px; flex: 1; background: var(--line); }
+.wp-auth-message { margin-top: 16px; color: var(--primary); font-size: 14px; }
+.wp-auth-footnote { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 16px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.wp-workspace-preview { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 32px; }
+.wp-workspace-preview figcaption { margin-bottom: 20px; }
+.wp-workspace-preview h2 { color: var(--navy); font-size: 24px; font-weight: 650; letter-spacing: -.02em; }
+.wp-workspace-preview p { color: var(--muted); margin-top: 8px; font-size: 14px; }
+.wp-workspace-preview img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 4px; }
+@media (max-width: 767px) {
+  .wp-public-page { padding: 28px 18px; }
+  .wp-public-layout { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .wp-brand { margin-bottom: 32px; }
+  .wp-auth-card { margin-top: 0; padding: 24px; }
+  .wp-lead { font-size: 16px; }
 }

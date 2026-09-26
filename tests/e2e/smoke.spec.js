@@ -5,6 +5,7 @@ test('smoke: the Shotmap workspace is the only primary screen', async ({ page })
   await openWorkspace(page);
 
   await expect(page.getByRole('heading', { name: 'Demo Match' })).toBeVisible();
+  await page.getByRole('button', { name: 'Match setup' }).click();
   await expect(page.getByRole('button', { name: 'New match' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Roster' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Lineup' })).toBeVisible();

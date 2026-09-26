@@ -1,11 +1,11 @@
 import React from 'react';
 
 const ModuleHeader = ({ eyebrow, title, description, actions = null }) => (
-  <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
+  <div className="flex flex-wrap items-start justify-between gap-2 wp-module-header py-2 sm:py-3">
     <div className="min-w-0">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-700">{eyebrow}</p>
-      <h2 className="mt-0.5 text-xl font-semibold text-slate-900 sm:text-2xl">{title}</h2>
-      {description ? <p className="mt-1 max-w-3xl text-sm text-slate-500">{description}</p> : null}
+      <p className="hidden text-[11px] font-semibold uppercase tracking-[0.08em] text-[#1f6197] sm:block">{eyebrow}</p>
+      <h2 className="mt-0.5 text-lg font-semibold text-slate-900 sm:text-[26px]">{title}</h2>
+      {description ? <p className="mt-1 hidden max-w-3xl text-sm text-slate-500 sm:block">{description}</p> : null}
     </div>
     {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
   </div>

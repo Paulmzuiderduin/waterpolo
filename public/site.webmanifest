@@ -3,9 +3,9 @@
   "short_name": "Waterpolo",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f5f6f8",
-  "theme_color": "#256af4",
-  "description": "Waterpolo Hub for shotmaps, scoring, possession mapping, and local video analysis.",
+  "background_color": "#f4f6f8",
+  "theme_color": "#122b42",
+  "description": "Log water polo shots on an interactive field. Review locations, players, results, and conversion by match or season. Export your shotmap and shot data.",
   "icons": [
     {
       "src": "/favicon.svg",
@@ -19,4 +19,3 @@
     }
   ]
 }
-

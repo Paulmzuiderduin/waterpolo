@@ -10,8 +10,6 @@ import StatTooltipLabel from '../../components/StatTooltipLabel';
 import ToolbarButton from '../../components/ToolbarButton';
 
 const SHOTMAP_TOOLTIPS = {
-  matchMode: 'Track and edit shots for one selected match.',
-  seasonMode: 'View and filter shots across multiple matches in the selected team scope.',
   interactiveField:
     'Click on the field to create a shot draft. Zone 14 is reserved for penalties via the + Penalty button.',
   result: 'Shot outcome: Goal (scored), Saved (keeper save), or Miss.',
@@ -46,9 +44,12 @@ const ShotmapView = ({
   const [currentMatchId, setCurrentMatchId] = useState('');
   const [pendingShot, setPendingShot] = useState(null);
   const [editingShotId, setEditingShotId] = useState(null);
+  const [shotSaving, setShotSaving] = useState(false);
   const [seasonMode, setSeasonMode] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [showExports, setShowExports] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
+  const [showScoreCorrection, setShowScoreCorrection] = useState(false);
+  const [showShots, setShowShots] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [liveMode, setLiveMode] = useState(false);
   const [isFullscreenActive, setIsFullscreenActive] = useState(false);
@@ -69,11 +70,12 @@ const ShotmapView = ({
     time: formatShotTime()
   }));
   const fieldRef = useRef(null);
-  const liveModeContainerRef = useRef(null);
 
   useEffect(() => {
     const onFullscreenChange = () => {
-      setIsFullscreenActive(Boolean(document.fullscreenElement || document.webkitFullscreenElement));
+      const active = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      setIsFullscreenActive(active);
+      if (!active) setLiveMode(false);
     };
     document.addEventListener('fullscreenchange', onFullscreenChange);
     document.addEventListener('webkitfullscreenchange', onFullscreenChange);
@@ -148,15 +150,18 @@ const ShotmapView = ({
   );
 
   const activeLineup = useMemo(() => {
-    if (!currentMatch) return [];
+    const match = editingShotId
+      ? matches.find((item) => item.shots.some((shot) => shot.id === editingShotId))
+      : currentMatch;
+    if (!match) return [];
     const selectedCaps = new Set(
       lineups
-        .filter((row) => row.match_id === currentMatch.info.id && (row.status || 'playing') === 'playing')
+        .filter((row) => row.match_id === match.info.id && (row.status || 'playing') === 'playing')
         .map((row) => row.cap_number)
     );
     // Historic matches without lineup rows retain access to the existing team roster.
     return selectedCaps.size ? roster.filter((player) => selectedCaps.has(player.capNumber)) : roster;
-  }, [currentMatch, lineups, roster]);
+  }, [currentMatch, editingShotId, matches, lineups, roster]);
 
   const liveScore = useMemo(() => {
     if (!currentMatch) return { team: 0, opponent: 0 };
@@ -181,10 +186,9 @@ const ShotmapView = ({
       return;
     }
 
-    setSeasonMode(false);
     setLiveMode(true);
     window.setTimeout(async () => {
-      const element = liveModeContainerRef.current;
+      const element = document.documentElement;
       try {
         if (element?.requestFullscreen) await element.requestFullscreen();
         else if (element?.webkitRequestFullscreen) element.webkitRequestFullscreen();
@@ -192,13 +196,6 @@ const ShotmapView = ({
         // iOS Safari does not support arbitrary-element fullscreen; use the full-viewport layout.
       }
     }, 0);
-  };
-
-  const scoreStateLabel = (shot) => {
-    if (shot.scoreFor == null || shot.scoreAgainst == null) return 'Not recorded';
-    if (Number(shot.scoreFor) > Number(shot.scoreAgainst)) return 'Leading';
-    if (Number(shot.scoreFor) < Number(shot.scoreAgainst)) return 'Trailing';
-    return 'Tied';
   };
 
   useEffect(() => {
@@ -358,7 +355,7 @@ const ShotmapView = ({
 
   const handleFieldClick = (event) => {
     if (seasonMode) {
-      setError('Adding shots is disabled in Season mode. Switch to Match mode.');
+      setError('Choose Selected match in Scope to add shots.');
       return;
     }
     if (!fieldRef.current) return;
@@ -387,7 +384,7 @@ const ShotmapView = ({
 
   const handlePenaltyClick = () => {
     if (seasonMode) {
-      setError('Adding shots is disabled in Season mode. Switch to Match mode.');
+      setError('Choose Selected match in Scope to add shots.');
       return;
     }
     if (!currentMatch) {
@@ -413,19 +410,24 @@ const ShotmapView = ({
   };
 
   const saveShot = async () => {
-    if (!pendingShot || !currentMatch) return;
+    if (!pendingShot || !currentMatch || shotSaving) return;
     if (seasonMode && !editingShotId) {
-      setError('Adding shots is disabled in Season mode. Switch to Match mode.');
+      setError('Choose Selected match in Scope to add shots.');
       return;
     }
     if (!pendingShot.playerCap) {
       setError('Select a player.');
       return;
     }
+    const originalMatch = editingShotId
+      ? matches.find((match) => match.shots.some((shot) => shot.id === editingShotId))
+      : currentMatch;
+    if (!originalMatch) return;
+    const originalShot = originalMatch.shots.find((shot) => shot.id === editingShotId);
     const payload = {
       team_id: teamId,
       season_id: seasonId,
-      match_id: currentMatch.info.id,
+      match_id: originalMatch.info.id,
       user_id: userId,
       x: pendingShot.x,
       y: pendingShot.y,
@@ -435,64 +437,47 @@ const ShotmapView = ({
       attack_type: pendingShot.attackType,
       time: normalizeTime(pendingShot.time),
       period: pendingShot.period,
-      score_for: liveScore.team + (!editingShotId && pendingShot.result === 'raak' ? 1 : 0),
-      score_against: liveScore.opponent,
+      score_for: editingShotId ? originalShot.scoreFor ?? null : liveScore.team,
+      score_against: editingShotId ? originalShot.scoreAgainst ?? null : liveScore.opponent,
       follow_up_outcome: pendingShot.followUpOutcome || (pendingShot.result === 'raak' ? 'goal' : null)
     };
     let data;
-    if (editingShotId) {
-      const { data: updated, error: updateError } = await supabase
-        .from('shots')
-        .update(payload)
-        .eq('id', editingShotId)
-        .select('*')
-        .single();
-      if (updateError) {
-        setError('Failed to update shot.');
-        return;
+    setShotSaving(true);
+    try {
+      if (editingShotId) {
+        // Editing shot details must not reassign ownership or rewrite historical context.
+        const { team_id, season_id, match_id, user_id, score_for, score_against, ...details } = payload;
+        const { data: updated, error: updateError } = await supabase
+          .from('shots')
+          .update(details)
+          .eq('id', editingShotId)
+          .select('*')
+          .single();
+        if (updateError) {
+          setError('Failed to update shot.');
+          return;
+        }
+        data = updated;
+      } else {
+        const { data: inserted, error: insertError } = await supabase
+          .from('shots')
+          .insert(payload)
+          .select('*')
+          .single();
+        if (insertError) {
+          setError('Failed to save shot.');
+          return;
+        }
+        data = inserted;
       }
-      data = updated;
-    } else {
-      const { data: inserted, error: insertError } = await supabase
-        .from('shots')
-        .insert(payload)
-        .select('*')
-        .single();
-      if (insertError) {
-        setError('Failed to save shot.');
-        return;
-      }
-      data = inserted;
-    }
-    const nextMatches = matches.map((match) =>
-      match.info.id === currentMatch.info.id
-        ? {
-            ...match,
-            shots: match.shots
-              .map((shot) =>
-                shot.id === editingShotId
-                  ? {
-                      id: data.id,
-                      x: data.x,
-                      y: data.y,
-                      zone: data.zone,
-                      result: data.result,
-                      playerCap: data.player_cap,
-                      attackType: data.attack_type,
-                      time: data.time,
-                      period: data.period,
-                      matchId: currentMatch.info.id,
-                      scoreFor: data.score_for,
-                      scoreAgainst: data.score_against,
-                      followUpOutcome: data.follow_up_outcome || ''
-                    }
-                  : shot
-              )
-              .concat(
-                editingShotId
-                  ? []
-                  : [
-                      {
+      const nextMatches = matches.map((match) =>
+        match.info.id === originalMatch.info.id
+          ? {
+              ...match,
+              shots: match.shots
+                .map((shot) =>
+                  shot.id === editingShotId
+                    ? {
                         id: data.id,
                         x: data.x,
                         y: data.y,
@@ -502,22 +487,48 @@ const ShotmapView = ({
                         attackType: data.attack_type,
                         time: data.time,
                         period: data.period,
-                        matchId: currentMatch.info.id,
+                        matchId: originalMatch.info.id,
                         scoreFor: data.score_for,
                         scoreAgainst: data.score_against,
                         followUpOutcome: data.follow_up_outcome || ''
                       }
-                    ]
-              )
-          }
-        : match
-    );
-    setMatches(nextMatches);
-    setLastShotMeta({ period: pendingShot.period, time: normalizeTime(pendingShot.time) });
-    setPendingShot(null);
-    setEditingShotId(null);
-    setError('');
-    onDataUpdated?.();
+                    : shot
+                )
+                .concat(
+                  editingShotId
+                    ? []
+                    : [
+                        {
+                          id: data.id,
+                          x: data.x,
+                          y: data.y,
+                          zone: data.zone,
+                          result: data.result,
+                          playerCap: data.player_cap,
+                          attackType: data.attack_type,
+                          time: data.time,
+                          period: data.period,
+                          matchId: originalMatch.info.id,
+                          scoreFor: data.score_for,
+                          scoreAgainst: data.score_against,
+                          followUpOutcome: data.follow_up_outcome || ''
+                        }
+                      ]
+                )
+            }
+          : match
+      );
+      setMatches(nextMatches);
+      if (!editingShotId) setLastShotMeta({ period: pendingShot.period, time: normalizeTime(pendingShot.time) });
+      setPendingShot(null);
+      setEditingShotId(null);
+      setError('');
+      onDataUpdated?.();
+    } catch {
+      setError('Could not save the shot. Please try again.');
+    } finally {
+      setShotSaving(false);
+    }
   };
 
   const deleteShot = async (shotId) => {
@@ -527,11 +538,7 @@ const ShotmapView = ({
       toast('Failed to delete shot.', 'error');
       return;
     }
-    const nextMatches = matches.map((match) =>
-      match.info.id === currentMatch.info.id
-        ? { ...match, shots: match.shots.filter((shot) => shot.id !== shotId) }
-        : match
-    );
+    const nextMatches = matches.map((match) => ({ ...match, shots: match.shots.filter((shot) => shot.id !== shotId) }));
     setMatches(nextMatches);
     onDataUpdated?.();
     toast('Shot deleted.', 'success');
@@ -547,12 +554,10 @@ const ShotmapView = ({
       : [];
     const shots = relevantMatches.flatMap((match) => match.shots);
     return shots.filter((shot) => {
-      if (seasonMode) {
-        if (filters.players.length && !filters.players.includes(shot.playerCap)) return false;
-        if (filters.results.length && !filters.results.includes(shot.result)) return false;
-        if (filters.periods.length && !filters.periods.includes(shot.period)) return false;
-        if (filters.attackTypes.length && !filters.attackTypes.includes(shot.attackType)) return false;
-      }
+      if (filters.players.length && !filters.players.includes(shot.playerCap)) return false;
+      if (filters.results.length && !filters.results.includes(shot.result)) return false;
+      if (filters.periods.length && !filters.periods.includes(shot.period)) return false;
+      if (filters.attackTypes.length && !filters.attackTypes.includes(shot.attackType)) return false;
       return true;
     });
   }, [seasonMode, matches, currentMatch, filters]);
@@ -569,20 +574,12 @@ const ShotmapView = ({
   const summary = useMemo(() => {
     const total = displayShots.length;
     const goals = displayShots.filter((shot) => shot.result === 'raak').length;
-    const saves = displayShots.filter((shot) => shot.result === 'redding').length;
-    const misses = displayShots.filter((shot) => shot.result === 'mis').length;
     const conversion = total ? ((goals / total) * 100).toFixed(1) : '0.0';
-    const byPeriod = periods.reduce((acc, period) => {
-      acc[period] = displayShots.filter((shot) => shot.period === period).length;
-      return acc;
-    }, {});
-    const byZone = displayShots.reduce((acc, shot) => {
-      acc[shot.zone] = (acc[shot.zone] || 0) + 1;
-      return acc;
-    }, {});
-    const topZone = Object.entries(byZone).sort((a, b) => b[1] - a[1])[0];
-    const topPeriod = Object.entries(byPeriod).sort((a, b) => Number(b[1]) - Number(a[1]))[0];
-    return { total, goals, saves, misses, conversion, byPeriod, topZone, topPeriod };
+    return {
+      total, goals, conversion,
+      saves: displayShots.filter((shot) => shot.result === 'redding').length,
+      misses: displayShots.filter((shot) => shot.result === 'mis').length
+    };
   }, [displayShots, periods]);
 
   const outcomeInsights = useMemo(() => {
@@ -604,20 +601,7 @@ const ShotmapView = ({
     return {
       zones: toRows(displayShots, (shot) => String(shot.zone), (zone) => `Zone ${zone}`),
       players: toRows(displayShots, (shot) => shot.playerCap, (cap) => `#${cap}`),
-      periods: toRows(displayShots, (shot) => shot.period, (period) => `P${period}`),
-      scoreStates: toRows(displayShots, scoreStateLabel, (state) => state),
-      followUps: toRows(
-        displayShots,
-        (shot) => shot.followUpOutcome || '',
-        (outcome) => ({
-          goal: 'Goal',
-          saved_recovered: 'Saved, recovered',
-          rebound_retained: 'Rebound retained',
-          rebound_lost: 'Rebound lost',
-          exclusion_won: 'Exclusion won',
-          turnover: 'Turnover'
-        })[outcome] || outcome
-      )
+      periods: toRows(displayShots, (shot) => shot.period, (period) => `P${period}`)
     };
   }, [displayShots]);
 
@@ -636,7 +620,7 @@ const ShotmapView = ({
       ctx.fillStyle = '#f8fbff';
       ctx.fillRect(0, 0, output.width, output.height);
       ctx.fillStyle = '#0b1c2c';
-      ctx.font = '600 36px Space Grotesk, sans-serif';
+      ctx.font = '600 36px sans-serif';
       const title = seasonMode ? 'Water Polo Shotmap (Season)' : `Water Polo Shotmap - ${currentMatch?.info?.name || ''}`;
       ctx.fillText(title, 40, 64);
       const targetX = 0;
@@ -683,7 +667,7 @@ const ShotmapView = ({
         shot.y
       ]);
     });
-    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/\"/g, '""')}"`).join(',')).join('\\n');
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/\"/g, '""')}"`).join(',')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -708,20 +692,17 @@ const ShotmapView = ({
 
   return (
     <div
-      ref={liveModeContainerRef}
-      className={liveMode ? 'fixed inset-0 z-50 overflow-y-auto bg-slate-950 p-2 text-white sm:p-3' : 'space-y-6'}
+      className={liveMode ? 'fixed inset-0 z-50 overflow-y-auto bg-slate-950 p-2 text-white sm:p-3' : 'space-y-3'}
     >
       {!liveMode && <ModuleHeader
         eyebrow="Shotmap workspace"
-        title={currentMatch ? currentMatch.info.name : 'Start a match'}
+        title={seasonMode ? 'Season review' : currentMatch ? currentMatch.info.name : 'Start a match'}
         description={currentMatch ? `${currentMatch.info.opponent ? `vs ${currentMatch.info.opponent} · ` : ''}${currentMatch.info.date}` : 'Create a match, set a lineup, and map shots from one workspace.'}
         actions={
           <>
-            <ToolbarButton onClick={() => setSetupPanel('match')}>New match</ToolbarButton>
-            <ToolbarButton onClick={() => setSetupPanel('roster')}>Roster</ToolbarButton>
-            <ToolbarButton onClick={openLineupSetup} disabled={!currentMatch}>Lineup</ToolbarButton>
+            <ToolbarButton onClick={() => setShowSetup((value) => !value)} aria-expanded={showSetup}>Match setup</ToolbarButton>
             <ToolbarButton variant="primary" onClick={toggleLiveMode} disabled={!currentMatch}>
-              <Maximize2 size={15} /> Live mode
+              <Maximize2 size={15} /> Fullscreen
             </ToolbarButton>
             <ToolbarButton onClick={() => setShowSummary((prev) => !prev)}>
               {showSummary ? 'Hide analysis' : 'Show analysis'}
@@ -729,105 +710,80 @@ const ShotmapView = ({
             <ToolbarButton onClick={() => setShowFilters((prev) => !prev)}>
               {showFilters ? 'Hide filters' : 'Filters'}
             </ToolbarButton>
-            <ToolbarButton onClick={() => setShowExports((prev) => !prev)}>
-              {showExports ? 'Hide export' : 'Export'}
-            </ToolbarButton>
+            <details className="relative">
+              <summary className="cursor-pointer rounded border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">Export</summary>
+              <div className="absolute right-0 z-20 mt-1 grid w-44 gap-2 rounded border border-slate-200 bg-white p-2 shadow-lg">
+                <ToolbarButton onClick={downloadPNG}><Download size={15} /> Image (PNG)</ToolbarButton>
+                <ToolbarButton onClick={exportCSV}>Export CSV</ToolbarButton>
+              </div>
+            </details>
           </>
         }
       />}
 
+      {!liveMode && showSetup && (
+        <div className="flex flex-wrap gap-2 rounded border border-slate-200 bg-white p-3">
+          <ToolbarButton onClick={() => setSetupPanel('match')}>New match</ToolbarButton>
+          <ToolbarButton onClick={() => setSetupPanel('roster')}>Roster</ToolbarButton>
+          <ToolbarButton onClick={openLineupSetup} disabled={!currentMatch}>Lineup</ToolbarButton>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded bg-white px-4 py-2 text-sm text-slate-700">
+        {!liveMode && <label className="flex items-center gap-2">Scope
+          <select aria-label="Shotmap scope" className="rounded border border-slate-200 bg-white py-1 pl-2 pr-8 text-slate-900" value={seasonMode ? 'season' : 'match'} onChange={(event) => setSeasonMode(event.target.value === 'season')}>
+            <option value="match">Selected match</option><option value="season">Whole season</option>
+          </select>
+        </label>}
+        {Object.entries(filters).some(([key, values]) => values.length && (key !== 'matches' || seasonMode)) && <span className="text-xs text-[#1f6197]">Filtered results</span>}
+        <span><strong>{summary.total}</strong> {summary.total === 1 ? 'shot' : 'shots'}</span>
+        <span><strong>{summary.goals}</strong> {summary.goals === 1 ? 'goal' : 'goals'}</span>
+        <span><strong>{summary.conversion}%</strong> conversion</span>
+        {!seasonMode && currentMatch && <button className="ml-auto text-xs font-semibold text-[#1f6197]" onClick={() => setShowScoreCorrection((value) => !value)} aria-expanded={showScoreCorrection}>Correct score</button>}
+      </div>
+
       {liveMode && (
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/15 bg-slate-900 px-3 py-2">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded border border-white/15 bg-slate-900 px-3 py-2">
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">{currentMatch?.info.name || 'Live match'}</div>
+            <div className="truncate text-sm font-semibold">{seasonMode ? 'Season review' : currentMatch?.info.name || 'Match'}</div>
             <div className="text-xs text-slate-400">{currentMatch?.info.opponent ? `vs ${currentMatch.info.opponent}` : 'Shot logging'}</div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="rounded-lg bg-slate-800 px-3 py-1.5 text-lg font-semibold">
+            {!seasonMode && <div className="rounded bg-slate-800 px-3 py-1.5 text-lg font-semibold">
               {liveScore.team} <span className="text-slate-500">-</span> {liveScore.opponent}
-            </div>
-            <label className="text-xs text-slate-300">P
-              <select aria-label="Live period" className="ml-1 rounded bg-slate-800 px-2 py-1 text-sm text-white" value={lastShotMeta.period} onChange={(event) => setLastShotMeta((prev) => ({ ...prev, period: event.target.value }))}>
+            </div>}
+            {!seasonMode && <label className="text-xs text-slate-300">P
+              <select aria-label="Live period" className="ml-1 rounded bg-slate-800 py-1 pl-2 pr-8 text-sm text-white" value={lastShotMeta.period} onChange={(event) => setLastShotMeta((prev) => ({ ...prev, period: event.target.value }))}>
                 {periods.map((period) => <option key={period} className="bg-slate-900 text-white" value={period}>{period}</option>)}
               </select>
-            </label>
-            <button className="rounded-lg border border-white/20 p-2 text-white" onClick={toggleLiveMode} title="Exit live mode">
+            </label>}
+            <button className="rounded border border-white/20 p-2 text-white" onClick={toggleLiveMode} aria-label="Exit fullscreen" title="Exit fullscreen">
               {isFullscreenActive ? <Minimize2 size={16} /> : 'Exit'}
             </button>
           </div>
         </div>
       )}
 
-      {!liveMode && (showSummary || seasonMode) && (
+      {!liveMode && showSummary && (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Shots</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-900">{summary.total}</div>
-            </div>
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Goals</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-900">{summary.goals}</div>
-            </div>
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversion</div>
-              <div className="mt-1 text-2xl font-semibold text-emerald-700">{summary.conversion}%</div>
-            </div>
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Result split</div>
-              <div className="mt-1 text-sm text-slate-700">
-                G {summary.goals} · S {summary.saves} · M {summary.misses}
-              </div>
-            </div>
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top zone</div>
-              <div className="mt-1 text-sm text-slate-700">
-                {summary.topZone ? `Zone ${summary.topZone[0]} (${summary.topZone[1]})` : 'No shots yet'}
-              </div>
-            </div>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            <div className="rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-950">
-              <div className="text-xs font-semibold uppercase tracking-wide text-cyan-700">
-                Location trend
-              </div>
-              <div className="mt-1 font-semibold">
-                {summary.topZone
-                  ? `Most volume comes from Zone ${summary.topZone[0]}.`
-                  : 'No location trend yet.'}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Period trend
-              </div>
-              <div className="mt-1 font-semibold">
-                {summary.topPeriod
-                  ? `Highest shot volume in P${summary.topPeriod[0]} (${summary.topPeriod[1]} shots).`
-                  : 'No period trend yet.'}
-              </div>
-            </div>
-          </div>
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <section className="rounded border border-slate-200 bg-white p-4">
+            <p className="mb-3 text-sm text-slate-600">Results: {summary.goals} goals · {summary.saves} saved · {summary.misses} missed</p>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Outcome analysis</div>
-                <h3 className="mt-1 text-sm font-semibold text-slate-900">Where, who, when, and under what game state</h3>
+                <h3 className="mt-1 text-sm font-semibold text-slate-900">Shots by location, player, and period</h3>
               </div>
               <div className="text-xs text-slate-500">Conversion = goals / shots</div>
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {[
                 ['Zones', outcomeInsights.zones],
                 ['Players', outcomeInsights.players],
-                ['Periods', outcomeInsights.periods],
-                ['Score state', outcomeInsights.scoreStates],
-                ['After shot', outcomeInsights.followUps]
+                ['Periods', outcomeInsights.periods]
               ].map(([title, rows]) => (
-                <div key={title} className="rounded-xl bg-slate-50 p-3">
+                <div key={title} className="rounded bg-slate-50 p-3">
                   <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</div>
                   <div className="mt-2 space-y-1.5 text-xs">
-                    {rows.slice(0, 3).map((row) => (
+                    {rows.map((row) => (
                       <div key={row.label} className="flex items-center justify-between gap-2 text-slate-700">
                         <span className="truncate font-medium">{row.label}</span>
                         <span className="whitespace-nowrap text-slate-500">{row.shots} · {row.conversion}%</span>
@@ -843,15 +799,15 @@ const ShotmapView = ({
       )}
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      {!seasonMode && currentMatch && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3">
+      {!seasonMode && currentMatch && showScoreCorrection && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-[#d4dde4] bg-[#edf3f7] px-4 py-3">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Live match state</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-[#1f6197]">Live match state</div>
             <div className="mt-1 text-xl font-semibold text-slate-900">
               {liveScore.team} <span className="text-slate-400">-</span> {liveScore.opponent}
             </div>
@@ -860,20 +816,20 @@ const ShotmapView = ({
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <div className="flex items-center gap-1">
               <span className="font-semibold text-slate-700">Our adjustment</span>
-              <button className="rounded-md border border-cyan-200 px-2 py-1" onClick={() => updateScore('teamScoreAdjustment', -1)}>-</button>
-              <button className="rounded-md border border-cyan-200 px-2 py-1" onClick={() => updateScore('teamScoreAdjustment', 1)}>+</button>
+              <button className="rounded-md border border-[#b9cbd9] px-2 py-1" onClick={() => updateScore('teamScoreAdjustment', -1)}>-</button>
+              <button className="rounded-md border border-[#b9cbd9] px-2 py-1" onClick={() => updateScore('teamScoreAdjustment', 1)}>+</button>
             </div>
             <div className="flex items-center gap-1">
               <span className="font-semibold text-slate-700">Opponent</span>
-              <button className="rounded-md border border-cyan-200 px-2 py-1" onClick={() => updateScore('opponentScore', -1)}>-</button>
-              <button className="rounded-md border border-cyan-200 px-2 py-1" onClick={() => updateScore('opponentScore', 1)}>+</button>
+              <button className="rounded-md border border-[#b9cbd9] px-2 py-1" onClick={() => updateScore('opponentScore', -1)}>-</button>
+              <button className="rounded-md border border-[#b9cbd9] px-2 py-1" onClick={() => updateScore('opponentScore', 1)}>+</button>
             </div>
           </div>
         </div>
       )}
 
       {!liveMode && setupPanel && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="rounded border border-slate-200 bg-white p-4">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-slate-800">
               {setupPanel === 'match' ? 'Create match' : setupPanel === 'roster' ? 'Team roster' : 'Match lineup'}
@@ -882,21 +838,21 @@ const ShotmapView = ({
           </div>
           {setupPanel === 'match' && (
             <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_10rem_auto]">
-              <input aria-label="Match name" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Match name" value={newMatch.name} onChange={(event) => setNewMatch((prev) => ({ ...prev, name: event.target.value }))} />
-              <input aria-label="Opponent" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Opponent" value={newMatch.opponentName} onChange={(event) => setNewMatch((prev) => ({ ...prev, opponentName: event.target.value }))} />
-              <input aria-label="Match date" type="date" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={newMatch.date} onChange={(event) => setNewMatch((prev) => ({ ...prev, date: event.target.value }))} />
-              <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={createMatch}>Create</button>
+              <input aria-label="Match name" className="rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Match name" value={newMatch.name} onChange={(event) => setNewMatch((prev) => ({ ...prev, name: event.target.value }))} />
+              <input aria-label="Opponent" className="rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Opponent" value={newMatch.opponentName} onChange={(event) => setNewMatch((prev) => ({ ...prev, opponentName: event.target.value }))} />
+              <input aria-label="Match date" type="date" className="rounded border border-slate-200 px-3 py-2 text-sm" value={newMatch.date} onChange={(event) => setNewMatch((prev) => ({ ...prev, date: event.target.value }))} />
+              <button className="rounded bg-[#1f6197] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={createMatch}>Create</button>
             </div>
           )}
           {setupPanel === 'roster' && (
             <div className="mt-3 space-y-3">
               <div className="flex flex-wrap gap-2">
-                <input aria-label="Player name" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Player name" value={newPlayer.name} onChange={(event) => setNewPlayer((prev) => ({ ...prev, name: event.target.value }))} />
-                <input aria-label="Cap number" className="w-28 rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Cap #" value={newPlayer.capNumber} onChange={(event) => setNewPlayer((prev) => ({ ...prev, capNumber: event.target.value }))} />
-                <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={addPlayer}>Add player</button>
+                <input aria-label="Player name" className="rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Player name" value={newPlayer.name} onChange={(event) => setNewPlayer((prev) => ({ ...prev, name: event.target.value }))} />
+                <input aria-label="Cap number" className="w-28 rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Cap #" value={newPlayer.capNumber} onChange={(event) => setNewPlayer((prev) => ({ ...prev, capNumber: event.target.value }))} />
+                <button className="rounded bg-[#1f6197] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={addPlayer}>Add player</button>
               </div>
               <div className="flex flex-wrap gap-2 text-sm text-slate-700">
-                {roster.map((player) => <span key={player.id} className="rounded-full bg-slate-100 px-3 py-1">#{player.capNumber} {player.name}</span>)}
+                {roster.map((player) => <span key={player.id} className="rounded bg-slate-100 px-3 py-1">#{player.capNumber} {player.name}</span>)}
               </div>
             </div>
           )}
@@ -905,51 +861,22 @@ const ShotmapView = ({
               <p className="text-xs text-slate-500">Only selected players can be chosen while mapping shots.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {roster.map((player) => (
-                  <label key={player.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                  <label key={player.id} className="flex cursor-pointer items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm">
                     <input type="checkbox" checked={Boolean(lineupSelection[player.id])} onChange={(event) => setLineupSelection((prev) => ({ ...prev, [player.id]: event.target.checked }))} />
                     #{player.capNumber} {player.name}
                   </label>
                 ))}
               </div>
-              <button className="mt-3 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={saveLineup}>Save lineup</button>
+              <button className="mt-3 rounded bg-[#1f6197] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={saveLineup}>Save lineup</button>
             </div>
           )}
         </section>
       )}
 
-      <div className={liveMode ? 'grid min-h-[calc(100vh-5.25rem)] grid-cols-1 gap-3 md:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.65fr)]' : 'grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]'}>
+      <div className={liveMode ? 'grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.65fr)]' : 'grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]'}>
         <div className="space-y-4">
-          {!liveMode && <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <ToolbarButton
-                variant={!seasonMode ? 'primary' : 'secondary'}
-                className={!seasonMode ? '' : 'text-slate-600'}
-                onClick={() => setSeasonMode(false)}
-              >
-                <StatTooltipLabel
-                  label="Match mode"
-                  tooltip={SHOTMAP_TOOLTIPS.matchMode}
-                  enabled={showTooltips}
-                />
-              </ToolbarButton>
-              <ToolbarButton
-                variant={seasonMode ? 'primary' : 'secondary'}
-                className={seasonMode ? '' : 'text-slate-600'}
-                onClick={() => setSeasonMode(true)}
-              >
-                <StatTooltipLabel
-                  label="Season mode"
-                  tooltip={SHOTMAP_TOOLTIPS.seasonMode}
-                  enabled={showTooltips}
-                />
-              </ToolbarButton>
-            </div>
-            {matches.length === 0 && (
-              <button className="text-xs font-semibold text-cyan-700" onClick={() => setSetupPanel('match')}>Create your first match</button>
-            )}
-          </div>}
           {!liveMode && !seasonMode && !currentMatch && (
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="rounded bg-white p-4 border border-slate-200">
               <ModuleEmptyState
                 compact
                 title={matches.length === 0 ? 'No matches available' : 'Select a match'}
@@ -962,7 +889,7 @@ const ShotmapView = ({
           )}
 
           {!liveMode && showFilters && (
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="rounded bg-white p-4 border border-slate-200">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-sm font-semibold text-slate-700">Quick filters</h3>
                 <button
@@ -988,7 +915,7 @@ const ShotmapView = ({
                       {sortedMatches.map((match) => (
                         <button
                           key={match.info.id}
-                          className={`rounded-full px-3 py-1 text-xs ${
+                          className={`rounded px-3 py-1 text-xs ${
                             filters.matches.includes(match.info.id)
                               ? 'bg-slate-900 text-white'
                               : 'bg-slate-100 text-slate-600'
@@ -1014,7 +941,7 @@ const ShotmapView = ({
                     {roster.map((player) => (
                       <button
                         key={player.id}
-                        className={`rounded-full px-3 py-1 text-xs ${
+                        className={`rounded px-3 py-1 text-xs ${
                           filters.players.includes(player.capNumber)
                             ? 'bg-slate-900 text-white'
                             : 'bg-slate-100 text-slate-600'
@@ -1043,7 +970,7 @@ const ShotmapView = ({
                     ].map((result) => (
                       <button
                         key={result.value}
-                        className={`rounded-full px-3 py-1 text-xs ${
+                        className={`rounded px-3 py-1 text-xs ${
                           filters.results.includes(result.value)
                             ? 'bg-slate-900 text-white'
                             : 'bg-slate-100 text-slate-600'
@@ -1068,7 +995,7 @@ const ShotmapView = ({
                     {periods.map((period) => (
                       <button
                         key={period}
-                        className={`rounded-full px-3 py-1 text-xs ${
+                        className={`rounded px-3 py-1 text-xs ${
                           filters.periods.includes(period)
                             ? 'bg-slate-900 text-white'
                             : 'bg-slate-100 text-slate-600'
@@ -1093,7 +1020,7 @@ const ShotmapView = ({
                     {attackTypes.map((type) => (
                       <button
                         key={type}
-                        className={`rounded-full px-3 py-1 text-xs ${
+                        className={`rounded px-3 py-1 text-xs ${
                           filters.attackTypes.includes(type)
                             ? 'bg-slate-900 text-white'
                             : 'bg-slate-100 text-slate-600'
@@ -1116,7 +1043,7 @@ const ShotmapView = ({
             </div>
           )}
 
-          <div className={liveMode ? 'h-full rounded-2xl bg-slate-900 p-2 shadow-sm' : 'rounded-2xl bg-white p-4 shadow-sm'}>
+          <div className={liveMode ? 'rounded bg-[#122b42] p-2 border border-slate-200' : 'rounded bg-white p-4 border border-slate-200'}>
             <div className="flex items-center justify-between">
               <h3 className={`text-sm font-semibold ${liveMode ? 'text-white' : 'text-slate-700'}`}>
                 <StatTooltipLabel
@@ -1126,14 +1053,14 @@ const ShotmapView = ({
                 />
               </h3>
               <div className={`text-xs ${liveMode ? 'text-slate-300' : 'text-slate-500'}`}>
-                {seasonMode ? 'Season mode: field is view-only' : 'Click to add a shot'}
+                {seasonMode ? 'Whole season: view only' : 'Click to add a shot'}
               </div>
             </div>
-            <div className={liveMode ? 'mt-2 flex h-[calc(100%-2rem)] justify-center' : 'mt-4 flex justify-center'}>
+            <div className={liveMode ? 'mt-2 flex justify-center' : 'mt-4 flex justify-center'}>
               <div
                 ref={fieldRef}
                 data-testid="shotmap-field"
-                className={`relative ${liveMode ? 'h-full max-w-none' : 'h-[600px] max-w-[720px]'} w-full overflow-hidden rounded-2xl bg-gradient-to-b from-[#4aa3d6] via-[#2c7bb8] to-[#1f639a] ${
+                className={`relative ${liveMode ? 'h-[max(160px,calc(100dvh-11rem))] max-w-none' : 'h-[min(600px,65dvh)] min-h-[280px] max-w-[720px]'} w-full overflow-hidden rounded bg-[#316987] ${
                   seasonMode ? 'cursor-default' : 'cursor-crosshair'
                 }`}
                 onClick={handleFieldClick}
@@ -1158,7 +1085,7 @@ const ShotmapView = ({
                     {zone.id === 14 && (
                       <div className="absolute inset-0 grid grid-cols-3 place-items-center gap-1 p-2">
                         <button
-                          className={`col-span-3 rounded-lg px-2 py-1 text-xs font-semibold ${
+                          className={`col-span-3 rounded px-2 py-1 text-xs font-semibold ${
                             seasonMode
                               ? 'cursor-not-allowed bg-slate-300 text-slate-600'
                               : 'bg-yellow-400 text-slate-900'
@@ -1203,49 +1130,16 @@ const ShotmapView = ({
         </div>
 
         <div className="space-y-4">
-          {!liveMode && showExports && (
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <ToolbarButton variant="primary" onClick={downloadPNG}>
-                  <Download size={16} />
-                  Download PNG
-                </ToolbarButton>
-                <ToolbarButton onClick={exportCSV}>Export CSV</ToolbarButton>
-              </div>
-            </div>
-          )}
-
-          {!liveMode && <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-700">Roster</h3>
-            <p className="mt-2 text-sm text-slate-500">
-              Add players or change the active lineup from the setup actions above.
-            </p>
-            <div className="mt-3 space-y-2">
-              {roster
-                .slice()
-                .sort((a, b) => Number(a.capNumber) - Number(b.capNumber))
-                .map((player) => (
-                  <div
-                    key={player.id}
-                    className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm"
-                  >
-                    <span>
-                      #{player.capNumber} {player.name}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          </div>}
-
-          <div className={liveMode ? 'h-full overflow-hidden rounded-2xl bg-white p-3 shadow-sm' : 'rounded-2xl bg-white p-4 shadow-sm'}>
-            <h3 className="text-sm font-semibold text-slate-700">
+          <div className={liveMode ? 'overflow-hidden rounded bg-white p-3 border border-slate-200' : 'rounded bg-white p-4 border border-slate-200'}>
+            <button className="mb-2 text-sm font-semibold text-[#1f6197] md:hidden" onClick={() => setShowShots((value) => !value)} aria-expanded={showShots}>{showShots ? 'Hide shots' : `Show shots (${displayShots.length})`}</button>
+            <h3 className="hidden text-sm font-semibold text-slate-700 md:block">
               <StatTooltipLabel
                 label="Shots"
                 tooltip={SHOTMAP_TOOLTIPS.shotsList}
                 enabled={showTooltips}
               />
             </h3>
-            <div className={liveMode ? 'mt-3 h-[calc(100%-2.5rem)] space-y-2 overflow-y-auto text-sm' : 'mt-3 max-h-[320px] space-y-2 overflow-y-auto text-sm'}>
+            <div className={`${showShots ? 'block' : 'hidden'} md:block mt-3 max-h-[60dvh] space-y-2 overflow-y-auto text-sm`}>
               {displayShots.length === 0 && (
                 <ModuleEmptyState
                   compact
@@ -1255,30 +1149,20 @@ const ShotmapView = ({
                       ? 'Use filters or log shots in Shotmap to populate this list.'
                       : 'Log the first shot for the selected match to start building the list.'
                   }
-                  actions={[
-                    {
-                      label: seasonMode ? 'Clear filters' : 'Create match',
-                      onClick: seasonMode
-                        ? () =>
-                            setFilters({
-                              players: [],
-                              results: [],
-                              periods: [],
-                              attackTypes: [],
-                              matches: []
-                            })
-                        : () => setSetupPanel('match'),
-                      variant: seasonMode ? 'secondary' : undefined
-                    }
-                  ]}
+                  actions={Object.values(filters).some((items) => items.length) ? [{
+                    label: 'Clear filters',
+                    onClick: () => setFilters({ players: [], results: [], periods: [], attackTypes: [], matches: [] })
+                  }] : !currentMatch ? [{ label: 'Create match', onClick: () => setSetupPanel('match') }] : []}
                 />
               )}
               {displayShots.map((shot) => (
                 <div
                   key={shot.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2"
+                  data-testid="shot-row"
+                  className="wp-shot-row flex items-center justify-between gap-3 border-b border-slate-200 py-3"
                 >
                   <div>
+                    {seasonMode && <div className="text-xs text-slate-500">{matches.find((match) => match.info.id === shot.matchId)?.info.name}</div>}
                     <div className="font-semibold text-slate-700">
                       Zone {shot.zone} · #{shot.playerCap}
                     </div>
@@ -1323,19 +1207,19 @@ const ShotmapView = ({
 
       {pendingShot && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
-          <div className="w-full max-w-xl rounded-3xl bg-white p-5 text-slate-900 shadow-2xl shadow-slate-950/20">
+          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded bg-white p-5 text-slate-900 shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#1f6197]">
                   {editingShotId ? 'Edit shot' : 'New shot'}
                 </p>
                 <h3 className="mt-1 text-xl font-semibold text-slate-900">Shot details</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Zone {pendingShot.zone} · X {pendingShot.x.toFixed(1)}% · Y {pendingShot.y.toFixed(1)}%
+                  Zone {pendingShot.zone}
                 </p>
               </div>
               <button
-                className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600"
+                className="rounded border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600"
                 onClick={closeShotEditor}
                 type="button"
               >
@@ -1344,17 +1228,21 @@ const ShotmapView = ({
             </div>
 
             <div className="mt-4 space-y-4 text-sm">
+              {error && <p role="alert" className="text-red-700">{error}</p>}
               <div>
                 <label className="text-xs font-semibold text-slate-500">Player</label>
                 <select
                   aria-label="Shot player"
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white py-2 pl-3 pr-8 text-slate-900"
                   value={pendingShot.playerCap}
                   onChange={(event) =>
                     setPendingShot((prev) => ({ ...prev, playerCap: event.target.value }))
                   }
                 >
                   <option className="bg-white text-slate-900" value="">Select player</option>
+                  {pendingShot.playerCap && !activeLineup.some((player) => String(player.capNumber) === String(pendingShot.playerCap)) && (
+                    <option value={pendingShot.playerCap}>#{pendingShot.playerCap} (recorded player)</option>
+                  )}
                   {activeLineup.map((player) => (
                     <option key={player.id} className="bg-white text-slate-900" value={player.capNumber}>
                       #{player.capNumber} {player.name}
@@ -1374,7 +1262,7 @@ const ShotmapView = ({
                   </div>
                   <select
                     aria-label="Shot result"
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900"
                     value={pendingShot.result}
                     onChange={(event) => {
                       const result = event.target.value;
@@ -1405,7 +1293,7 @@ const ShotmapView = ({
                   </div>
                   <select
                     aria-label="Shot attack"
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900"
                     value={pendingShot.attackType}
                     onChange={(event) =>
                       setPendingShot((prev) => ({ ...prev, attackType: event.target.value }))
@@ -1432,7 +1320,7 @@ const ShotmapView = ({
                   </div>
                   <select
                     aria-label="Shot period"
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900"
                     value={pendingShot.period}
                     onChange={(event) =>
                       setPendingShot((prev) => ({ ...prev, period: event.target.value }))
@@ -1460,7 +1348,7 @@ const ShotmapView = ({
                         type="number"
                         min="0"
                         max="7"
-                        className="w-20 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
+                        className="w-20 rounded border border-slate-200 bg-white px-3 py-2 text-slate-900"
                         value={splitTimeParts(pendingShot.time).minutes}
                         onChange={(event) => {
                           const minutes = Math.min(7, Math.max(0, Number(event.target.value)));
@@ -1479,7 +1367,7 @@ const ShotmapView = ({
                         type="number"
                         min="0"
                         max="59"
-                        className="w-20 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
+                        className="w-20 rounded border border-slate-200 bg-white px-3 py-2 text-slate-900"
                         value={splitTimeParts(pendingShot.time).seconds}
                         onChange={(event) => {
                           const minutes = splitTimeParts(pendingShot.time).minutes;
@@ -1496,7 +1384,7 @@ const ShotmapView = ({
                       {['7:00', '6:00', '5:00'].map((preset) => (
                         <button
                           key={preset}
-                          className="rounded-full border border-slate-200 px-2 py-1"
+                          className="rounded border border-slate-200 px-2 py-1"
                           onClick={() => setPendingShot((prev) => ({ ...prev, time: preset }))}
                           type="button"
                         >
@@ -1508,11 +1396,12 @@ const ShotmapView = ({
                 </div>
               </div>
 
-              <div>
+              <details>
+                <summary className="cursor-pointer text-sm font-semibold text-slate-600">Optional details</summary>
                 <label className="text-xs font-semibold text-slate-500">After the shot</label>
                 <select
                   aria-label="Shot follow-up outcome"
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-2 text-slate-900"
                   value={pendingShot.followUpOutcome || ''}
                   onChange={(event) => setPendingShot((prev) => ({ ...prev, followUpOutcome: event.target.value }))}
                 >
@@ -1524,22 +1413,23 @@ const ShotmapView = ({
                   <option className="bg-white text-slate-900" value="exclusion_won">Exclusion won</option>
                   <option className="bg-white text-slate-900" value="turnover">Turnover</option>
                 </select>
-              </div>
+              </details>
 
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+                  className="rounded border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
                   onClick={closeShotEditor}
                   type="button"
                 >
                   Cancel
                 </button>
                 <button
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                  className="rounded bg-[#1f6197] px-4 py-2 text-sm font-semibold text-white"
                   onClick={saveShot}
+                  disabled={shotSaving}
                   type="button"
                 >
-                  {editingShotId ? 'Update shot' : 'Save shot'}
+                  {shotSaving ? 'Saving...' : editingShotId ? 'Update shot' : 'Save shot'}
                 </button>
               </div>
             </div>

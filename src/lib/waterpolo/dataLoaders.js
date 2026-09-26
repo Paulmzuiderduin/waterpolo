@@ -8,8 +8,12 @@ const E2E_SAMPLE = {
     { id: 'smoke-r1', name: 'Alex Example', cap_number: '1', dominant_hand: 'right', birthday: '2000-01-01' },
     { id: 'smoke-r2', name: 'Sam Demo', cap_number: '5', dominant_hand: 'left', birthday: '2002-06-05' }
   ],
-  matches: [{ id: 'smoke-m1', name: 'Demo Match', date: E2E_DATE, opponent_name: 'Test Club' }],
+  matches: [
+    { id: 'smoke-m1', name: 'Demo Match', date: E2E_DATE, opponent_name: 'Test Club' },
+    { id: 'smoke-m2', name: 'Earlier Match', date: '2026-01-10', opponent_name: 'Other Club' }
+  ],
   shots: [
+    { id: 'smoke-s2', match_id: 'smoke-m2', x: 60, y: 35, zone: 7, result: 'mis', player_cap: '5', attack_type: '6vs6', period: '2', time: '5:30', score_for: 2, score_against: 3 },
     {
       id: 'smoke-s1',
       match_id: 'smoke-m1',

@@ -2,7 +2,7 @@ import React from 'react';
 
 const ModuleEmptyState = ({ title, description, actions = [], compact = false }) => (
   <div
-    className={`rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 ${
+    className={`rounded border border-dashed border-slate-200 bg-slate-50/80 ${
       compact ? 'px-4 py-4' : 'px-5 py-5'
     }`}
   >
@@ -13,7 +13,7 @@ const ModuleEmptyState = ({ title, description, actions = [], compact = false })
         {actions.map((action) => (
           <button
             key={action.label}
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+            className={`rounded px-3 py-1.5 text-xs font-semibold ${
               action.variant === 'secondary'
                 ? 'border border-slate-200 bg-white text-slate-700'
                 : 'bg-slate-900 text-white'

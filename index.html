@@ -5,38 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Water Polo Hub for shotmaps, scoring events, stat sheets, and video workflows. Built as a practical water polo statistics and scoring app."
-    />
-    <meta
-      name="keywords"
-      content="water polo statistics, water polo statistics app, water polo scoring app, waterpolo shotmap, water polo analytics, water polo video analysis"
+      content="Log water polo shots on an interactive field. Review locations, players, results, and conversion by match or season. Export your shotmap and shot data."
     />
     <meta name="robots" content="index, follow" />
-    <meta name="theme-color" content="#256af4" />
+    <meta name="theme-color" content="#122b42" />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Waterpolo Hub" />
-    <meta property="og:title" content="Waterpolo Hub | Shotmap, Scoring & Video Analysis" />
+    <meta property="og:title" content="Water Polo Shotmap | Track Shots & Review Results" />
     <meta
       property="og:description"
-      content="Track and analyze water polo performance with shotmaps, scoring logs, possession maps, and local video snippets."
+      content="Log water polo shots on an interactive field. Review locations, players, results, and conversion by match or season. Export your shotmap and shot data."
     />
     <meta property="og:url" content="https://waterpolo.paulzuiderduin.com/" />
-    <meta property="og:image" content="https://waterpolo.paulzuiderduin.com/logos/waterpolo-logo-light.png" />
+    <meta property="og:image" content="https://waterpolo.paulzuiderduin.com/images/shotmap-preview.png" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Waterpolo Hub | Shotmap, Scoring & Video Analysis" />
+    <meta name="twitter:title" content="Water Polo Shotmap | Track Shots & Review Results" />
     <meta
       name="twitter:description"
-      content="Track and analyze water polo performance with shotmaps, scoring logs, possession maps, and local video snippets."
+      content="Log water polo shots on an interactive field. Review locations, players, results, and conversion by match or season. Export your shotmap and shot data."
     />
-    <meta name="twitter:image" content="https://waterpolo.paulzuiderduin.com/logos/waterpolo-logo-light.png" />
+    <meta name="twitter:image" content="https://waterpolo.paulzuiderduin.com/images/shotmap-preview.png" />
 
     <link rel="canonical" href="https://waterpolo.paulzuiderduin.com/" />
     <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Waterpolo Hub | Shotmap, Scoring & Video Analysis</title>
+    <title>Water Polo Shotmap | Track Shots & Review Results</title>
     <script type="application/ld+json" id="seo-jsonld-default">
       {
         "@context": "https://schema.org",
@@ -45,7 +41,7 @@
         "applicationCategory": "SportsApplication",
         "operatingSystem": "Web",
         "url": "https://waterpolo.paulzuiderduin.com/",
-        "description": "Waterpolo Hub helps coaches and players track shotmaps, scoring events, possessions, and video snippets in one platform.",
+        "description": "Log water polo shots on an interactive field. Review locations, players, results, and conversion by match or season. Export your shotmap and shot data.",
         "inLanguage": "en",
         "offers": {
           "@type": "Offer",
@@ -141,7 +137,6 @@
         function removeBanner() {
           var banner = document.getElementById('consent-banner');
           if (banner) banner.remove();
-          document.body.style.overflow = '';
         }
 
         function createBanner() {
@@ -150,38 +145,38 @@
           overlay.id = 'consent-banner';
           overlay.style.cssText = [
             'position:fixed',
-            'inset:0',
+            'left:16px', 'right:16px', 'bottom:16px',
             'z-index:9999',
             'display:flex',
             'align-items:center',
             'justify-content:center',
             'padding:24px',
-            'background:rgba(15,23,42,0.5)',
-            'backdrop-filter:blur(8px)'
+            'background:transparent',
+            'pointer-events:none'
           ].join(';');
 
           var banner = document.createElement('div');
           banner.setAttribute('role', 'dialog');
-          banner.setAttribute('aria-modal', 'true');
+          banner.setAttribute('aria-label', 'Analytics preferences');
           banner.setAttribute('aria-live', 'polite');
           banner.setAttribute('aria-labelledby', 'consent-banner-heading');
           banner.setAttribute('aria-describedby', 'consent-banner-description');
           banner.style.cssText = [
-            'width:min(100%,620px)',
-            'padding:26px',
-            'border-radius:24px',
+            'width:min(100%,620px)', 'pointer-events:auto',
+            'padding:16px',
+            'border-radius:4px',
             'border:1px solid rgba(15,23,42,0.18)',
             'background:#ffffff',
-            'box-shadow:0 30px 80px -28px rgba(2,6,23,0.75)',
+            'box-shadow:0 6px 24px rgba(18,43,66,0.12)',
             'display:grid',
-            'gap:18px',
-            'font:500 14px/1.5 Manrope, Arial, sans-serif',
+            'gap:10px',
+            'font:500 14px/1.5 Segoe UI, Arial, sans-serif',
             'color:#0f172a'
           ].join(';');
 
           var heading = document.createElement('div');
           heading.id = 'consent-banner-heading';
-          heading.style.cssText = 'font:800 18px/1.2 Manrope, Arial, sans-serif;color:#0f172a;';
+          heading.style.cssText = 'font:800 18px/1.2 Segoe UI, Arial, sans-serif;color:#0f172a;';
           heading.textContent = 'Help improve Waterpolo Hub';
 
           var text = document.createElement('div');
@@ -189,28 +184,15 @@
           text.textContent =
             'Allow privacy-friendly analytics so I can understand visits and improve the website. Google Analytics 4 only loads after you accept.';
 
-          var details = document.createElement('div');
-          details.style.cssText =
-            'display:grid;gap:8px;font:500 12px/1.55 Manrope, Arial, sans-serif;color:#475569;background:#f8fafc;border:1px solid rgba(148,163,184,0.24);border-radius:16px;padding:12px 14px;';
-
-          [
-            'Analytics stays off until you accept.',
-            'Rejecting does not block the site or any core features.',
-            'You can change this later via Analytics preferences in the app.'
-          ].forEach(function (line) {
-            var row = document.createElement('div');
-            row.textContent = '• ' + line;
-            details.appendChild(row);
-          });
-
           var actions = document.createElement('div');
           actions.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;';
 
           var reject = document.createElement('button');
           reject.type = 'button';
           reject.textContent = 'Reject analytics';
-          reject.style.cssText = 'border:1px solid rgba(15,23,42,0.18);background:#fff;color:#0f172a;border-radius:999px;padding:14px 16px;font:700 13px Manrope, Arial,sans-serif;cursor:pointer;';
+          reject.style.cssText = 'border:1px solid rgba(15,23,42,0.18);background:#fff;color:#0f172a;border-radius:4px;padding:14px 16px;font:700 13px Segoe UI, Arial,sans-serif;cursor:pointer;';
           reject.onclick = function () {
+            window['ga-disable-' + MEASUREMENT_ID] = true;
             saveConsent('denied');
             removeBanner();
           };
@@ -218,27 +200,22 @@
           var accept = document.createElement('button');
           accept.type = 'button';
           accept.textContent = 'Accept analytics';
-          accept.style.cssText = 'border:1px solid transparent;background:#0f4ea6;color:#fff;border-radius:999px;padding:14px 16px;font:700 13px Manrope, Arial,sans-serif;cursor:pointer;';
+          accept.style.cssText = 'border:1px solid transparent;background:#1f6197;color:#fff;border-radius:4px;padding:14px 16px;font:700 13px Segoe UI, Arial,sans-serif;cursor:pointer;';
           accept.onclick = function () {
+            window['ga-disable-' + MEASUREMENT_ID] = false;
             saveConsent('granted');
             loadAnalytics();
             removeBanner();
           };
 
-          var footer = document.createElement('div');
-          footer.style.cssText = 'font:500 12px/1.5 Manrope, Arial, sans-serif;color:#64748b;text-align:center;';
-          footer.textContent = 'This choice applies only to website analytics and can be updated later.';
-
           actions.appendChild(reject);
           actions.appendChild(accept);
           banner.appendChild(heading);
           banner.appendChild(text);
-          banner.appendChild(details);
           banner.appendChild(actions);
-          banner.appendChild(footer);
           overlay.appendChild(banner);
           document.body.appendChild(overlay);
-          document.body.style.overflow = 'hidden';
+
         }
 
         var consent = readConsent();
@@ -253,20 +230,8 @@
     </script>
   </head>
   <body>
-    <noscript>
-      <main style="max-width:860px;margin:24px auto;padding:0 16px;font-family:Inter,system-ui,sans-serif;color:#0f172a;">
-        <h1>Waterpolo Hub</h1>
-        <p>Water polo statistics and scoring app with modules for live scoring, shotmap, analytics, stat sheet, and video analysis.</p>
-        <ul>
-          <li><a href="/water-polo-scoring-app.html">Water polo scoring app</a></li>
-          <li><a href="/water-polo-shotmap-app.html">Water polo shotmap app</a></li>
-          <li><a href="/water-polo-statistics-app.html">Water polo analytics app</a></li>
-          <li><a href="/water-polo-stat-sheet-app.html">Water polo stat sheet app</a></li>
-          <li><a href="/docs/waterpolo-quickstart.html">Quickstart guide</a></li>
-        </ul>
-      </main>
-    </noscript>
-    <div id="root"></div>
+    <noscript><p>Enable JavaScript to sign in and record shots.</p></noscript>
+    <div id="root"><main style="max-width:1000px;margin:32px auto;padding:0 20px;font-family:Arial,sans-serif;color:#0f172a"><h1>Water Polo Shotmap</h1><p>Log water polo shots on an interactive field. Review locations, players, results, and conversion by match or season. Export your shotmap and shot data.</p><img src="/images/shotmap-preview.png" alt="Shot locations and match review with example data" width="1180" height="920" style="width:100%;height:auto"><p>Log shots. Review shooting patterns. Share the results.</p><p><a href="/water-polo-shotmap-app.html">Explore Shotmap</a> · <a href="/docs/waterpolo-quickstart.html">Quickstart guide</a></p></main></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -24,35 +24,35 @@ const WorkspaceSetupScreen = ({
 }) => (
   <div className="min-h-screen px-6 py-8">
     <div className="mx-auto max-w-5xl space-y-6">
-      <header className="rounded-3xl bg-white p-6 shadow-sm">
+      <header className="rounded bg-white p-6 border border-slate-200">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-cyan-700">Water Polo Platform</p>
+            <p className="text-sm font-semibold text-[#1f6197]">Waterpolo Hub</p>
             <h1 className="text-3xl font-semibold">Seasons & Teams</h1>
             <p className="mt-2 text-sm text-slate-500">Select a season and team, or create new folders.</p>
           </div>
           {onClose && (
             <button
-              className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="shrink-0 rounded border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               onClick={onClose}
             >
-              ← Back to app
+              Back to Shotmap
             </button>
           )}
         </div>
       </header>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr]">
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
+        <div className="rounded bg-white p-4 border border-slate-200">
           <h2 className="text-sm font-semibold text-slate-700">Seasons</h2>
           <div className="mt-3 space-y-2">
             {seasons.length === 0 && <div className="text-sm text-slate-500">No seasons yet.</div>}
             {seasons.map((season) => (
               <div
                 key={season.id}
-                className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${
+                className={`flex w-full items-center justify-between rounded border px-3 py-2 text-left text-sm ${
                   selectedSeasonId === season.id
-                    ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
+                    ? 'border-[#1f6197] bg-[#edf3f7] text-[#1f6197]'
                     : 'border-slate-100 text-slate-600'
                 }`}
               >
@@ -86,13 +86,13 @@ const WorkspaceSetupScreen = ({
           </div>
           <div className="mt-4 flex gap-2">
             <input
-              className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="min-w-0 flex-1 rounded border border-slate-200 px-3 py-2 text-sm"
               placeholder="New season"
               value={seasonForm}
               onChange={(event) => setSeasonForm(event.target.value)}
             />
             <button
-              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
+              className="rounded bg-[#1f6197] px-3 py-2 text-sm font-semibold text-white"
               onClick={createSeason}
             >
               <Plus size={16} />
@@ -101,7 +101,7 @@ const WorkspaceSetupScreen = ({
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="rounded bg-white p-4 border border-slate-200">
             <h2 className="text-sm font-semibold text-slate-700">Teams</h2>
             {selectedSeason ? (
               <div className="mt-3 space-y-2">
@@ -111,9 +111,9 @@ const WorkspaceSetupScreen = ({
                 {(selectedSeason.teams || []).map((team) => (
                   <div
                     key={team.id}
-                    className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${
+                    className={`flex w-full items-center justify-between rounded border px-3 py-2 text-left text-sm ${
                       selectedTeamId === team.id
-                        ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
+                        ? 'border-[#1f6197] bg-[#edf3f7] text-[#1f6197]'
                         : 'border-slate-100 text-slate-600'
                     }`}
                   >
@@ -143,14 +143,14 @@ const WorkspaceSetupScreen = ({
             )}
             <div className="mt-4 flex gap-2">
               <input
-                className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="flex-1 rounded border border-slate-200 px-3 py-2 text-sm"
                 placeholder={selectedSeason ? 'New team' : 'Select season first'}
                 value={teamForm}
                 onChange={(event) => setTeamForm(event.target.value)}
                 disabled={!selectedSeason}
               />
               <button
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                className="rounded bg-[#1f6197] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 onClick={createTeam}
                 disabled={!selectedSeason}
               >
@@ -159,12 +159,12 @@ const WorkspaceSetupScreen = ({
             </div>
           </div>
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="rounded bg-white p-4 border border-slate-200">
             <h2 className="text-sm font-semibold text-slate-700">Getting started</h2>
             <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-600">
               <li>Create a season.</li>
               <li>Select the season and create a team.</li>
-              <li>Then move into live scoring.</li>
+              <li>Create a match and start mapping shots.</li>
             </ol>
           </div>
         </div>

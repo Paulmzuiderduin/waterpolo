@@ -35,7 +35,8 @@ const ShotmapView = ({
   showTooltips = true,
   selectedMatchId,
   onSelectMatch,
-  onMatchesChange
+  workspaceTab = 'shotmap',
+  onSelectTab
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -48,10 +49,11 @@ const ShotmapView = ({
   const [shotSaving, setShotSaving] = useState(false);
   const [seasonMode, setSeasonMode] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [showSetup, setShowSetup] = useState(false);
+  const isAnalysis = workspaceTab === 'analytics';
+  const isShotWorkspace = workspaceTab === 'shotmap' || isAnalysis;
   const [showScoreCorrection, setShowScoreCorrection] = useState(false);
   const [showShots, setShowShots] = useState(false);
-  const [showSummary, setShowSummary] = useState(false);
+
   const [liveMode, setLiveMode] = useState(false);
   const [isFullscreenActive, setIsFullscreenActive] = useState(false);
   const [setupPanel, setSetupPanel] = useState('');
@@ -71,6 +73,17 @@ const ShotmapView = ({
     time: formatShotTime()
   }));
   const fieldRef = useRef(null);
+
+  useEffect(() => {
+    setSetupPanel(workspaceTab === 'roster' ? 'roster' : '');
+    setPendingShot(null);
+    setEditingShotId(null);
+    setShowScoreCorrection(false);
+    setShowFilters(false);
+    setSeasonMode(workspaceTab === 'analytics');
+    setFilters({ players: [], results: [], periods: [], attackTypes: [], matches: [] });
+  }, [workspaceTab, teamId]);
+
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -211,10 +224,6 @@ const ShotmapView = ({
   }, [matches, selectedMatchId]);
 
   useEffect(() => {
-    onMatchesChange?.(sortedMatches);
-  }, [onMatchesChange, sortedMatches]);
-
-  useEffect(() => {
     if (currentMatchId) onSelectMatch?.(currentMatchId);
   }, [currentMatchId, onSelectMatch]);
 
@@ -305,10 +314,10 @@ const ShotmapView = ({
     }
   };
 
-  const openLineupSetup = () => {
-    if (!currentMatch) return;
+  const openLineupSetup = (match = currentMatch) => {
+    if (!match) return;
     const playingCaps = new Set(
-      lineups.filter((row) => row.match_id === currentMatch.info.id && (row.status || 'playing') === 'playing').map((row) => row.cap_number)
+      lineups.filter((row) => row.match_id === match.info.id && (row.status || 'playing') === 'playing').map((row) => row.cap_number)
     );
     setLineupSelection(Object.fromEntries(roster.map((player) => [player.id, playingCaps.size ? playingCaps.has(player.capNumber) : true])));
     setSetupPanel('lineup');
@@ -355,6 +364,7 @@ const ShotmapView = ({
   };
 
   const handleFieldClick = (event) => {
+    if (isAnalysis) return;
     if (seasonMode) {
       setError('Choose Selected match in Scope to add shots.');
       return;
@@ -384,6 +394,7 @@ const ShotmapView = ({
   };
 
   const handlePenaltyClick = () => {
+    if (isAnalysis) return;
     if (seasonMode) {
       setError('Choose Selected match in Scope to add shots.');
       return;
@@ -695,18 +706,76 @@ const ShotmapView = ({
     <div
       className={liveMode ? 'fixed inset-0 z-50 overflow-y-auto bg-slate-950 p-2 text-white sm:p-3' : 'space-y-3'}
     >
+      {error && !isShotWorkspace && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      {workspaceTab === 'matches' && <>
+        <ModuleHeader title="Matches" description="Create matches, set lineups, then open the shotmap."
+          actions={<ToolbarButton onClick={() => setSetupPanel('match')}>New match</ToolbarButton>} />
+        <div className="divide-y divide-slate-200 rounded border border-slate-200 bg-white">
+          {sortedMatches.map((match) => <div key={match.info.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
+            <div><h3 className="text-sm font-semibold">{match.info.name}</h3><p className="text-xs text-slate-500">{match.info.date}{match.info.opponent ? ` · vs ${match.info.opponent}` : ''} · {match.shots.length} shots</p></div>
+            <div className="flex gap-2">
+              <ToolbarButton onClick={() => { setCurrentMatchId(match.info.id); setSetupPanel(''); onSelectMatch?.(match.info.id); onSelectTab?.('shotmap'); }}>Open shotmap</ToolbarButton>
+              <ToolbarButton onClick={() => { setCurrentMatchId(match.info.id); openLineupSetup(match); }}>Lineup</ToolbarButton>
+            </div>
+          </div>)}
+          {!matches.length && <p className="p-4 text-sm text-slate-500">No matches yet. Create your first match to start logging shots.</p>}
+        </div>
+      </>}
+      {workspaceTab === 'roster' && <ModuleHeader title="Roster" description="Manage the players available for your match lineups." />}
+      {!isShotWorkspace && setupPanel && (
+        <section className="rounded border border-slate-200 bg-white p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-slate-800">
+              {setupPanel === 'match' ? 'Create match' : setupPanel === 'roster' ? 'Team roster' : `Lineup: ${currentMatch?.info.name || ''}`}
+            </h3>
+            {workspaceTab !== 'roster' && <button className="text-xs font-semibold text-slate-500" onClick={() => setSetupPanel('')}>Close</button>}
+          </div>
+          {setupPanel === 'match' && (
+            <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_10rem_auto]">
+              <input aria-label="Match name" className="rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Match name" value={newMatch.name} onChange={(event) => setNewMatch((prev) => ({ ...prev, name: event.target.value }))} />
+              <input aria-label="Opponent" className="rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Opponent" value={newMatch.opponentName} onChange={(event) => setNewMatch((prev) => ({ ...prev, opponentName: event.target.value }))} />
+              <input aria-label="Match date" type="date" className="rounded border border-slate-200 px-3 py-2 text-sm" value={newMatch.date} onChange={(event) => setNewMatch((prev) => ({ ...prev, date: event.target.value }))} />
+              <button className="rounded bg-[#1f6197] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={createMatch}>Create</button>
+            </div>
+          )}
+          {setupPanel === 'roster' && (
+            <div className="mt-3 space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <input aria-label="Player name" className="rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Player name" value={newPlayer.name} onChange={(event) => setNewPlayer((prev) => ({ ...prev, name: event.target.value }))} />
+                <input aria-label="Cap number" className="w-28 rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Cap #" value={newPlayer.capNumber} onChange={(event) => setNewPlayer((prev) => ({ ...prev, capNumber: event.target.value }))} />
+                <button className="rounded bg-[#1f6197] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={addPlayer}>Add player</button>
+              </div>
+              <div className="flex flex-wrap gap-2 text-sm text-slate-700">
+                {roster.map((player) => <span key={player.id} className="rounded bg-slate-100 px-3 py-1">#{player.capNumber} {player.name}</span>)}
+              </div>
+            </div>
+          )}
+          {setupPanel === 'lineup' && (
+            <div className="mt-3">
+              <p className="text-xs text-slate-500">Only selected players can be chosen while mapping shots.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {roster.map((player) => (
+                  <label key={player.id} className="flex cursor-pointer items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" checked={Boolean(lineupSelection[player.id])} onChange={(event) => setLineupSelection((prev) => ({ ...prev, [player.id]: event.target.checked }))} />
+                    #{player.capNumber} {player.name}
+                  </label>
+                ))}
+              </div>
+              <button className="mt-3 rounded bg-[#1f6197] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={saveLineup}>Save lineup</button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {isShotWorkspace && <>
       {!liveMode && <ModuleHeader
-        eyebrow="Shotmap workspace"
-        title={seasonMode ? 'Season review' : currentMatch ? currentMatch.info.name : 'Start a match'}
-        description={currentMatch ? `${currentMatch.info.opponent ? `vs ${currentMatch.info.opponent} · ` : ''}${currentMatch.info.date}` : 'Create a match, set a lineup, and map shots from one workspace.'}
+        eyebrow={isAnalysis ? 'Analytics' : 'Shot logging'}
+        title={isAnalysis ? 'Shot analytics' : seasonMode ? 'Season review' : currentMatch ? currentMatch.info.name : 'Start a match'}
+        description={currentMatch ? `${currentMatch.info.opponent ? `vs ${currentMatch.info.opponent} · ` : ''}${currentMatch.info.date}` : 'Create a match in Matches, then select it here to log shots.'}
         actions={
           <>
-            <ToolbarButton onClick={() => setShowSetup((value) => !value)} aria-expanded={showSetup}>Match setup</ToolbarButton>
             <ToolbarButton variant="primary" onClick={toggleLiveMode} disabled={!currentMatch}>
               <Maximize2 size={15} /> Fullscreen
-            </ToolbarButton>
-            <ToolbarButton onClick={() => setShowSummary((prev) => !prev)}>
-              {showSummary ? 'Hide analysis' : 'Show analysis'}
             </ToolbarButton>
             <ToolbarButton onClick={() => setShowFilters((prev) => !prev)}>
               {showFilters ? 'Hide filters' : 'Filters'}
@@ -722,13 +791,12 @@ const ShotmapView = ({
         }
       />}
 
-      {!liveMode && showSetup && (
-        <div className="flex flex-wrap gap-2 rounded border border-slate-200 bg-white p-3">
-          <ToolbarButton onClick={() => setSetupPanel('match')}>New match</ToolbarButton>
-          <ToolbarButton onClick={() => setSetupPanel('roster')}>Roster</ToolbarButton>
-          <ToolbarButton onClick={openLineupSetup} disabled={!currentMatch}>Lineup</ToolbarButton>
-        </div>
-      )}
+      {!liveMode && <label className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">Match
+        <select aria-label="Active match" className="max-w-full rounded border border-slate-200 bg-white py-2 pl-2 pr-8 text-sm text-slate-900" value={currentMatchId} onChange={(event) => setCurrentMatchId(event.target.value)}>
+          <option value="">Select match</option>
+          {sortedMatches.map((match) => <option key={match.info.id} value={match.info.id}>{match.info.name}</option>)}
+        </select>
+      </label>}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded bg-white px-4 py-2 text-sm text-slate-700">
         {!liveMode && <label className="flex items-center gap-2">Scope
           <select aria-label="Shotmap scope" className="rounded border border-slate-200 bg-white py-1 pl-2 pr-8 text-slate-900" value={seasonMode ? 'season' : 'match'} onChange={(event) => setSeasonMode(event.target.value === 'season')}>
@@ -739,7 +807,7 @@ const ShotmapView = ({
         <span><strong>{summary.total}</strong> {summary.total === 1 ? 'shot' : 'shots'}</span>
         <span><strong>{summary.goals}</strong> {summary.goals === 1 ? 'goal' : 'goals'}</span>
         <span><strong>{summary.conversion}%</strong> conversion</span>
-        {!seasonMode && currentMatch && <button className="ml-auto text-xs font-semibold text-[#1f6197]" onClick={() => setShowScoreCorrection((value) => !value)} aria-expanded={showScoreCorrection}>Correct score</button>}
+        {!isAnalysis && !seasonMode && currentMatch && <button className="ml-auto text-xs font-semibold text-[#1f6197]" onClick={() => setShowScoreCorrection((value) => !value)} aria-expanded={showScoreCorrection}>Correct score</button>}
       </div>
 
       {liveMode && (
@@ -764,7 +832,7 @@ const ShotmapView = ({
         </div>
       )}
 
-      {!liveMode && showSummary && (
+      {!liveMode && isAnalysis && (
         <div className="space-y-3">
           <section className="rounded border border-slate-200 bg-white p-4">
             <p className="mb-3 text-sm text-slate-600">Results: {summary.goals} goals · {summary.saves} saved · {summary.misses} missed</p>
@@ -829,50 +897,6 @@ const ShotmapView = ({
         </div>
       )}
 
-      {!liveMode && setupPanel && (
-        <section className="rounded border border-slate-200 bg-white p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-slate-800">
-              {setupPanel === 'match' ? 'Create match' : setupPanel === 'roster' ? 'Team roster' : 'Match lineup'}
-            </h3>
-            <button className="text-xs font-semibold text-slate-500" onClick={() => setSetupPanel('')}>Close</button>
-          </div>
-          {setupPanel === 'match' && (
-            <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_10rem_auto]">
-              <input aria-label="Match name" className="rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Match name" value={newMatch.name} onChange={(event) => setNewMatch((prev) => ({ ...prev, name: event.target.value }))} />
-              <input aria-label="Opponent" className="rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Opponent" value={newMatch.opponentName} onChange={(event) => setNewMatch((prev) => ({ ...prev, opponentName: event.target.value }))} />
-              <input aria-label="Match date" type="date" className="rounded border border-slate-200 px-3 py-2 text-sm" value={newMatch.date} onChange={(event) => setNewMatch((prev) => ({ ...prev, date: event.target.value }))} />
-              <button className="rounded bg-[#1f6197] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={createMatch}>Create</button>
-            </div>
-          )}
-          {setupPanel === 'roster' && (
-            <div className="mt-3 space-y-3">
-              <div className="flex flex-wrap gap-2">
-                <input aria-label="Player name" className="rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Player name" value={newPlayer.name} onChange={(event) => setNewPlayer((prev) => ({ ...prev, name: event.target.value }))} />
-                <input aria-label="Cap number" className="w-28 rounded border border-slate-200 px-3 py-2 text-sm" placeholder="Cap #" value={newPlayer.capNumber} onChange={(event) => setNewPlayer((prev) => ({ ...prev, capNumber: event.target.value }))} />
-                <button className="rounded bg-[#1f6197] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={addPlayer}>Add player</button>
-              </div>
-              <div className="flex flex-wrap gap-2 text-sm text-slate-700">
-                {roster.map((player) => <span key={player.id} className="rounded bg-slate-100 px-3 py-1">#{player.capNumber} {player.name}</span>)}
-              </div>
-            </div>
-          )}
-          {setupPanel === 'lineup' && (
-            <div className="mt-3">
-              <p className="text-xs text-slate-500">Only selected players can be chosen while mapping shots.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {roster.map((player) => (
-                  <label key={player.id} className="flex cursor-pointer items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm">
-                    <input type="checkbox" checked={Boolean(lineupSelection[player.id])} onChange={(event) => setLineupSelection((prev) => ({ ...prev, [player.id]: event.target.checked }))} />
-                    #{player.capNumber} {player.name}
-                  </label>
-                ))}
-              </div>
-              <button className="mt-3 rounded bg-[#1f6197] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={setupSaving} onClick={saveLineup}>Save lineup</button>
-            </div>
-          )}
-        </section>
-      )}
 
       <div className={liveMode ? 'grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.65fr)]' : 'grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]'}>
         <div className="space-y-4">
@@ -884,7 +908,7 @@ const ShotmapView = ({
                 description={matches.length === 0
                   ? 'Create a match, set the lineup, and then map shots on the field.'
                   : 'Choose the match you want to log from the selector in the top bar.'}
-                actions={matches.length === 0 ? [{ label: 'Create match', onClick: () => setSetupPanel('match') }] : []}
+                actions={matches.length === 0 ? [{ label: 'Create match', onClick: () => onSelectTab?.('matches') }] : []}
               />
             </div>
           )}
@@ -1054,7 +1078,7 @@ const ShotmapView = ({
                 />
               </h3>
               <div className={`text-xs ${liveMode ? 'text-slate-300' : 'text-slate-500'}`}>
-                {seasonMode ? 'Whole season: view only' : 'Click to add a shot'}
+                {isAnalysis ? 'Review shots' : seasonMode ? 'Whole season: view only' : 'Click to add a shot'}
               </div>
             </div>
             <div className={liveMode ? 'mt-2 flex justify-center' : 'mt-4 flex justify-center'}>
@@ -1088,7 +1112,7 @@ const ShotmapView = ({
                               ? 'cursor-not-allowed bg-slate-300 text-slate-600'
                               : 'bg-yellow-400 text-slate-900'
                           }`}
-                          disabled={seasonMode}
+                          disabled={seasonMode || isAnalysis}
                           onClick={(event) => {
                             event.stopPropagation();
                             handlePenaltyClick();
@@ -1205,7 +1229,8 @@ const ShotmapView = ({
         </div>
       </div>
 
-      {pendingShot && (
+      </>}
+      {isShotWorkspace && pendingShot && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
           <div className="max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded bg-white p-5 text-slate-900 shadow-xl">
             <div className="flex items-start justify-between gap-4">

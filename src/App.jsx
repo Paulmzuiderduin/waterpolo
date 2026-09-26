@@ -23,7 +23,7 @@ const App = () => {
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [promptDialog, setPromptDialog] = useState(null);
   const [toasts, setToasts] = useState([]);
-  const [headerMatches, setHeaderMatches] = useState([]);
+  const [workspaceTab, setWorkspaceTab] = useState('shotmap');
   const [selectedMatchId, setSelectedMatchId] = useState('');
   const [isManagingWorkspace, setIsManagingWorkspace] = useState(false);
 
@@ -275,9 +275,8 @@ const App = () => {
         teamOptions={selectedSeason.teams || []}
         selectedTeamId={selectedTeamId}
         onSelectTeam={setSelectedTeamId}
-        matches={headerMatches}
-        selectedMatchId={selectedMatchId}
-        onSelectMatch={setSelectedMatchId}
+        activeTab={workspaceTab}
+        onSelectTab={setWorkspaceTab}
         onSignOut={() => supabase.auth.signOut()}
         onOpenSetup={() => setIsManagingWorkspace(true)}
       />
@@ -299,7 +298,8 @@ const App = () => {
             showTooltips={preferences.showStatTooltips}
             selectedMatchId={selectedMatchId}
             onSelectMatch={setSelectedMatchId}
-            onMatchesChange={setHeaderMatches}
+            workspaceTab={workspaceTab}
+            onSelectTab={setWorkspaceTab}
           />
         </Suspense>
       </main>

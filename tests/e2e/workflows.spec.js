@@ -26,8 +26,8 @@ test('workflow: lineup setup limits the match context', async ({ page }) => {
   });
 
   await openWorkspace(page);
-  await page.getByRole('button', { name: 'Match setup' }).click();
-  await page.getByRole('button', { name: 'Lineup' }).click();
+  await page.getByRole('button', { name: 'Matches', exact: true }).click();
+  await page.getByRole('button', { name: 'Lineup' }).first().click();
   await expect(page.getByText('Only selected players can be chosen while mapping shots.')).toBeVisible();
   await page.getByRole('button', { name: 'Save lineup' }).click();
   await expect(page.getByText('Lineup saved.')).toBeVisible();
@@ -58,7 +58,7 @@ test('workflow: expanded analysis remains available across scopes', async ({ pag
   await openWorkspace(page);
 
   await expect(page.getByText('Outcome analysis')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Show analysis' }).click();
+  await page.getByRole('button', { name: 'Analytics', exact: true }).click();
   await expect(page.getByText('Outcome analysis')).toBeVisible();
   await expect(page.getByText('Score state')).toHaveCount(0);
   await expect(page.getByText('After shot', { exact: true })).toHaveCount(0);
@@ -104,9 +104,9 @@ test('match filters work and analysis can be hidden in either scope', async ({ p
   await page.getByRole('button', { name: 'Clear all' }).click();
   await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(1);
   await page.getByLabel('Shotmap scope').selectOption('season');
-  await page.getByRole('button', { name: 'Show analysis' }).click();
+  await page.getByRole('button', { name: 'Analytics', exact: true }).click();
   await expect(page.getByText('Outcome analysis')).toBeVisible();
-  await page.getByRole('button', { name: 'Hide analysis' }).click();
+  await page.getByRole('button', { name: 'Shotmap', exact: true }).click();
   await expect(page.getByText('Outcome analysis')).toHaveCount(0);
 });
 

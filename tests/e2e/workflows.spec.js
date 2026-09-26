@@ -181,3 +181,30 @@ test('fullscreen fallback keeps season scope and exits cleanly', async ({ page }
   await expect(page.getByLabel('Shotmap scope')).toHaveValue('season');
   await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden');
 });
+
+test('field distance guides are labeled, positioned correctly, and allow shot entry', async ({ page }) => {
+  await openWorkspace(page);
+  const field = page.getByTestId('shotmap-field');
+  for (const [kind, fraction, label] of [
+    ['two', 0.16, '2 m line'],
+    ['penalty', 0.40, '5 m · Penalties'],
+    ['six', 0.48, '6 m line'],
+    ['halfway', 1, 'Halfway · 12.5 m']
+  ]) {
+    const line = page.getByTestId(`field-line-${kind}`);
+    await expect(line).toContainText(label);
+    const height = await field.evaluate((el) => el.clientHeight);
+    const offset = await line.evaluate((el) => parseFloat(getComputedStyle(el).top));
+    expect(Math.abs(offset / height - fraction)).toBeLessThan(0.005);
+  }
+  await expect(page.getByTestId('field-line-penalty')).toHaveCSS('border-top-style', 'dashed');
+  const box = await field.boundingBox();
+  await field.click({ position: { x: box.width / 2, y: box.height * 0.4 } });
+  await expect(page.getByRole('heading', { name: 'Shot details' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  for (const kind of ['two', 'penalty', 'six', 'halfway']) {
+    await expect(page.getByTestId(`field-line-${kind}`).locator('span')).toBeInViewport();
+  }
+});

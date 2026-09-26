@@ -8,10 +8,11 @@ import ModuleEmptyState from '../../components/ModuleEmptyState';
 import ModuleHeader from '../../components/ModuleHeader';
 import StatTooltipLabel from '../../components/StatTooltipLabel';
 import ToolbarButton from '../../components/ToolbarButton';
+import FieldMarkings from './FieldMarkings';
 
 const SHOTMAP_TOOLTIPS = {
   interactiveField:
-    'Click on the field to create a shot draft. Zone 14 is reserved for penalties via the + Penalty button.',
+    'Attacking half of a 25 m field, from goal to halfway (12.5 m). Colored guides show the official distances; actual pool markings are on the sides. The dashed 5 m guide is for penalties. Click to log a shot; use + Penalty for penalties.',
   result: 'Shot outcome: Goal (scored), Saved (keeper save), or Miss.',
   attackType: 'Situation at time of shot: even strength, powerplay, or penalty.',
   period: 'Quarter number in the match timeline.',
@@ -1047,7 +1048,7 @@ const ShotmapView = ({
             <div className="flex items-center justify-between">
               <h3 className={`text-sm font-semibold ${liveMode ? 'text-white' : 'text-slate-700'}`}>
                 <StatTooltipLabel
-                  label="Interactive field"
+                  label="Attacking half"
                   tooltip={SHOTMAP_TOOLTIPS.interactiveField}
                   enabled={showTooltips}
                 />
@@ -1065,13 +1066,10 @@ const ShotmapView = ({
                 }`}
                 onClick={handleFieldClick}
               >
-                <div className="absolute left-0 top-[48%] h-[2px] w-full bg-yellow-300" />
-                <div className="absolute left-[40%] top-0 h-[6%] w-[20%] border-2 border-white bg-white/10" />
-
                 {zones.map((zone) => (
                   <div
                     key={zone.id}
-                    className={`absolute border border-white/40 ${zone.id === 14 ? 'bg-slate-900/40' : ''}`}
+                    className={`absolute border border-white/15 ${zone.id === 14 ? 'bg-slate-900/40' : ''}`}
                     style={{
                       left: `${zone.left}%`,
                       top: `${zone.top}%`,
@@ -1079,11 +1077,11 @@ const ShotmapView = ({
                       height: `${zone.height}%`
                     }}
                   >
-                    <div className="absolute left-2 top-2 text-xs font-semibold text-white/70">
-                      {zone.label}
+                    <div className={`absolute text-[10px] font-medium text-white/50 ${zone.id === 14 ? 'left-2 top-1' : 'left-3 top-2'}`}>
+                      {zone.id === 14 ? 'Penalty log' : zone.label}
                     </div>
                     {zone.id === 14 && (
-                      <div className="absolute inset-0 grid grid-cols-3 place-items-center gap-1 p-2">
+                      <div className="absolute inset-0 grid grid-cols-3 place-items-center gap-1 p-2 pt-5">
                         <button
                           className={`col-span-3 rounded px-2 py-1 text-xs font-semibold ${
                             seasonMode
@@ -1102,6 +1100,8 @@ const ShotmapView = ({
                     )}
                   </div>
                 ))}
+
+                <FieldMarkings />
 
                 {filteredShots.map((shot) => {
                   const isPenalty = shot.attackType === 'strafworp';
